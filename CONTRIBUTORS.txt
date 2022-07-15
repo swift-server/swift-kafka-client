@@ -11,7 +11,9 @@ needs to be listed here.
 
 ### Contributors
 
+- Felix Schlegel <fefefe152@gmail.com>
 - FranzBusch <f.busch@apple.com>
+- SHILPEE GUPTA <78029920+shilpeegupta14@users.noreply.github.com>
 
 **Updating this list**
 
