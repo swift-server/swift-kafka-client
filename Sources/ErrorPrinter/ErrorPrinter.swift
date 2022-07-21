@@ -16,9 +16,7 @@ import Crdkafka
 
 @main
 struct ErrorPrinter {
-
     static func main() {
-
         print("""
         This program is for testing purposes.
         It prints the names of all available Kafka errors.

@@ -42,7 +42,7 @@ let package = Package(
             pkgConfig: "rdkafka",
             providers: [
                 .brew(["librdkafka"]),
-                .apt(["librdkafka-dev"])
+                .apt(["librdkafka-dev"]),
             ]
         ),
         .testTarget(
