@@ -1,4 +1,4 @@
-// swift-tools-version: 5.7
+// swift-tools-version: 5.6
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the swift-kafka-gsoc open source project
@@ -22,12 +22,28 @@ let package = Package(
             name: "SwiftKafka",
             targets: ["SwiftKafka"]
         ),
+        .executable(
+            name: "ErrorPrinter",
+            targets: ["ErrorPrinter"]
+        ),
     ],
     dependencies: [],
     targets: [
         .target(
             name: "SwiftKafka",
             dependencies: []
+        ),
+        .executableTarget(
+            name: "ErrorPrinter",
+            dependencies: ["Crdkafka"]
+        ),
+        .systemLibrary(
+            name: "Crdkafka",
+            pkgConfig: "rdkafka",
+            providers: [
+                .brew(["librdkafka"]),
+                .apt(["librdkafka-dev"]),
+            ]
         ),
         .testTarget(
             name: "SwiftKafkaTests",

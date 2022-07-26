@@ -1,0 +1,7 @@
+# Usage: docker-compose -f docker/docker-compose.yaml run swift-kafka-gsoc
+version: "3.9"
+services:
+  swift-kafka-gsoc:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
