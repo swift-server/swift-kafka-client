@@ -10,4 +10,4 @@ WORKDIR /swift-kafka-gsoc
 
 COPY . /swift-kafka-gsoc
 
-CMD ["swift", "run", "ErrorPrinter"]
+CMD ["swift", "test"]

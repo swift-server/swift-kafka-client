@@ -12,8 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct SwiftKafka {
-    public private(set) var text = "Hello, World!"
-
-    public init() {}
+public struct KafkaError: Error {
+    // Preliminary Implementation
 }
