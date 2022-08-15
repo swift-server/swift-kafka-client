@@ -33,6 +33,10 @@ env PKG_CONFIG_PATH=$(brew --prefix)/opt/openssl@1.1/lib/pkgconfig swift build
 
 ##### Opening & Building the Package in Xcode
 
+> **Note**
+>
+> Please make sure that Xcode is **not** running already. Otherwise, Xcode will not open the project in the specified environment.
+
 ```bash
 env PKG_CONFIG_PATH=$(brew --prefix)/opt/openssl@1.1/lib/pkgconfig xed .
 ```
