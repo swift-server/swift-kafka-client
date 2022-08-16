@@ -16,15 +16,15 @@ import Crdkafka
 import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``, which is used to handle the connection to the Kafka ecosystem.
-public class KafkaClient {
+class KafkaClient {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
-    private var _kafkaHandle: OpaquePointer?
-    private var _clientType: rd_kafka_type_t
-    private var _config: KafkaConfig
+    let logger: Logger
 
-    static let logger = Logger(label: "SwiftKafkaLogger")
+    private let _clientType: rd_kafka_type_t
+    private let _config: KafkaConfig
+    private let _kafkaHandle: OpaquePointer
 
     /// Determines if client is a producer or a consumer
     enum `Type` {
@@ -32,34 +32,27 @@ public class KafkaClient {
         case consumer
     }
 
-    init(type: Type, config: KafkaConfig) throws {
+    init(type: Type, config: KafkaConfig, logger: Logger) throws {
+        self.logger = logger
         self._clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
         self._config = config.createDuplicate()
 
-        try self.initializeKafkaHandle()
-    }
-
-    deinit {
-        if let handle = _kafkaHandle {
-            rd_kafka_destroy(handle)
-        }
-    }
-
-    func initializeKafkaHandle() throws {
         let errorString = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorString.deallocate() }
 
-        if self._kafkaHandle == nil {
-            guard let handle = rd_kafka_new(
-                _clientType,
-                _config.pointer,
-                errorString,
-                KafkaClient.stringSize
-            ) else {
-                throw KafkaError()
-            }
-            self._kafkaHandle = handle
+        guard let handle = rd_kafka_new(
+            _clientType,
+            _config.pointer,
+            errorString,
+            KafkaClient.stringSize
+        ) else {
+            throw KafkaError()
         }
+        self._kafkaHandle = handle
+    }
+
+    deinit {
+        rd_kafka_destroy(_kafkaHandle)
     }
 
     func connectAdditional(brokers: [String]) {
