@@ -14,10 +14,15 @@
 
 import Crdkafka
 
+/**
+ Class that is used to configure producers and consumers.
+ Please see the [list of all available configuration properties](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) for more information.
+ */
 public class KafkaConfig {
     // Preliminary implementation
     internal private(set) var pointer: OpaquePointer
 
+    /// Initialize `KafkaConfig` with default configuration
     public init() {
         self.pointer = rd_kafka_conf_new()
     }
@@ -30,6 +35,7 @@ public class KafkaConfig {
         rd_kafka_conf_destroy(pointer)
     }
 
+    /// Get / Set configuration properties
     public subscript(key: String) -> String? {
         get {
             let value = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
