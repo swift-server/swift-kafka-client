@@ -34,7 +34,7 @@ public class KafkaClient {
 
     init(type: Type, config: KafkaConfig) throws {
         self._clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
-        self._config = config
+        self._config = config.createDuplicate()
 
         try self.initializeKafkaHandle()
     }
@@ -52,7 +52,7 @@ public class KafkaClient {
         if self._kafkaHandle == nil {
             guard let handle = rd_kafka_new(
                 _clientType,
-                _config.getPointerDuplicate(),
+                _config.pointer,
                 errorString,
                 KafkaClient.stringSize
             ) else {

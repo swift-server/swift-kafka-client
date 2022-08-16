@@ -16,14 +16,14 @@ import Crdkafka
 
 public class KafkaConfig {
     // Preliminary implementation
-    private var pointer: OpaquePointer
-
-    func getPointerDuplicate() -> OpaquePointer {
-        return rd_kafka_conf_dup(self.pointer)
-    }
+    internal private(set) var pointer: OpaquePointer
 
     public init() {
         self.pointer = rd_kafka_conf_new()
+    }
+
+    private init(from pointer: OpaquePointer) {
+        self.pointer = pointer
     }
 
     deinit {
@@ -63,5 +63,10 @@ public class KafkaConfig {
 
             // TODO: what shall we do when the value could not be set?
         }
+    }
+
+    func createDuplicate() -> KafkaConfig {
+        let duplicatePointer: OpaquePointer = rd_kafka_conf_dup(self.pointer)
+        return KafkaConfig(from: duplicatePointer)
     }
 }
