@@ -15,16 +15,23 @@
 import Crdkafka
 import Logging
 
-/// Base class for ``KafkaProducer`` and ``KafkaConsumer``, which is used to handle the connection to the Kafka ecosystem.
-class KafkaClient {
+/**
+Base class for ``KafkaProducer`` and ``KafkaConsumer``,
+which is used to handle the connection to the Kafka ecosystem.
+*/
+final class KafkaClient {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
+    /// A logger.
     let logger: Logger
 
-    private let _clientType: rd_kafka_type_t
-    private let _config: KafkaConfig
-    private let _kafkaHandle: OpaquePointer
+    /// A client is either a `.producer` or a `.consumer`
+    private let clientType: rd_kafka_type_t
+    /// The configuration object of the client
+    private let config: KafkaConfig
+    /// Handle for the C library's Kafka instance
+    private let kafkaHandle: OpaquePointer
 
     /// Determines if client is a producer or a consumer
     enum `Type` {
@@ -34,25 +41,25 @@ class KafkaClient {
 
     init(type: Type, config: KafkaConfig, logger: Logger) throws {
         self.logger = logger
-        self._clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
-        self._config = config.createDuplicate()
+        self.clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
+        self.config = config.createDuplicate()
 
         let errorString = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorString.deallocate() }
 
         guard let handle = rd_kafka_new(
-            _clientType,
-            _config.pointer,
+            clientType,
+            config.pointer,
             errorString,
             KafkaClient.stringSize
         ) else {
             throw KafkaError()
         }
-        self._kafkaHandle = handle
+        self.kafkaHandle = handle
     }
 
     deinit {
-        rd_kafka_destroy(_kafkaHandle)
+        rd_kafka_destroy(kafkaHandle)
     }
 
     func connectAdditional(brokers: [String]) {
