@@ -16,9 +16,9 @@ import Crdkafka
 import Logging
 
 /**
-Base class for ``KafkaProducer`` and ``KafkaConsumer``,
-which is used to handle the connection to the Kafka ecosystem.
-*/
+ Base class for ``KafkaProducer`` and ``KafkaConsumer``,
+ which is used to handle the connection to the Kafka ecosystem.
+ */
 final class KafkaClient {
     // Default size for Strings returned from C API
     static let stringSize = 1024
@@ -42,18 +42,19 @@ final class KafkaClient {
     init(type: Type, config: KafkaConfig, logger: Logger) throws {
         self.logger = logger
         self.clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
-        self.config = config.createDuplicate()
+        self.config = config
 
-        let errorString = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
-        defer { errorString.deallocate() }
+        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
+        defer { errorChars.deallocate() }
 
         guard let handle = rd_kafka_new(
             clientType,
             config.pointer,
-            errorString,
+            errorChars,
             KafkaClient.stringSize
         ) else {
-            throw KafkaError()
+            let errorString = String(cString: errorChars)
+            throw KafkaError(description: errorString)
         }
         self.kafkaHandle = handle
     }

@@ -14,4 +14,5 @@
 
 public struct KafkaError: Error {
     // Preliminary Implementation
+    public let description: String
 }
