@@ -15,16 +15,14 @@
 import Crdkafka
 import Logging
 
-/**
- Base class for ``KafkaProducer`` and ``KafkaConsumer``,
- which is used to handle the connection to the Kafka ecosystem.
- */
+/// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
+/// which is used to handle the connection to the Kafka ecosystem.
 final class KafkaClient {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
     /// A logger.
-    let logger: Logger
+    private let logger: Logger
 
     /// A client is either a `.producer` or a `.consumer`
     private let clientType: rd_kafka_type_t
@@ -61,9 +59,5 @@ final class KafkaClient {
 
     deinit {
         rd_kafka_destroy(kafkaHandle)
-    }
-
-    func connectAdditional(brokers: [String]) {
-        fatalError("Not implemented")
     }
 }

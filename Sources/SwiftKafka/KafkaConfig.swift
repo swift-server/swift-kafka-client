@@ -14,10 +14,12 @@
 
 import Crdkafka
 
-/**
- Class that is used to configure producers and consumers.
- Please see the [list of all available configuration properties](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md) for more information.
- */
+/// Used to configure producers and consumers.
+/// `KafkaConfig` is a `struct` that points to a configuration in memory.
+/// Once a property of the `KafkaConfig` is changed, a duplicate in-memory config is created using the
+/// copy-on-write mechanism.
+/// For more information on how to configure Kafka, see
+/// [all available configurations](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 public struct KafkaConfig {
     private final class _Internal {
         /// Pointer to the `rd_kafka_conf_t` object managed by `librdkafka`
@@ -85,7 +87,7 @@ public struct KafkaConfig {
         self._internal = .init()
     }
 
-    public var pointer: OpaquePointer {
+    var pointer: OpaquePointer {
         return self._internal.pointer
     }
 
@@ -108,5 +110,11 @@ public struct KafkaConfig {
 extension KafkaConfig: Equatable {
     public static func == (lhs: KafkaConfig, rhs: KafkaConfig) -> Bool {
         return lhs._internal === rhs._internal
+    }
+}
+
+extension KafkaConfig: Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self._internal.pointer)
     }
 }
