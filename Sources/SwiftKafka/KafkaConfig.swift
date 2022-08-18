@@ -20,8 +20,8 @@ import Crdkafka
 /// copy-on-write mechanism.
 /// For more information on how to configure Kafka, see
 /// [all available configurations](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
-public struct KafkaConfig {
-    private final class _Internal {
+public struct KafkaConfig: Hashable, Equatable {
+    private final class _Internal: Hashable, Equatable {
         /// Pointer to the `rd_kafka_conf_t` object managed by `librdkafka`
         private(set) var pointer: OpaquePointer
 
@@ -79,6 +79,18 @@ public struct KafkaConfig {
             let duplicatePointer: OpaquePointer = rd_kafka_conf_dup(self.pointer)
             return .init(pointer: duplicatePointer)
         }
+
+        // MARK: Hashable
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(self.pointer)
+        }
+
+        // MARK: Equatable
+
+        static func == (lhs: _Internal, rhs: _Internal) -> Bool {
+            return lhs.pointer == rhs.pointer
+        }
     }
 
     private var _internal: _Internal
@@ -104,17 +116,5 @@ public struct KafkaConfig {
         }
 
         try self._internal.set(value, forKey: key)
-    }
-}
-
-extension KafkaConfig: Equatable {
-    public static func == (lhs: KafkaConfig, rhs: KafkaConfig) -> Bool {
-        return lhs._internal === rhs._internal
-    }
-}
-
-extension KafkaConfig: Hashable {
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(self._internal.pointer)
     }
 }
