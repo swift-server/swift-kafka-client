@@ -22,20 +22,17 @@ let package = Package(
             name: "SwiftKafka",
             targets: ["SwiftKafka"]
         ),
-        .executable(
-            name: "ErrorPrinter",
-            targets: ["ErrorPrinter"]
-        ),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
+    ],
     targets: [
         .target(
             name: "SwiftKafka",
-            dependencies: []
-        ),
-        .executableTarget(
-            name: "ErrorPrinter",
-            dependencies: ["Crdkafka"]
+            dependencies: [
+                "Crdkafka",
+                .product(name: "Logging", package: "swift-log"),
+            ]
         ),
         .systemLibrary(
             name: "Crdkafka",
