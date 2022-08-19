@@ -25,18 +25,20 @@ public struct KafkaConfig: Hashable, Equatable {
         /// Pointer to the `rd_kafka_conf_t` object managed by `librdkafka`
         private(set) var pointer: OpaquePointer
 
-        /// Initialize internal `KafkaConfig` object with default configuration
-        init() {
-            self.pointer = rd_kafka_conf_new()
-        }
-
         /// Initialize internal `KafkaConfig` object through a given `rd_kafka_conf_t` pointer
         init(pointer: OpaquePointer) {
             self.pointer = pointer
+            self.setMessageCallback()
+        }
+
+        /// Initialize internal `KafkaConfig` object with default configuration
+        convenience init() {
+            self.init(pointer: rd_kafka_conf_new())
         }
 
         deinit {
-            rd_kafka_conf_destroy(pointer)
+            // rd_kafka_conf_destroy(pointer)
+            // https://docs.confluent.io/platform/current/clients/librdkafka/html/rdkafka_8h.html#a63d5cd86ab1f77772b2be170e1c09c24
         }
 
         func value(forKey key: String) -> String? {
@@ -78,6 +80,35 @@ public struct KafkaConfig: Hashable, Equatable {
         func createDuplicate() -> _Internal {
             let duplicatePointer: OpaquePointer = rd_kafka_conf_dup(self.pointer)
             return .init(pointer: duplicatePointer)
+        }
+
+        /// Message callback has to be instantiated before KafkaClient is initialized
+        /// as pointer to rd_kafka_conf_t gets freed after rd_kafka_new()
+        func setMessageCallback() {
+            rd_kafka_conf_set_dr_msg_cb(
+                self.pointer,
+                { kafkaHandle, message, _ in
+
+                    guard let kafkaHandle = kafkaHandle, let message = message else {
+                        return // TODO: log error
+                    }
+
+                    guard let callback = KafkaProducer.messageToCallback[kafkaHandle]?[message.pointee._private] else {
+                        return // TODO: log error
+                    }
+
+                    let errorCode = message.pointee.err.rawValue
+                    // TODO: deallocate message pointer in dictionary
+                    guard errorCode == 0 else {
+                        return callback(.failure(KafkaError(rawValue: errorCode)))
+                    }
+
+                    guard let consumerMessage = try? KafkaConsumerMessage(messagePointer: message) else {
+                        return // TODO: log error
+                    }
+                    return callback(.success(consumerMessage))
+                }
+            )
         }
 
         // MARK: Hashable

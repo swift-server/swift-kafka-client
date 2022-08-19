@@ -29,7 +29,7 @@ final class KafkaClient {
     /// The configuration object of the client
     private let config: KafkaConfig
     /// Handle for the C library's Kafka instance
-    private let kafkaHandle: OpaquePointer
+    let kafkaHandle: OpaquePointer
 
     /// Determines if client is a producer or a consumer
     enum `Type` {

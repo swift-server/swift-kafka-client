@@ -35,7 +35,8 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         }
 
         deinit {
-            rd_kafka_topic_conf_destroy(pointer)
+            // rd_kafka_topic_conf_destroy(pointer)
+            // https://docs.confluent.io/platform/current/clients/librdkafka/html/rdkafka_8h.html#ab1dcba74a35e8f3bfe3270ff600581d8
         }
 
         func value(forKey key: String) -> String? {

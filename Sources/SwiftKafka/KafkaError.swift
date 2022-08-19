@@ -12,7 +12,25 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
+
 public struct KafkaError: Error {
     // Preliminary Implementation
+    public let rawValue: Int32
     public let description: String
+
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+        self.description = "" // TODO: error PR
+    }
+
+    init(description: String) {
+        self.rawValue = -1
+        self.description = description
+    }
+
+    init(error: rd_kafka_resp_err_t) {
+        self.rawValue = error.rawValue
+        self.description = String(cString: rd_kafka_err2str(error))
+    }
 }
