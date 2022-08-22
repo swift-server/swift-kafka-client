@@ -19,6 +19,21 @@ final class KafkaProducerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
+    var bootstrapServer: String!
+    var config: KafkaConfig!
+
+    override func setUpWithError() throws {
+        self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
+
+        self.config = KafkaConfig()
+        try self.config.set(self.bootstrapServer, forKey: "bootstrap.servers")
+        try self.config.set("v4", forKey: "broker.address.family")
+    }
+
+    override func tearDownWithError() throws {
+        self.bootstrapServer = nil
+        self.config = nil
+    }
 
     // For testing locally on Mac, do the following:
     // 1. Install Kafka and Zookeeper using homebrew
@@ -26,14 +41,7 @@ final class KafkaProducerTests: XCTestCase {
     // 2. Run the following command
     // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
     func testSendAsync() throws {
-        let bootstrapServer = "\(kafkaHost):\(kafkaPort)"
-
-        var config = KafkaConfig()
-        try config.set(bootstrapServer, forKey: "bootstrap.servers")
-        try config.set("v4", forKey: "broker.address.family")
-
-        // TODO: implement producer in a way that send is not mutating so that we can use let here
-        var producer = try KafkaProducer(config: config, logger: .kafkaTest)
+        let producer = try KafkaProducer(config: config, logger: .kafkaTest)
 
         let expectedTopic = "test-topic"
         let expectedValue = "Hello, World!"
@@ -58,4 +66,6 @@ final class KafkaProducerTests: XCTestCase {
 
         waitForExpectations(timeout: 2)
     }
+
+    // TODO: test concurrent send async
 }

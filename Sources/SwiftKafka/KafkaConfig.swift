@@ -93,20 +93,26 @@ public struct KafkaConfig: Hashable, Equatable {
                         return // TODO: log error
                     }
 
-                    guard let callback = KafkaProducer.messageToCallback[kafkaHandle]?[message.pointee._private] else {
-                        return // TODO: log error
-                    }
-
+                    // message.pointee cannot be accessed in async context, therefore extract values before entering Task
                     let errorCode = message.pointee.err.rawValue
-                    // TODO: deallocate message pointer in dictionary
-                    guard errorCode == 0 else {
-                        return callback(.failure(KafkaError(rawValue: errorCode)))
-                    }
-
+                    let messageID: UnsafeMutableRawPointer = message.pointee._private
                     guard let consumerMessage = try? KafkaConsumerMessage(messagePointer: message) else {
                         return // TODO: log error
                     }
-                    return callback(.success(consumerMessage))
+
+                    // Deallocate pointer to message ID (was allocated in KafkaProducer as idPointer)
+                    message.pointee._private.deallocate()
+
+                    Task {
+                        guard let callback = await KafkaProducerCallbacks.shared.get(for: kafkaHandle, messageID: messageID) else {
+                            return // TODO: log error
+                        }
+                        guard errorCode == 0 else {
+                            return callback(.failure(KafkaError(rawValue: errorCode)))
+                        }
+
+                        return callback(.success(consumerMessage))
+                    }
                 }
             )
         }
