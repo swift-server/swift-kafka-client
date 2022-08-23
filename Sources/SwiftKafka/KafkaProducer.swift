@@ -15,9 +15,12 @@
 import Crdkafka
 import Logging
 
+/// Send messages to the Kafka cluster.
+/// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
+/// configuration object (only works if server has `auto.create.topics.enable` property set).
 public struct KafkaProducer {
-    let client: KafkaClient
-    let topicConfig: KafkaTopicConfig
+    private let client: KafkaClient
+    private let topicConfig: KafkaTopicConfig
 
     // Preliminary implementation
     public init(

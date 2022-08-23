@@ -17,10 +17,10 @@ import Foundation
 
 /// Message that is sent by the `KafkaProducer`
 public struct KafkaProducerMessage {
-    let topic: String
-    let partition: Int32
-    let key: ContiguousBytes?
-    let value: ContiguousBytes
+    public var topic: String
+    public var partition: KafkaPartition
+    public var key: ContiguousBytes?
+    public var value: ContiguousBytes
 
     /// Create a new `KafkaProducerMessage` with any keys and values pair that conform to the `ContiguousBytes` protocol
     /// - Parameter topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
@@ -29,7 +29,7 @@ public struct KafkaProducerMessage {
     /// - Parameter value: The message body.
     public init(
         topic: String,
-        partition: Int32? = nil,
+        partition: KafkaPartition? = nil,
         key: ContiguousBytes? = nil,
         value: ContiguousBytes
     ) {
@@ -40,7 +40,7 @@ public struct KafkaProducerMessage {
         if let partition = partition {
             self.partition = partition
         } else {
-            self.partition = RD_KAFKA_PARTITION_UA
+            self.partition = .unassigned
         }
     }
 
@@ -51,7 +51,7 @@ public struct KafkaProducerMessage {
     /// - Parameter value: The message body.
     public init(
         topic: String,
-        partition: Int32? = nil,
+        partition: KafkaPartition? = nil,
         key: String? = nil,
         value: String
     ) {

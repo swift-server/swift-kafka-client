@@ -14,9 +14,7 @@
 
 import Crdkafka
 
-/// When messages get published to a non-existent topic, a new topic is created using the `KafkaTopicConfig`
-/// configuration object (only works if server has `auto.create.topics.enable` property set).
-/// `KafkaTopicConfig` is a `struct` that points to a configuration in memory.
+/// `KafkaTopicConfig` is a `struct` that points to a topic configuration in memory.
 /// Once a property of the `KafkaTopicConfig` is changed, a duplicate in-memory config is created using the
 /// copy-on-write mechanism.
 /// For more information on how to configure Kafka topics, see
