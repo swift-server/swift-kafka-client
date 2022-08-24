@@ -47,7 +47,7 @@ final class KafkaClient {
 
         guard let handle = rd_kafka_new(
             clientType,
-            config.pointer,
+            config.createDuplicatePointer(), // Duplicate because rd_kafka_new deallocates config object
             errorChars,
             KafkaClient.stringSize
         ) else {

@@ -35,8 +35,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         }
 
         deinit {
-            // rd_kafka_topic_conf_destroy(pointer)
-            // https://docs.confluent.io/platform/current/clients/librdkafka/html/rdkafka_8h.html#ab1dcba74a35e8f3bfe3270ff600581d8
+            rd_kafka_topic_conf_destroy(pointer)
         }
 
         func value(forKey key: String) -> String? {
@@ -75,9 +74,12 @@ public struct KafkaTopicConfig: Hashable, Equatable {
             }
         }
 
+        func createDuplicatePointer() -> OpaquePointer {
+            rd_kafka_topic_conf_dup(self.pointer)
+        }
+
         func createDuplicate() -> _Internal {
-            let duplicatePointer: OpaquePointer = rd_kafka_topic_conf_dup(self.pointer)
-            return .init(pointer: duplicatePointer)
+            return .init(pointer: self.createDuplicatePointer())
         }
 
         // MARK: Hashable
@@ -116,5 +118,11 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         }
 
         try self._internal.set(value, forKey: key)
+    }
+
+    /// Create a duplicate topic configuration object in memory.
+    /// - Returns: `OpaquePointer` to the duplicate `rd_kafka_topic_conf_t` object in memory.
+    func createDuplicatePointer() -> OpaquePointer {
+        return self._internal.createDuplicatePointer()
     }
 }

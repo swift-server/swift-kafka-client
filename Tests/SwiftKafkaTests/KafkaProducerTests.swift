@@ -40,31 +40,58 @@ final class KafkaProducerTests: XCTestCase {
     // https://medium.com/@Ankitthakur/apache-kafka-installation-on-mac-using-homebrew-a367cdefd273
     // 2. Run the following command
     // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
-    func testSendAsync() throws {
+    func testSendAsync() async throws {
         let producer = try KafkaProducer(config: config, logger: .kafkaTest)
 
         let expectedTopic = "test-topic"
-        let expectedValue = "Hello, World!"
         let message = KafkaProducerMessage(
             topic: expectedTopic,
-            value: expectedValue
+            value: "Hello, World!"
         )
 
-        let expectation = expectation(description: "Send complete")
+        try await producer.sendAsync(message: message)
 
-        producer.sendAsync(message: message) { result in
-            expectation.fulfill()
+        for await acknowledgedMessage in producer.acknowledgements {
+            // TODO: make Producer Message Equatable somehow and test entire message -> Problem: Hard to make Contiguous bytes equatable
+            XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
+            break
+        }
 
-            switch result {
-            case .success(let receivedMessage):
-                XCTAssertEqual(expectedTopic, receivedMessage.topic)
-                XCTAssertEqual(expectedValue, receivedMessage.valueString)
-            case .failure:
-                XCTFail("Sending message was unsuccessful")
+        await producer.close()
+    }
+
+    func testSendAsyncTwoTopics() async throws {
+        let producer = try KafkaProducer(config: config, logger: .kafkaTest)
+
+        let topic1 = "test-topic1"
+        let topic2 = "test-topic2"
+        let message1 = KafkaProducerMessage(
+            topic: topic1,
+            value: "Hello, Munich!"
+        )
+        let message2 = KafkaProducerMessage(
+            topic: topic2,
+            value: "Hello, London!"
+        )
+
+        try await producer.sendAsync(message: message1)
+        try await producer.sendAsync(message: message2)
+
+        var acknowledgedMessages = [KafkaProducerMessage]()
+
+        for await acknowledgedMessage in producer.acknowledgements {
+            acknowledgedMessages.append(acknowledgedMessage)
+
+            if acknowledgedMessages.count >= 2 {
+                break
             }
         }
 
-        waitForExpectations(timeout: 2)
+        XCTAssertEqual(2, acknowledgedMessages.count)
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic1 }))
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic2 }))
+
+        await producer.close()
     }
 
     // TODO: test concurrent send async

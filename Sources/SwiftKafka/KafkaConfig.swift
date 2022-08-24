@@ -28,7 +28,6 @@ public struct KafkaConfig: Hashable, Equatable {
         /// Initialize internal `KafkaConfig` object through a given `rd_kafka_conf_t` pointer
         init(pointer: OpaquePointer) {
             self.pointer = pointer
-            self.setMessageCallback()
         }
 
         /// Initialize internal `KafkaConfig` object with default configuration
@@ -37,8 +36,7 @@ public struct KafkaConfig: Hashable, Equatable {
         }
 
         deinit {
-            // rd_kafka_conf_destroy(pointer)
-            // https://docs.confluent.io/platform/current/clients/librdkafka/html/rdkafka_8h.html#a63d5cd86ab1f77772b2be170e1c09c24
+            rd_kafka_conf_destroy(pointer)
         }
 
         func value(forKey key: String) -> String? {
@@ -77,44 +75,12 @@ public struct KafkaConfig: Hashable, Equatable {
             }
         }
 
-        func createDuplicate() -> _Internal {
-            let duplicatePointer: OpaquePointer = rd_kafka_conf_dup(self.pointer)
-            return .init(pointer: duplicatePointer)
+        func createDuplicatePointer() -> OpaquePointer {
+            rd_kafka_conf_dup(self.pointer)
         }
 
-        /// Message callback has to be instantiated before KafkaClient is initialized
-        /// as pointer to rd_kafka_conf_t gets freed after rd_kafka_new()
-        func setMessageCallback() {
-            rd_kafka_conf_set_dr_msg_cb(
-                self.pointer,
-                { kafkaHandle, message, _ in
-
-                    guard let kafkaHandle = kafkaHandle, let message = message else {
-                        return // TODO: log error
-                    }
-
-                    // message.pointee cannot be accessed in async context, therefore extract values before entering Task
-                    let errorCode = message.pointee.err.rawValue
-                    let messageID: UnsafeMutableRawPointer = message.pointee._private
-                    guard let consumerMessage = try? KafkaConsumerMessage(messagePointer: message) else {
-                        return // TODO: log error
-                    }
-
-                    // Deallocate pointer to message ID (was allocated in KafkaProducer as idPointer)
-                    message.pointee._private.deallocate()
-
-                    Task {
-                        guard let callback = await KafkaProducerCallbacks.shared.get(for: kafkaHandle, messageID: messageID) else {
-                            return // TODO: log error
-                        }
-                        guard errorCode == 0 else {
-                            return callback(.failure(KafkaError(rawValue: errorCode)))
-                        }
-
-                        return callback(.success(consumerMessage))
-                    }
-                }
-            )
+        func createDuplicate() -> _Internal {
+            return .init(pointer: self.createDuplicatePointer())
         }
 
         // MARK: Hashable
@@ -153,5 +119,22 @@ public struct KafkaConfig: Hashable, Equatable {
         }
 
         try self._internal.set(value, forKey: key)
+    }
+
+    /// Define a function that is called upon every message acknowledgement.
+    /// - Parameter callback: C compatible function.
+    func setDeliveryReportCallback(
+        callback: @escaping (@convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void)
+    ) {
+        rd_kafka_conf_set_dr_msg_cb(
+            self.pointer,
+            callback
+        )
+    }
+
+    /// Create a duplicate configuration object in memory.
+    /// - Returns: `OpaquePointer` to the duplicate `rd_kafka_conf_t` object in memory.
+    func createDuplicatePointer() -> OpaquePointer {
+        return self._internal.createDuplicatePointer()
     }
 }
