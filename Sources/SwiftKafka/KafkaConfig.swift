@@ -75,6 +75,15 @@ public struct KafkaConfig: Hashable, Equatable {
             }
         }
 
+        func setDeliveryReportCallback(
+            callback: @escaping (@convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void)
+        ) {
+            rd_kafka_conf_set_dr_msg_cb(
+                self.pointer,
+                callback
+            )
+        }
+
         func createDuplicatePointer() -> OpaquePointer {
             rd_kafka_conf_dup(self.pointer)
         }
@@ -123,13 +132,15 @@ public struct KafkaConfig: Hashable, Equatable {
 
     /// Define a function that is called upon every message acknowledgement.
     /// - Parameter callback: C compatible function.
-    func setDeliveryReportCallback(
+    mutating func setDeliveryReportCallback(
         callback: @escaping (@convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void)
     ) {
-        rd_kafka_conf_set_dr_msg_cb(
-            self.pointer,
-            callback
-        )
+        // Copy-on-write mechanism
+        if !isKnownUniquelyReferenced(&(self._internal)) {
+            self._internal = self._internal.createDuplicate()
+        }
+
+        self._internal.setDeliveryReportCallback(callback: callback)
     }
 
     /// Create a duplicate configuration object in memory.

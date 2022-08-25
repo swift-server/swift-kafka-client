@@ -41,7 +41,7 @@ final class KafkaProducerTests: XCTestCase {
     // 2. Run the following command
     // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
     func testSendAsync() async throws {
-        let producer = try KafkaProducer(config: config, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
 
         let expectedTopic = "test-topic"
         let message = KafkaProducerMessage(
@@ -61,7 +61,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendAsyncTwoTopics() async throws {
-        let producer = try KafkaProducer(config: config, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
 
         let topic1 = "test-topic1"
         let topic2 = "test-topic2"

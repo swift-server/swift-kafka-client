@@ -31,7 +31,7 @@ public actor KafkaProducer {
         }
     }
 
-    private let config: KafkaConfig
+    private var config: KafkaConfig
     private let client: KafkaClient
     private let kafkaHandle: OpaquePointer
     private let topicConfig: KafkaTopicConfig
@@ -49,25 +49,12 @@ public actor KafkaProducer {
         config: KafkaConfig = KafkaConfig(),
         topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
         logger: Logger
-    ) throws {
+    ) async throws {
         self.config = config
-        self.config.setDeliveryReportCallback { _, message, _ in
-            guard let pointer = message?.pointee._private else {
-                return
-            }
-
-            let callbackOpaque = Unmanaged<CallbackOpaquePointer>.fromOpaque(pointer).takeUnretainedValue()
-            let messageID = callbackOpaque.messageID
-            let producer = callbackOpaque.producer
-
-            Task {
-                await producer.deallocateCallbackOpaquePointer(pointer)
-                await producer.markMessageAsAcknowledged(messageID)
-            }
-        }
+        self.config.setDeliveryReportCallback(callback: deliveryReportCallback)
 
         self.topicConfig = topicConfig
-        self.client = try KafkaClient(type: .producer, config: config, logger: logger)
+        self.client = try KafkaClient(type: .producer, config: self.config, logger: logger)
         self.kafkaHandle = client.kafkaHandle
         self.topicHandles = [:]
         self.unacknowledgedMessages = [:]
@@ -86,7 +73,7 @@ public actor KafkaProducer {
     /// Kafka producer must be closed **explicitly**.
     public func close() {
         // Wait 10 seconds for outstanding messages to be sent and callbacks to be called
-        rd_kafka_flush(kafkaHandle, 10_000)
+        rd_kafka_flush(kafkaHandle, 10000)
 
         for (_, topicHandle) in self.topicHandles {
             rd_kafka_topic_destroy(topicHandle)
@@ -168,6 +155,24 @@ public actor KafkaProducer {
         }
         receivedMessages.removeFirst()
         return first
+    }
+
+    // Closure that is executed when a message has been acknowledged by Kafka
+    private let deliveryReportCallback: (
+        @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
+    ) = { _, message, _ in
+        guard let pointer = message?.pointee._private else {
+            return
+        }
+
+        let callbackOpaque = Unmanaged<CallbackOpaquePointer>.fromOpaque(pointer).takeUnretainedValue()
+        let messageID = callbackOpaque.messageID
+        let producer = callbackOpaque.producer
+
+        Task {
+            await producer.deallocateCallbackOpaquePointer(pointer)
+            await producer.markMessageAsAcknowledged(messageID)
+        }
     }
 
     /// Check `topicHandles` for a handle matching the topic name and create a new handle if needed.

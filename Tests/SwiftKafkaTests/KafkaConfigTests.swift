@@ -46,7 +46,7 @@ final class KafkaConfigTests: XCTestCase {
         XCTAssertTrue(configA == configB)
     }
 
-    func testCopyOnWriteWorks() throws {
+    func testSetCopyOnWrite() throws {
         var configA = KafkaConfig()
         let configB = configA
         let configC = configA
@@ -61,6 +61,18 @@ final class KafkaConfigTests: XCTestCase {
         XCTAssertEqual("ssl", configA.value(forKey: "security.protocol"))
         XCTAssertEqual("plaintext", configB.value(forKey: "security.protocol"))
         XCTAssertEqual("plaintext", configC.value(forKey: "security.protocol"))
+        XCTAssertNotEqual(configA, configB)
+        XCTAssertNotEqual(configA, configC)
+        XCTAssertEqual(configB, configC)
+    }
+
+    func testMessageCallbackCopyOnWrite() throws {
+        var configA = KafkaConfig()
+        let configB = configA
+        let configC = configA
+
+        configA.setDeliveryReportCallback { _, _, _ in }
+
         XCTAssertNotEqual(configA, configB)
         XCTAssertNotEqual(configA, configC)
         XCTAssertEqual(configB, configC)
