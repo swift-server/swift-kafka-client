@@ -13,20 +13,17 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import struct Foundation.Data
+import NIOCore
 
-/// Messages that are received from the Kafka cluster.
-public struct KafkaConsumerMessage {
+/// A message produced by the client and acknowledged by the Kafka cluster.
+public struct KafkaAckedMessage {
     let topic: String
     let partition: Int32
-    let key: Data?
-    let value: Data
+    let key: ByteBuffer?
+    let value: ByteBuffer
     let offset: Int64
 
-    // TODO: copy on write, does this even make sense as we read-only?
-    // TODO: deallocate rd_kafka_message_t on deinit
-
-    /// Initialize `KafkaConsumerMessage` from `rd_kafka_message_t` pointer.
+    /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
@@ -42,10 +39,11 @@ public struct KafkaConsumerMessage {
         self.partition = rdKafkaMessage.partition
 
         if let keyPointer = rdKafkaMessage.key {
-            self.key = Data(
-                bytes: keyPointer.assumingMemoryBound(to: UInt8.self),
+            let keyBufferPointer = UnsafeRawBufferPointer(
+                start: keyPointer,
                 count: rdKafkaMessage.key_len
             )
+            self.key = .init(bytes: keyBufferPointer)
         } else {
             self.key = nil
         }
@@ -54,25 +52,9 @@ public struct KafkaConsumerMessage {
             throw KafkaError(description: "Message payload could not be read")
         }
 
-        self.value = Data(
-            bytes: valuePointer.assumingMemoryBound(to: UInt8.self),
-            count: rdKafkaMessage.len
-        )
+        let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
+        self.value = .init(bytes: valueBufferPointer)
 
         self.offset = Int64(rdKafkaMessage.offset)
-    }
-
-    /// Optional String representation of the message's key.
-    public var keyString: String? {
-        guard let key = self.key else {
-            return nil
-        }
-
-        return String(data: key, encoding: .utf8)
-    }
-
-    /// Optional String representation of the message's value.
-    public var valueString: String? {
-        return String(data: value, encoding: .utf8)
     }
 }
