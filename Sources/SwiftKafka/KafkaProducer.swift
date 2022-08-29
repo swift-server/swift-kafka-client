@@ -121,7 +121,6 @@ public actor KafkaProducer {
             throw KafkaError(rawValue: responseCode)
         }
 
-        // TODO: can messages be acked before the message gets set? Should not be possible -> we are an actor
         unacknowledgedMessages[callbackOpaque.messageID] = message
     }
 
