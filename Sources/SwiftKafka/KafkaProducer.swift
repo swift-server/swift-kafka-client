@@ -13,20 +13,56 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
+import NIOCore
 import Logging
+
+/// `NIOAsyncSequenceProducerBackPressureStrategy` that always returns true.
+public struct NoBackPressure: NIOAsyncSequenceProducerBackPressureStrategy {
+    public func didYield(bufferDepth: Int) -> Bool { true }
+    public func didConsume(bufferDepth: Int) -> Bool { true }
+}
+
+/// `NIOAsyncSequenceProducerBackPressureStrategy` that does nothing.
+public struct NoDelegate: NIOAsyncSequenceProducerDelegate {
+    public func produceMore() {}
+    public func didTerminate() {}
+}
+
+/// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAckedMessage``).
+public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
+    public typealias Element = KafkaAckedMessage
+    public typealias AsyncIterator = NIOAsyncSequenceProducer<KafkaAckedMessage, NoBackPressure, NoDelegate>.AsyncIterator
+
+    let _internal = NIOAsyncSequenceProducer.makeSequence(
+        of: Element.self,
+        backPressureStrategy: NoBackPressure(),
+        delegate: NoDelegate()
+    )
+
+    func produceMessage(_ message: KafkaAckedMessage) {
+        _ = _internal.source.yield(message)
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator {
+        _internal.sequence.makeAsyncIterator()
+    }
+}
 
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``shutdownGracefully()`` when the `KafkaProducer` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
-    private var messageIDCounter: UInt = 0
 
+    /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
+    /// acknowledged by the Kafka cluster.
+    public nonisolated let acknowledgements = AcknowledgedMessagesAsyncSequence()
+
+    private var messageIDCounter: UInt = 0
     private var config: KafkaConfig
     private let topicConfig: KafkaTopicConfig
     private let logger: Logger
     private var topicHandles: [String: OpaquePointer]
-    private var receivedMessages: [KafkaAckedMessage]
 
     // Implicitly unwrapped optional because we must pass self to our config before initializing client etc.
     private var referenceToSelf: UnsafeMutableRawPointer!
@@ -47,7 +83,6 @@ public actor KafkaProducer {
         self.topicConfig = topicConfig
         self.logger = logger
         self.topicHandles = [:]
-        self.receivedMessages = []
 
         self.referenceToSelf = Unmanaged.passRetained(self).toOpaque()
         self.config.setDeliveryReportCallback(callback: deliveryReportCallback)
@@ -112,34 +147,6 @@ public actor KafkaProducer {
         }
     }
 
-    func publishAckedMessage(_ message: KafkaAckedMessage) {
-        self.receivedMessages.append(message)
-    }
-
-    /// `AsyncStream` that returns all ``KafkaProducerMessage`` objects that have been
-    /// acknowledged by the Kafka cluster.
-    public nonisolated var acknowledgements: AsyncStream<KafkaAckedMessage> {
-        AsyncStream { continuation in
-            // TODO: cancel task, retain cycle otherwise
-            Task {
-                while !Task.isCancelled {
-                    // TODO: Sleep here to slow down rate?
-                    if let firstElement = await receivedMessagesPopFirst() {
-                        continuation.yield(firstElement)
-                    }
-                }
-            }
-        }
-    }
-
-    private func receivedMessagesPopFirst() -> KafkaAckedMessage? {
-        guard let first = receivedMessages.first else {
-            return nil
-        }
-        receivedMessages.removeFirst()
-        return first
-    }
-
     // Closure that is executed when a message has been acknowledged by Kafka
     private let deliveryReportCallback: (
         @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
@@ -162,9 +169,8 @@ public actor KafkaProducer {
             return
         }
 
-        Task {
-            await producer.publishAckedMessage(message)
-        }
+        // TODO: is this thread-safe???
+        producer.acknowledgements.produceMessage(message)
     }
 
     /// Check `topicHandles` for a handle matching the topic name and create a new handle if needed.

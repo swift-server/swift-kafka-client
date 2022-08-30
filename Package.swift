@@ -30,7 +30,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", branch: "main"), // TODO: change once NIOBackPressuredAsyncSequence is officially released
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
