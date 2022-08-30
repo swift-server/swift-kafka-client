@@ -17,12 +17,18 @@ import NIOCore
 
 /// A message produced by the client and acknowledged by the Kafka cluster.
 public struct KafkaAckedMessage: Hashable, Equatable {
-    let id: UInt?
-    let topic: String
-    let partition: Int32
-    let key: ByteBuffer?
-    let value: ByteBuffer
-    let offset: Int64
+    /// The identifier assigned by the ``KafkaProducer``
+    public let id: UInt?
+    /// The topic that the message was sent to.
+    public let topic: String
+    /// The partition that the message was sent to.
+    public let partition: Int32
+    /// The key of the message.
+    public let key: ByteBuffer?
+    /// The body of the message.
+    public let value: ByteBuffer
+    /// The index of the message in its partition.
+    public let offset: Int64
 
     /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
     init?(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt? = nil) {

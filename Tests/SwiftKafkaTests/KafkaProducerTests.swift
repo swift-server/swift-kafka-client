@@ -49,10 +49,10 @@ final class KafkaProducerTests: XCTestCase {
             value: "Hello, World!"
         )
 
-        try await producer.sendAsync(message: message)
+        let messageID = try await producer.sendAsync(message: message)
 
         for await acknowledgedMessage in producer.acknowledgements {
-            XCTAssertEqual(1, acknowledgedMessage.id)
+            XCTAssertEqual(messageID, acknowledgedMessage.id)
             XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
             XCTAssertEqual(message.value, acknowledgedMessage.value)
             break
@@ -64,24 +64,24 @@ final class KafkaProducerTests: XCTestCase {
     func testSendAsyncTwoTopics() async throws {
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
 
-        let topic1 = "test-topic1"
-        let topic2 = "test-topic2"
         let message1 = KafkaProducerMessage(
-            topic: topic1,
+            topic: "test-topic1",
             value: "Hello, Munich!"
         )
         let message2 = KafkaProducerMessage(
-            topic: topic2,
+            topic: "test-topic2",
             value: "Hello, London!"
         )
 
-        try await producer.sendAsync(message: message1)
-        try await producer.sendAsync(message: message2)
+        var messageIDs = Set<UInt>()
 
-        var acknowledgedMessages = [KafkaAckedMessage]()
+        messageIDs.insert(try await producer.sendAsync(message: message1))
+        messageIDs.insert(try await producer.sendAsync(message: message2))
+
+        var acknowledgedMessages = Set<KafkaAckedMessage>()
 
         for await acknowledgedMessage in producer.acknowledgements {
-            acknowledgedMessages.append(acknowledgedMessage)
+            acknowledgedMessages.insert(acknowledgedMessage)
 
             if acknowledgedMessages.count >= 2 {
                 break
@@ -89,10 +89,9 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         XCTAssertEqual(2, acknowledgedMessages.count)
-        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.id == 1 }))
-        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.id == 2 }))
-        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic1 }))
-        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic2 }))
+        XCTAssertEqual(acknowledgedMessages.compactMap(\.id).sorted(), messageIDs.sorted())
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
 

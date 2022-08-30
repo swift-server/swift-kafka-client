@@ -115,7 +115,9 @@ public actor KafkaProducer {
     /// Send messages to the Kafka cluster asynchronously, aka "fire and forget".
     /// This function is non-blocking.
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
-    public func sendAsync(message: KafkaProducerMessage) throws {
+    /// - Returns: Unique message identifier matching the `id` property of the corresponding ``KafkaAckedMessage``
+    @discardableResult
+    public func sendAsync(message: KafkaProducerMessage) throws -> UInt {
         let topicHandle = self.createTopicHandleIfNeeded(topic: message.topic)
 
         let keyBytes: [UInt8]?
@@ -144,6 +146,8 @@ public actor KafkaProducer {
         guard responseCode == 0 else {
             throw KafkaError(rawValue: responseCode)
         }
+
+        return self.messageIDCounter
     }
 
     // Closure that is executed when a message has been acknowledged by Kafka
