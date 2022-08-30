@@ -13,8 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import NIOCore
 import Logging
+import NIOCore
 
 /// `NIOAsyncSequenceProducerBackPressureStrategy` that always returns true.
 public struct NoBackPressure: NIOAsyncSequenceProducerBackPressureStrategy {
@@ -40,11 +40,11 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
     )
 
     func produceMessage(_ message: KafkaAckedMessage) {
-        _ = _internal.source.yield(message)
+        _ = self._internal.source.yield(message)
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        _internal.sequence.makeAsyncIterator()
+        self._internal.sequence.makeAsyncIterator()
     }
 }
 
@@ -53,7 +53,6 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
-
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
     public nonisolated let acknowledgements = AcknowledgedMessagesAsyncSequence()
@@ -85,11 +84,11 @@ public actor KafkaProducer {
         self.topicHandles = [:]
 
         self.referenceToSelf = Unmanaged.passRetained(self).toOpaque()
-        self.config.setDeliveryReportCallback(callback: deliveryReportCallback)
+        self.config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
         self.config.setCallbackOpaque(opaque: self.referenceToSelf)
 
         self.client = try KafkaClient(type: .producer, config: self.config, logger: self.logger)
-        self.kafkaHandle = client.kafkaHandle
+        self.kafkaHandle = self.client.kafkaHandle
 
         // Poll Kafka every millisecond
         self.pollTask = Task { [kafkaHandle] in
@@ -103,7 +102,7 @@ public actor KafkaProducer {
     /// Kafka producer must be closed **explicitly**.
     public func shutdownGracefully() {
         // Wait 10 seconds for outstanding messages to be sent and callbacks to be called
-        rd_kafka_flush(kafkaHandle, 10000)
+        rd_kafka_flush(self.kafkaHandle, 10000)
 
         for (_, topicHandle) in self.topicHandles {
             rd_kafka_topic_destroy(topicHandle)
@@ -117,7 +116,7 @@ public actor KafkaProducer {
     /// This function is non-blocking.
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     public func sendAsync(message: KafkaProducerMessage) throws {
-        let topicHandle = createTopicHandleIfNeeded(topic: message.topic)
+        let topicHandle = self.createTopicHandleIfNeeded(topic: message.topic)
 
         let keyBytes: [UInt8]?
         if let key = message.key {
@@ -126,7 +125,7 @@ public actor KafkaProducer {
             keyBytes = nil
         }
 
-        messageIDCounter += 1
+        self.messageIDCounter += 1
 
         let responseCode = message.value.withUnsafeBytes { valueBuffer in
 
@@ -182,7 +181,7 @@ public actor KafkaProducer {
             let newHandle = rd_kafka_topic_new(
                 self.kafkaHandle,
                 topic,
-                topicConfig.createDuplicatePointer() // Duplicate because rd_kafka_topic_new deallocates config object
+                self.topicConfig.createDuplicatePointer() // Duplicate because rd_kafka_topic_new deallocates config object
             )
             if newHandle != nil {
                 self.topicHandles[topic] = newHandle

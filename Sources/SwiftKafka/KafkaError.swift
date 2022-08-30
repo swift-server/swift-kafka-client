@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-public struct KafkaError: Error {
+struct KafkaError: Error {
     // Preliminary Implementation
     public let rawValue: Int32
     public let description: String
