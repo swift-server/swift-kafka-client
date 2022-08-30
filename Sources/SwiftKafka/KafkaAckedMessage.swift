@@ -16,7 +16,8 @@ import Crdkafka
 import NIOCore
 
 /// A message produced by the client and acknowledged by the Kafka cluster.
-public struct KafkaAckedMessage {
+public struct KafkaAckedMessage: Hashable, Equatable {
+    let id: UInt?
     let topic: String
     let partition: Int32
     let key: ByteBuffer?
@@ -24,15 +25,16 @@ public struct KafkaAckedMessage {
     let offset: Int64
 
     /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
-    init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
-        let rdKafkaMessage = messagePointer.pointee
+    init?(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt? = nil) {
+        self.id = id
 
+        let rdKafkaMessage = messagePointer.pointee
         guard rdKafkaMessage.err.rawValue == 0 else {
-            throw KafkaError(error: rdKafkaMessage.err)
+            return nil
         }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
-            throw KafkaError(description: "Topic name not UTF8 encoded")
+            return nil
         }
         self.topic = topic
 
@@ -49,7 +51,7 @@ public struct KafkaAckedMessage {
         }
 
         guard let valuePointer = rdKafkaMessage.payload else {
-            throw KafkaError(description: "Message payload could not be read")
+            return nil
         }
 
         let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)

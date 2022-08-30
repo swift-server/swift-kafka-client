@@ -52,12 +52,12 @@ final class KafkaProducerTests: XCTestCase {
         try await producer.sendAsync(message: message)
 
         for await acknowledgedMessage in producer.acknowledgements {
-            // TODO: make Producer Message Equatable somehow and test entire message -> Problem: Hard to make Contiguous bytes equatable
+            XCTAssertEqual(1, acknowledgedMessage.id)
             XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
             break
         }
 
-        await producer.close()
+        await producer.shutdownGracefully()
     }
 
     func testSendAsyncTwoTopics() async throws {
@@ -77,7 +77,7 @@ final class KafkaProducerTests: XCTestCase {
         try await producer.sendAsync(message: message1)
         try await producer.sendAsync(message: message2)
 
-        var acknowledgedMessages = [KafkaProducerMessage]()
+        var acknowledgedMessages = [KafkaAckedMessage]()
 
         for await acknowledgedMessage in producer.acknowledgements {
             acknowledgedMessages.append(acknowledgedMessage)
@@ -88,10 +88,12 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         XCTAssertEqual(2, acknowledgedMessages.count)
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.id == 1 }))
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.id == 2 }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic1 }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic2 }))
 
-        await producer.close()
+        await producer.shutdownGracefully()
     }
 
     // TODO: test concurrent send async
