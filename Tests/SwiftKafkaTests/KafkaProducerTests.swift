@@ -54,6 +54,7 @@ final class KafkaProducerTests: XCTestCase {
         for await acknowledgedMessage in producer.acknowledgements {
             XCTAssertEqual(1, acknowledgedMessage.id)
             XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
+            XCTAssertEqual(message.value, acknowledgedMessage.value)
             break
         }
 
@@ -92,6 +93,8 @@ final class KafkaProducerTests: XCTestCase {
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.id == 2 }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic1 }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == topic2 }))
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
 
         await producer.shutdownGracefully()
     }

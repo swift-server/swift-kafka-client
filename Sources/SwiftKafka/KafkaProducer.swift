@@ -120,14 +120,14 @@ public actor KafkaProducer {
 
         let keyBytes: [UInt8]?
         if let key = message.key {
-            keyBytes = key.withUnsafeBytes { Array($0) }
+            keyBytes = key.getBytes(at: 0, length: key.readableBytes)
         } else {
             keyBytes = nil
         }
 
         self.messageIDCounter += 1
 
-        let responseCode = message.value.withUnsafeBytes { valueBuffer in
+        let responseCode = message.value.withUnsafeReadableBytes { valueBuffer in
 
             return rd_kafka_produce(
                 topicHandle,
