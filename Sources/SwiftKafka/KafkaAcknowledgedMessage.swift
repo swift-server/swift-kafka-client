@@ -16,8 +16,10 @@ import Crdkafka
 import NIOCore
 
 /// A message produced by the client and acknowledged by the Kafka cluster.
-public struct KafkaAckedMessage: Hashable, Equatable {
-    /// The identifier assigned by the ``KafkaProducer``
+public struct KafkaAcknowledgedMessage: Hashable {
+    /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
+    /// The same identifier is returned by ``KafkaProducer/sendAsync(message:)`` and can be used to correlate
+    /// a sent message and an acknowledged message.
     public let id: UInt?
     /// The topic that the message was sent to.
     public let topic: String
@@ -27,7 +29,7 @@ public struct KafkaAckedMessage: Hashable, Equatable {
     public let key: ByteBuffer?
     /// The body of the message.
     public let value: ByteBuffer
-    /// The index of the message in its partition.
+    /// The offset of the message in its partition.
     public let offset: Int64
 
     /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.

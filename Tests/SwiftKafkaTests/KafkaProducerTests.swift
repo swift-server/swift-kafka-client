@@ -46,6 +46,7 @@ final class KafkaProducerTests: XCTestCase {
         let expectedTopic = "test-topic"
         let message = KafkaProducerMessage(
             topic: expectedTopic,
+            key: "key",
             value: "Hello, World!"
         )
 
@@ -54,11 +55,12 @@ final class KafkaProducerTests: XCTestCase {
         for await acknowledgedMessage in producer.acknowledgements {
             XCTAssertEqual(messageID, acknowledgedMessage.id)
             XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
+            XCTAssertEqual(message.key, acknowledgedMessage.key)
             XCTAssertEqual(message.value, acknowledgedMessage.value)
             break
         }
 
-        await producer.shutdownGracefully()
+        try await producer.shutdownGracefully()
     }
 
     func testSendAsyncTwoTopics() async throws {
@@ -66,10 +68,12 @@ final class KafkaProducerTests: XCTestCase {
 
         let message1 = KafkaProducerMessage(
             topic: "test-topic1",
+            key: "key1",
             value: "Hello, Munich!"
         )
         let message2 = KafkaProducerMessage(
             topic: "test-topic2",
+            key: "key2",
             value: "Hello, London!"
         )
 
@@ -78,7 +82,7 @@ final class KafkaProducerTests: XCTestCase {
         messageIDs.insert(try await producer.sendAsync(message: message1))
         messageIDs.insert(try await producer.sendAsync(message: message2))
 
-        var acknowledgedMessages = Set<KafkaAckedMessage>()
+        var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
         for await acknowledgedMessage in producer.acknowledgements {
             acknowledgedMessages.insert(acknowledgedMessage)
@@ -92,11 +96,43 @@ final class KafkaProducerTests: XCTestCase {
         XCTAssertEqual(acknowledgedMessages.compactMap(\.id).sorted(), messageIDs.sorted())
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message1.key }))
+        XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message2.key }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
 
-        await producer.shutdownGracefully()
+        try await producer.shutdownGracefully()
     }
 
-    // TODO: test concurrent send async
+    func testProducerNotUsableAfterShutdown() async throws {
+        let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        try await producer.shutdownGracefully()
+
+        let message = KafkaProducerMessage(
+            topic: "test-topic",
+            value: "Hello, World!"
+        )
+
+        do {
+            try await producer.sendAsync(message: message)
+            XCTFail("Method should have thrown error")
+        } catch {}
+
+        do {
+            try await producer.shutdownGracefully()
+            XCTFail("Method should have thrown error")
+        } catch {}
+    }
+
+    func testNoMemoryLeakAfterShutdown() async throws {
+        var producer: KafkaProducer?
+        producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+
+        weak var producerCopy = producer
+
+        try await producer?.shutdownGracefully()
+        producer = nil
+
+        XCTAssertNil(producerCopy)
+    }
 }

@@ -84,7 +84,7 @@ public struct KafkaConfig: Hashable, Equatable {
             )
         }
 
-        func setCallbackOpaque(opaque: UnsafeMutableRawPointer) {
+        func setOpaque(opaque: UnsafeMutableRawPointer) {
             rd_kafka_conf_set_opaque(
                 self.pointer,
                 opaque
@@ -152,13 +152,13 @@ public struct KafkaConfig: Hashable, Equatable {
 
     /// Set an opaque pointer that will be passed to callbacks of the `KafkaClient` using this configuration.
     /// - Parameter pointer: pointer that will be passed to callbacks.
-    mutating func setCallbackOpaque(opaque: UnsafeMutableRawPointer) {
+    mutating func setOpaque(opaque: UnsafeMutableRawPointer) {
         // Copy-on-write mechanism
         if !isKnownUniquelyReferenced(&(self._internal)) {
             self._internal = self._internal.createDuplicate()
         }
 
-        self._internal.setCallbackOpaque(opaque: opaque)
+        self._internal.setOpaque(opaque: opaque)
     }
 
     /// Create a duplicate configuration object in memory.

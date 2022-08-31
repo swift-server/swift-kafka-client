@@ -24,14 +24,14 @@ final class KafkaClient {
     /// A logger.
     private let logger: Logger
 
-    /// A client is either a `.producer` or a `.consumer`
+    /// A client is either a `.producer` or a `.consumer`.
     private let clientType: rd_kafka_type_t
-    /// The configuration object of the client
+    /// The configuration object of the client.
     private let config: KafkaConfig
-    /// Handle for the C library's Kafka instance
+    /// Handle for the C library's Kafka instance.
     let kafkaHandle: OpaquePointer
 
-    /// Determines if client is a producer or a consumer
+    /// Determines if client is a producer or a consumer.
     enum `Type` {
         case producer
         case consumer
