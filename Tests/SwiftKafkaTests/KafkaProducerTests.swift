@@ -52,7 +52,12 @@ final class KafkaProducerTests: XCTestCase {
 
         let messageID = try await producer.sendAsync(message: message)
 
-        for await acknowledgedMessage in producer.acknowledgements {
+        for await messageResult in producer.acknowledgements {
+            guard case .success(let acknowledgedMessage) = messageResult else {
+                XCTFail()
+                return
+            }
+
             XCTAssertEqual(messageID, acknowledgedMessage.id)
             XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
             XCTAssertEqual(message.key, acknowledgedMessage.key)
@@ -84,7 +89,12 @@ final class KafkaProducerTests: XCTestCase {
 
         var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
-        for await acknowledgedMessage in producer.acknowledgements {
+        for await messageResult in producer.acknowledgements {
+            guard case .success(let acknowledgedMessage) = messageResult else {
+                XCTFail()
+                return
+            }
+
             acknowledgedMessages.insert(acknowledgedMessage)
 
             if acknowledgedMessages.count >= 2 {
@@ -93,7 +103,7 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         XCTAssertEqual(2, acknowledgedMessages.count)
-        XCTAssertEqual(acknowledgedMessages.compactMap(\.id).sorted(), messageIDs.sorted())
+        XCTAssertEqual(acknowledgedMessages.map(\.id).sorted(), messageIDs.sorted())
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message1.key }))
@@ -126,7 +136,7 @@ final class KafkaProducerTests: XCTestCase {
 
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
-        producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        producer = try await KafkaProducer(config: self.config, logger: .kafkaTest)
 
         weak var producerCopy = producer
 

@@ -30,29 +30,20 @@ struct NoDelegate: NIOAsyncSequenceProducerDelegate {
 
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
-    public typealias Element = KafkaAcknowledgedMessage
-
-    let _internal = NIOAsyncSequenceProducer.makeSequence(
-        of: Element.self,
-        backPressureStrategy: NoBackPressure(),
-        delegate: NoDelegate()
-    )
-
-    func produceMessage(_ message: KafkaAcknowledgedMessage) {
-        _ = self._internal.source.yield(message)
-    }
+    public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    let wrappedSequence: NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
     public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
-        let wrapped: NIOAsyncSequenceProducer<KafkaAcknowledgedMessage, NoBackPressure, NoDelegate>.AsyncIterator
+        let wrappedIterator: NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>.AsyncIterator
 
-        public mutating func next() async -> KafkaAcknowledgedMessage? {
-            await wrapped.next()
+        public mutating func next() async -> Element? {
+            await self.wrappedIterator.next()
         }
     }
 
     public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
-        return AcknowledgedMessagesAsyncIterator(wrapped: _internal.sequence.makeAsyncIterator())
+        return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
 }
 
@@ -61,10 +52,6 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
-    /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
-    /// acknowledged by the Kafka cluster.
-    public nonisolated let acknowledgements = AcknowledgedMessagesAsyncSequence()
-
     /// States that the ``KafkaProducer`` can have.
     private enum State {
         /// The ``KafkaProducer`` has started and is ready to use.
@@ -91,6 +78,17 @@ public actor KafkaProducer {
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
     private var topicHandles: [String: OpaquePointer]
 
+    /// `NIOAsyncSequenceProducer.Source` used for publishing values to the ``acknowledgements`` sequence.
+    private typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    private let acknowledgementsSource: NIOAsyncSequenceProducer<
+        Acknowledgement,
+        NoBackPressure,
+        NoDelegate
+    >.Source
+    /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
+    /// acknowledged by the Kafka cluster.
+    public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
+
     // Implicitly unwrapped optionals because we must pass self to our config before initializing client etc.
     /// Unmanaged reference to self with an unbalanced retain.
     private var referenceToSelf: UnsafeMutableRawPointer!
@@ -115,6 +113,22 @@ public actor KafkaProducer {
         self.logger = logger
         self.topicHandles = [:]
         self.state = .started
+
+        // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
+        // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
+        // The source MUST be held by the caller and used to signal new elements or finish.
+        // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
+        // This is due to the fact that deiniting the sequence is used as part of a trigger to
+        // terminate the underlying source.
+        let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+            of: Acknowledgement.self,
+            backPressureStrategy: NoBackPressure(),
+            delegate: NoDelegate()
+        )
+        self.acknowledgementsSource = acknowledgementsSourceAndSequence.source
+        self.acknowledgements = AcknowledgedMessagesAsyncSequence(
+            wrappedSequence: acknowledgementsSourceAndSequence.sequence
+        )
 
         // Create a new reference to self that is then passed
         // to the KafkaConfig as an opaque pointer.
@@ -142,9 +156,16 @@ public actor KafkaProducer {
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
     /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
     public func shutdownGracefully() throws {
-        try failIfProducerShutDown()
-        self.state = .shuttingDown
+        switch self.state {
+        case .started:
+            self.state = .shuttingDown
+            self._shutDownGracefully()
+        case .shuttingDown, .shutDown:
+            throw KafkaError(description: "Trying to invoke method on producer that has been shut down.")
+        }
+    }
 
+    private func _shutDownGracefully() {
         // Wait 10 seconds for outstanding messages to be sent and callbacks to be called
         rd_kafka_flush(self.kafkaHandle, 10000)
 
@@ -166,8 +187,15 @@ public actor KafkaProducer {
     /// - Returns: Unique message identifier matching the `id` property of the corresponding ``KafkaAcknowledgedMessage``
     @discardableResult
     public func sendAsync(message: KafkaProducerMessage) throws -> UInt {
-        try failIfProducerShutDown()
+        switch self.state {
+        case .started:
+            return try self._sendAsync(message: message)
+        case .shuttingDown, .shutDown:
+            throw KafkaError(description: "Trying to invoke method on producer that has been shut down.")
+        }
+    }
 
+    private func _sendAsync(message: KafkaProducerMessage) throws -> UInt {
         let topicHandle = self.createTopicHandleIfNeeded(topic: message.topic)
 
         let keyBytes: [UInt8]?
@@ -213,17 +241,21 @@ public actor KafkaProducer {
         let producer = Unmanaged<KafkaProducer>.fromOpaque(producerPointer).takeUnretainedValue()
 
         guard let messagePointer = messagePointer else {
-            producer.logger.error("Could not resolved acknowledged message")
+            producer.logger.error("Could not resolve acknowledged message")
             return
         }
 
         let messageID = messagePointer.pointee._private
-        guard let message = KafkaAcknowledgedMessage(messagePointer: messagePointer, id: UInt(bitPattern: messageID)) else {
-            producer.logger.error("Sending message failed due to an unknown error")
-            return
-        }
 
-        producer.acknowledgements.produceMessage(message)
+        do {
+            let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: UInt(bitPattern: messageID))
+            _ = producer.acknowledgementsSource.yield(.success(message))
+        } catch {
+            guard let error = error as? KafkaAcknowledgedMessageError else {
+                fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
+            }
+            _ = producer.acknowledgementsSource.yield(.failure(error))
+        }
 
         // The messagePointer is automatically destroyed by librdkafka
         // For safety reasons, we only use it inside of this closure
@@ -244,16 +276,6 @@ public actor KafkaProducer {
                 self.topicHandles[topic] = newHandle
             }
             return newHandle
-        }
-    }
-
-    /// Method that throws an error if the ``KafkaProducer`` has been shut down or is in the process of shutting down.
-    private func failIfProducerShutDown() throws {
-        switch state {
-        case .started:
-            return
-        case .shuttingDown, .shutDown:
-            throw KafkaError(description: "Trying to invoke method on producer that has been shut down.")
         }
     }
 }

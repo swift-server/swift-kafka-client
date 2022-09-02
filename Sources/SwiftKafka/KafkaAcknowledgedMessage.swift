@@ -20,7 +20,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
     /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
     /// The same identifier is returned by ``KafkaProducer/sendAsync(message:)`` and can be used to correlate
     /// a sent message and an acknowledged message.
-    public let id: UInt?
+    public let id: UInt
     /// The topic that the message was sent to.
     public let topic: String
     /// The partition that the message was sent to.
@@ -33,16 +33,13 @@ public struct KafkaAcknowledgedMessage: Hashable {
     public let offset: Int64
 
     /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
-    init?(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt? = nil) {
+    init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt) throws {
         self.id = id
 
         let rdKafkaMessage = messagePointer.pointee
-        guard rdKafkaMessage.err.rawValue == 0 else {
-            return nil
-        }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
-            return nil
+            fatalError("Received topic name that is non-valid UTF-8")
         }
         self.topic = topic
 
@@ -59,12 +56,23 @@ public struct KafkaAcknowledgedMessage: Hashable {
         }
 
         guard let valuePointer = rdKafkaMessage.payload else {
-            return nil
+            fatalError("Could not resolve payload of acknowledged message")
         }
 
         let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
         self.value = .init(bytes: valueBufferPointer)
 
         self.offset = Int64(rdKafkaMessage.offset)
+
+        guard rdKafkaMessage.err.rawValue == 0 else {
+            var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
+            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
+
+            throw KafkaAcknowledgedMessageError(
+                rawValue: rdKafkaMessage.err.rawValue,
+                description: errorString,
+                messageID: self.id
+            )
+        }
     }
 }
