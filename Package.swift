@@ -54,5 +54,9 @@ let package = Package(
             name: "SwiftKafkaTests",
             dependencies: ["SwiftKafka"]
         ),
+        .testTarget(
+            name: "IntegrationTests",
+            dependencies: ["SwiftKafka"]
+        ),
     ]
 )

@@ -28,3 +28,4 @@ services:
     environment:
       KAFKA_HOST: kafka
       KAFKA_PORT: 9092
+      KAFKA_CREATE_TOPICS: integration-test-topic

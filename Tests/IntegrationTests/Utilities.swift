@@ -12,15 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Crdkafka
+import Logging
 
-/// Type for representing the number of a Kafka Partition.
-public struct KafkaPartition: RawRepresentable, Hashable {
-    public var rawValue: Int32
-
-    public init(rawValue: Int32) {
-        self.rawValue = rawValue
+extension Logger {
+    static var kafkaTest: Logger {
+        var logger = Logger(label: "kafka.test")
+        logger.logLevel = .info
+        return logger
     }
-
-    public static let unassigned = KafkaPartition(rawValue: RD_KAFKA_PARTITION_UA)
 }
