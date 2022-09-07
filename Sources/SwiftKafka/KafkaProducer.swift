@@ -161,7 +161,7 @@ public actor KafkaProducer {
             self.state = .shuttingDown
             self._shutDownGracefully()
         case .shuttingDown, .shutDown:
-            throw KafkaError(description: "Trying to invoke method on producer that has been shut down.")
+            return
         }
     }
 

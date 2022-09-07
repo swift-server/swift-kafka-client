@@ -127,11 +127,6 @@ final class KafkaProducerTests: XCTestCase {
             try await producer.sendAsync(message: message)
             XCTFail("Method should have thrown error")
         } catch {}
-
-        do {
-            try await producer.shutdownGracefully()
-            XCTFail("Method should have thrown error")
-        } catch {}
     }
 
     func testNoMemoryLeakAfterShutdown() async throws {
