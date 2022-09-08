@@ -16,7 +16,7 @@ import Crdkafka
 
 /// Type for representing the number of a Kafka Partition.
 public struct KafkaPartition: RawRepresentable {
-    public let rawValue: Int32
+    public var rawValue: Int32
 
     public init(rawValue: Int32) {
         self.rawValue = rawValue

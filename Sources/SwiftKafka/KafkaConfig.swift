@@ -22,15 +22,15 @@ import Crdkafka
 /// [all available configurations](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 public struct KafkaConfig: Hashable, Equatable {
     private final class _Internal: Hashable, Equatable {
-        /// Pointer to the `rd_kafka_conf_t` object managed by `librdkafka`
+        /// Pointer to the `rd_kafka_conf_t` object managed by `librdkafka`.
         private(set) var pointer: OpaquePointer
 
-        /// Initialize internal `KafkaConfig` object through a given `rd_kafka_conf_t` pointer
+        /// Initialize internal `KafkaConfig` object through a given `rd_kafka_conf_t` pointer.
         init(pointer: OpaquePointer) {
             self.pointer = pointer
         }
 
-        /// Initialize internal `KafkaConfig` object with default configuration
+        /// Initialize internal `KafkaConfig` object with default configuration.
         convenience init() {
             self.init(pointer: rd_kafka_conf_new())
         }
@@ -84,10 +84,10 @@ public struct KafkaConfig: Hashable, Equatable {
             )
         }
 
-        func setOpaque(opaque: UnsafeMutableRawPointer) {
+        func setOpaque(opaque: AnyObject) {
             rd_kafka_conf_set_opaque(
                 self.pointer,
-                opaque
+                Unmanaged.passUnretained(opaque).toOpaque()
             )
         }
 
@@ -118,10 +118,6 @@ public struct KafkaConfig: Hashable, Equatable {
         self._internal = .init()
     }
 
-    var pointer: OpaquePointer {
-        return self._internal.pointer
-    }
-
     /// Retrieve value of configuration property for `key`
     public func value(forKey key: String) -> String? {
         return self._internal.value(forKey: key)
@@ -150,9 +146,9 @@ public struct KafkaConfig: Hashable, Equatable {
         self._internal.setDeliveryReportCallback(callback: callback)
     }
 
-    /// Set an opaque pointer that will be passed to callbacks of the `KafkaClient` using this configuration.
-    /// - Parameter pointer: pointer that will be passed to callbacks.
-    mutating func setOpaque(opaque: UnsafeMutableRawPointer) {
+    /// Set an reference to an object that will be passed to callbacks of the `KafkaClient` using this configuration.
+    /// - Parameter opaque: object that will be passed to callbacks.
+    mutating func setOpaque(opaque: AnyObject) {
         // Copy-on-write mechanism
         if !isKnownUniquelyReferenced(&(self._internal)) {
             self._internal = self._internal.createDuplicate()
@@ -161,9 +157,11 @@ public struct KafkaConfig: Hashable, Equatable {
         self._internal.setOpaque(opaque: opaque)
     }
 
-    /// Create a duplicate configuration object in memory.
-    /// - Returns: `OpaquePointer` to the duplicate `rd_kafka_conf_t` object in memory.
-    func createDuplicatePointer() -> OpaquePointer {
-        return self._internal.createDuplicatePointer()
+    /// Create a duplicate configuration object in memory and access it through a scoped accessor.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the `OpaquePointer` to the duplicate `rd_kafka_conf_t` object in memory.
+    @discardableResult
+    func withDuplicatePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
+        return try body(self._internal.createDuplicatePointer())
     }
 }

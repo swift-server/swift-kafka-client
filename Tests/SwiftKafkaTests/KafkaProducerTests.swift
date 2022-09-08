@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import NIOCore
 @testable import SwiftKafka
 import XCTest
 
@@ -48,6 +49,33 @@ final class KafkaProducerTests: XCTestCase {
             topic: expectedTopic,
             key: "key",
             value: "Hello, World!"
+        )
+
+        let messageID = try await producer.sendAsync(message: message)
+
+        for await messageResult in producer.acknowledgements {
+            guard case .success(let acknowledgedMessage) = messageResult else {
+                XCTFail()
+                return
+            }
+
+            XCTAssertEqual(messageID, acknowledgedMessage.id)
+            XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
+            XCTAssertEqual(message.key, acknowledgedMessage.key)
+            XCTAssertEqual(message.value, acknowledgedMessage.value)
+            break
+        }
+
+        try await producer.shutdownGracefully()
+    }
+
+    func testSendAsyncEmptyMessage() async throws {
+        let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+
+        let expectedTopic = "test-topic"
+        let message = KafkaProducerMessage(
+            topic: expectedTopic,
+            value: ByteBuffer()
         )
 
         let messageID = try await producer.sendAsync(message: message)
@@ -137,6 +165,9 @@ final class KafkaProducerTests: XCTestCase {
 
         try await producer?.shutdownGracefully()
         producer = nil
+
+        // Wait for rd_kafka_flush to complete
+        try await Task.sleep(nanoseconds: 10 * 1_000_000_000)
 
         XCTAssertNil(producerCopy)
     }

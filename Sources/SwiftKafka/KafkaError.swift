@@ -16,10 +16,10 @@ import Crdkafka
 
 struct KafkaError: Error {
     // Preliminary Implementation
-    public let rawValue: Int32
-    public let description: String
+    var rawValue: Int32
+    var description: String
 
-    public init(rawValue: Int32) {
+    init(rawValue: Int32) {
         self.rawValue = rawValue
         self.description = "" // TODO: https://github.com/swift-server/swift-kafka-gsoc/issues/4
     }

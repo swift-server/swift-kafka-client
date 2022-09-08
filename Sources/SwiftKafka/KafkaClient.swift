@@ -29,7 +29,7 @@ final class KafkaClient {
     /// The configuration object of the client.
     private let config: KafkaConfig
     /// Handle for the C library's Kafka instance.
-    let kafkaHandle: OpaquePointer
+    private let kafkaHandle: OpaquePointer
 
     /// Determines if client is a producer or a consumer.
     enum `Type` {
@@ -45,12 +45,15 @@ final class KafkaClient {
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
-        guard let handle = rd_kafka_new(
-            clientType,
-            config.createDuplicatePointer(), // Duplicate because rd_kafka_new takes ownership of the pointer and frees it.
-            errorChars,
-            KafkaClient.stringSize
-        ) else {
+        guard let handle = self.config.withDuplicatePointer({ [errorChars, clientType] duplicateConfig in
+            // Duplicate because rd_kafka_new takes ownership of the pointer and frees it.
+            rd_kafka_new(
+                clientType,
+                duplicateConfig,
+                errorChars,
+                KafkaClient.stringSize
+            )
+        }) else {
             let errorString = String(cString: errorChars)
             throw KafkaError(description: errorString)
         }
@@ -59,5 +62,13 @@ final class KafkaClient {
 
     deinit {
         rd_kafka_destroy(kafkaHandle)
+    }
+
+    /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the Kafka handle pointer.
+    @discardableResult
+    func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
+        return try body(self.kafkaHandle)
     }
 }

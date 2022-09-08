@@ -101,10 +101,6 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         self._internal = .init()
     }
 
-    var pointer: OpaquePointer {
-        return self._internal.pointer
-    }
-
     /// Retrieve value of topic configuration property for `key`
     public func value(forKey key: String) -> String? {
         return self._internal.value(forKey: key)
@@ -120,9 +116,11 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         try self._internal.set(value, forKey: key)
     }
 
-    /// Create a duplicate topic configuration object in memory.
-    /// - Returns: `OpaquePointer` to the duplicate `rd_kafka_topic_conf_t` object in memory.
-    func createDuplicatePointer() -> OpaquePointer {
-        return self._internal.createDuplicatePointer()
+    /// Create a duplicate topic configuration object in memory and access it through a scoped accessor.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the `OpaquePointer` to the duplicate `rd_kafka_topic_conf_t` object in memory.
+    @discardableResult
+    func withDuplicatePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
+        return try body(self._internal.createDuplicatePointer())
     }
 }

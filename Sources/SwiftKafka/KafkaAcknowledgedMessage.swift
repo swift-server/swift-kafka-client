@@ -20,23 +20,37 @@ public struct KafkaAcknowledgedMessage: Hashable {
     /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
     /// The same identifier is returned by ``KafkaProducer/sendAsync(message:)`` and can be used to correlate
     /// a sent message and an acknowledged message.
-    public let id: UInt
+    public var id: UInt
     /// The topic that the message was sent to.
-    public let topic: String
+    public var topic: String
     /// The partition that the message was sent to.
-    public let partition: Int32
+    public var partition: Int32
     /// The key of the message.
-    public let key: ByteBuffer?
+    public var key: ByteBuffer?
     /// The body of the message.
-    public let value: ByteBuffer
+    public var value: ByteBuffer
     /// The offset of the message in its partition.
-    public let offset: Int64
+    public var offset: Int64
 
     /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt) throws {
         self.id = id
 
         let rdKafkaMessage = messagePointer.pointee
+
+        let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
+        self.value = ByteBuffer(bytes: valueBufferPointer)
+
+        guard rdKafkaMessage.err.rawValue == 0 else {
+            var errorStringBuffer = self.value
+            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
+
+            throw KafkaAcknowledgedMessageError(
+                rawValue: rdKafkaMessage.err.rawValue,
+                description: errorString,
+                messageID: self.id
+            )
+        }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
             fatalError("Received topic name that is non-valid UTF-8")
@@ -55,24 +69,6 @@ public struct KafkaAcknowledgedMessage: Hashable {
             self.key = nil
         }
 
-        guard let valuePointer = rdKafkaMessage.payload else {
-            fatalError("Could not resolve payload of acknowledged message")
-        }
-
-        let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
-        self.value = .init(bytes: valueBufferPointer)
-
         self.offset = Int64(rdKafkaMessage.offset)
-
-        guard rdKafkaMessage.err.rawValue == 0 else {
-            var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
-            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
-
-            throw KafkaAcknowledgedMessageError(
-                rawValue: rdKafkaMessage.err.rawValue,
-                description: errorString,
-                messageID: self.id
-            )
-        }
     }
 }

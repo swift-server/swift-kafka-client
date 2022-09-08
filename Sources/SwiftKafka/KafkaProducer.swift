@@ -22,7 +22,7 @@ struct NoBackPressure: NIOAsyncSequenceProducerBackPressureStrategy {
     func didConsume(bufferDepth: Int) -> Bool { true }
 }
 
-/// `NIOAsyncSequenceProducerBackPressureStrategy` that does nothing.
+/// `NIOAsyncSequenceProducerDelegate` that does nothing.
 struct NoDelegate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {}
     func didTerminate() {}
@@ -44,6 +44,21 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 
     public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
         return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    }
+}
+
+private class OpaqueWrapper {
+    typealias SequenceSource = NIOAsyncSequenceProducer<
+        AcknowledgedMessagesAsyncSequence.Element,
+        NoBackPressure,
+        NoDelegate
+    >.Source
+    var source: SequenceSource
+    var logger: Logger
+
+    init(source: SequenceSource, logger: Logger) {
+        self.source = source
+        self.logger = logger
     }
 }
 
@@ -75,29 +90,19 @@ public actor KafkaProducer {
     private let topicConfig: KafkaTopicConfig
     /// A logger.
     private let logger: Logger
+    /// Object that is passed to the delivery report callback of the ``KafkaProducer``.
+    private let callbackOpaque: OpaqueWrapper
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
     private var topicHandles: [String: OpaquePointer]
+    /// Used for handling the connection to the Kafka cluster.
+    private let client: KafkaClient
+    /// Task that polls the Kafka cluster for updates periodically.
+    private let pollTask: Task<Void, Never>
 
-    /// `NIOAsyncSequenceProducer.Source` used for publishing values to the ``acknowledgements`` sequence.
-    private typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    private let acknowledgementsSource: NIOAsyncSequenceProducer<
-        Acknowledgement,
-        NoBackPressure,
-        NoDelegate
-    >.Source
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
     public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
-
-    // Implicitly unwrapped optionals because we must pass self to our config before initializing client etc.
-    /// Unmanaged reference to self with an unbalanced retain.
-    private var referenceToSelf: UnsafeMutableRawPointer!
-    /// Used for handling the connection to the Kafka cluster.
-    private var client: KafkaClient!
-    /// Refrence to `librdkafka`'s `rd_kafka_t` instance.
-    private var kafkaHandle: OpaquePointer!
-    /// Task that polls the Kafka cluster for updates periodically.
-    private var pollTask: Task<Void, Never>!
+    private typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
 
     /// Initialize a new `KafkaProducer`.
     /// - Parameter config: The ``KafkaConfig`` for configuring the `KafkaProducer`.
@@ -125,27 +130,26 @@ public actor KafkaProducer {
             backPressureStrategy: NoBackPressure(),
             delegate: NoDelegate()
         )
-        self.acknowledgementsSource = acknowledgementsSourceAndSequence.source
         self.acknowledgements = AcknowledgedMessagesAsyncSequence(
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
-        // Create a new reference to self that is then passed
-        // to the KafkaConfig as an opaque pointer.
-        // To avoid memory leaks, this reference is evantually
-        // removed in the shutdownGracefully method.
-        self.referenceToSelf = Unmanaged.passRetained(self).toOpaque()
+        self.callbackOpaque = OpaqueWrapper(
+            source: acknowledgementsSourceAndSequence.source,
+            logger: self.logger
+        )
 
         self.config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
-        self.config.setOpaque(opaque: self.referenceToSelf)
+        self.config.setOpaque(opaque: self.callbackOpaque)
 
         self.client = try KafkaClient(type: .producer, config: self.config, logger: self.logger)
-        self.kafkaHandle = self.client.kafkaHandle
 
         // Poll Kafka every millisecond
-        self.pollTask = Task { [kafkaHandle] in
+        self.pollTask = Task { [client] in
             while !Task.isCancelled {
-                rd_kafka_poll(kafkaHandle, 0)
+                client.withKafkaHandlePointer { handle in
+                    rd_kafka_poll(handle, 0)
+                }
                 try? await Task.sleep(nanoseconds: 1_000_000)
             }
         }
@@ -165,18 +169,19 @@ public actor KafkaProducer {
         }
     }
 
+    // TODO: put to deinit, remove state?
     private func _shutDownGracefully() {
-        // Wait 10 seconds for outstanding messages to be sent and callbacks to be called
-        rd_kafka_flush(self.kafkaHandle, 10000)
+        Task {
+            // Wait 10 seconds for outstanding messages to be sent and callbacks to be called
+            self.client.withKafkaHandlePointer { handle in
+                rd_kafka_flush(handle, 10000)
+            }
+        }
 
         for (_, topicHandle) in self.topicHandles {
             rd_kafka_topic_destroy(topicHandle)
         }
         self.pollTask.cancel()
-
-        // Decrease reference count of self by one.
-        // This is necessary because we created an additional reference to self in our initializer.
-        _ = Unmanaged<KafkaProducer>.fromOpaque(self.referenceToSelf).takeRetainedValue()
 
         self.state = .shutDown
     }
@@ -233,15 +238,15 @@ public actor KafkaProducer {
     // Closure that is executed when a message has been acknowledged by Kafka
     private let deliveryReportCallback: (
         @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
-    ) = { _, messagePointer, producerPointer in
-        guard let producerPointer = producerPointer else {
+    ) = { _, messagePointer, opaquePointer in
+        guard let opaquePointer = opaquePointer else {
             fatalError("Could not resolve reference to KafkaProducer instance")
         }
-        // Get a reference to the KafkaProducer without decrementing its reference count
-        let producer = Unmanaged<KafkaProducer>.fromOpaque(producerPointer).takeUnretainedValue()
+
+        let opaqueWrapper = Unmanaged<OpaqueWrapper>.fromOpaque(opaquePointer).takeUnretainedValue()
 
         guard let messagePointer = messagePointer else {
-            producer.logger.error("Could not resolve acknowledged message")
+            opaqueWrapper.logger.error("Could not resolve acknowledged message")
             return
         }
 
@@ -253,19 +258,19 @@ public actor KafkaProducer {
                 description: "TODO: implement in separate error issue",
                 messageID: messageID
             )
-            _ = producer.acknowledgementsSource.yield(.failure(error))
+            _ = opaqueWrapper.source.yield(.failure(error))
 
             return
         }
 
         do {
             let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
-            _ = producer.acknowledgementsSource.yield(.success(message))
+            _ = opaqueWrapper.source.yield(.success(message))
         } catch {
             guard let error = error as? KafkaAcknowledgedMessageError else {
                 fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
             }
-            _ = producer.acknowledgementsSource.yield(.failure(error))
+            _ = opaqueWrapper.source.yield(.failure(error))
         }
 
         // The messagePointer is automatically destroyed by librdkafka
@@ -278,11 +283,16 @@ public actor KafkaProducer {
         if let handle = self.topicHandles[topic] {
             return handle
         } else {
-            let newHandle = rd_kafka_topic_new(
-                self.kafkaHandle,
-                topic,
-                self.topicConfig.createDuplicatePointer() // Duplicate because rd_kafka_topic_new deallocates config object
-            )
+            let newHandle = self.client.withKafkaHandlePointer { handle in
+                self.topicConfig.withDuplicatePointer { duplicatePointer in
+                    // Duplicate because rd_kafka_topic_new deallocates config object
+                    rd_kafka_topic_new(
+                        handle,
+                        topic,
+                        duplicatePointer
+                    )
+                }
+            }
             if newHandle != nil {
                 self.topicHandles[topic] = newHandle
             }

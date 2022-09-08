@@ -15,9 +15,9 @@
 /// Error caused by the Kafka cluster when trying to process a message produced by ``KafkaProducer``.
 public struct KafkaAcknowledgedMessageError: Error {
     /// A raw value representing the error code.
-    public let rawValue: Int32
+    public var rawValue: Int32
     /// A string describing the error.
-    public let description: String?
+    public var description: String?
     /// Identifier of the message that caused the error.
-    public let messageID: UInt
+    public var messageID: UInt
 }
