@@ -18,15 +18,15 @@ import NIOCore
 /// A message produced by the client and acknowledged by the Kafka cluster.
 public struct KafkaConsumerMessage: Hashable {
     /// The topic that the message was sent to.
-    public let topic: String
+    public var topic: String
     /// The partition that the message was sent to.
-    public let partition: KafkaPartition
+    public var partition: KafkaPartition
     /// The key of the message.
-    public let key: ByteBuffer?
+    public var key: ByteBuffer?
     /// The body of the message.
-    public let value: ByteBuffer
+    public var value: ByteBuffer
     /// The offset of the message in its partition.
-    public let offset: Int64
+    public var offset: Int64
 
     /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
