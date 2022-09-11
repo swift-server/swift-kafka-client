@@ -17,6 +17,7 @@ import struct Foundation.UUID // TODO: can we avoid this Foundation import??
 import Logging
 import NIOCore
 
+/// `NIOAsyncSequenceProducerDelegate` implementation handling backpressure for ``KafkaConsumer``.
 actor ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDelegate {
     weak var consumer: KafkaConsumer?
 
@@ -36,11 +37,13 @@ actor ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
+/// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with something like KafkaConsumerError
     typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
     let wrappedSequence: NIOAsyncSequenceProducer<Element, HighLowWatermark, ConsumerMessagesAsyncSequenceDelegate>
 
+    /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
         let wrappedIterator: NIOAsyncSequenceProducer<
             Element,
@@ -58,29 +61,45 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     }
 }
 
+/// Receive messages from the Kafka cluster.
 public actor KafkaConsumer {
+    /// State of the ``KafkaConsumer``.
     private var state: State
 
+    /// States that the ``KafkaConsumer`` can have.
     private enum State {
+        /// The ``KafkaConsumer`` has started and is ready to use.
         case started
+        /// The ``KafkaConsumer`` has been closed and does not receive any more messages.
         case closed
     }
 
     // TODO: do we want to allow users to subscribe / assign to more topics during runtime?
     // TODO: function that returns all partitions for topic -> use rd_kafka_metadata, dedicated MetaData class
+    /// The configuration object of the consumer client.
     private var config: KafkaConfig
+    /// A logger.
     private let logger: Logger
+    /// Used for handling the connection to the Kafka cluster.
     private let client: KafkaClient
+    /// Pointer to a list of topics + partition pairs.
     private let subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
 
+    /// Type of the values returned by the ``messages`` sequence.
     private typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with a more specific Error type
     private let messagesSource: NIOAsyncSequenceProducer<
         Element,
         ConsumerMessagesAsyncSequence.HighLowWatermark,
         ConsumerMessagesAsyncSequenceDelegate
     >.Source
+    /// `AsyncSequence` that returns all ``KafkaConsumerMessage`` objects that the consumer receives.
     public nonisolated let messages: ConsumerMessagesAsyncSequence
 
+    /// Initialize a new ``KafkaConsumer``.
+    /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
+    /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
+    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter logger: A logger.
     private init(
         config: KafkaConfig = KafkaConfig(),
         logger: Logger
@@ -121,8 +140,12 @@ public actor KafkaConsumer {
         await messagesSequenceDelegate.setConsumer(self)
     }
 
-    // MARK: - Initialize as member of a consumner group
-
+    /// Initialize a new ``KafkaConsumer`` and subscribe to the given list of `topics` as part of
+    /// the consumer group specified in `groupID`.
+    /// - Parameter topics: An array of topic names to subscribe to.
+    /// - Parameter groupID: Name of the consumer group that this ``KafkaConsumer`` will create / join.
+    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter logger: A logger.
     public convenience init(
         topics: [String],
         groupID: String,
@@ -147,9 +170,12 @@ public actor KafkaConsumer {
         try await self.subscribe(topics: topics)
     }
 
-    // MARK: - Initialize as assignment to particular topic + partition pair
-
-    // TODO: DocC group.id property will be ignored
+    /// Initialize a new ``KafkaConsumer`` and assign it to a specific `partition` of a `topic`.
+    /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
+    /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
+    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter logger: A logger.
+    /// - Note: This consumer ignores the `group.id` property of its `config`.
     public convenience init(
         topic: String,
         partition: KafkaPartition,
@@ -173,12 +199,17 @@ public actor KafkaConsumer {
     deinit {
         switch self.state {
         case .started:
-            self._close()
+            Task {
+                try await self._close()
+            }
         case .closed:
             return
         }
     }
 
+    /// Subscribe to the given list of `topics`.
+    /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
+    /// - Parameter topics: An array of topic names to subscribe to.
     private func subscribe(topics: [String]) throws {
         // TODO: is this state needed for a method that is only invoked upon init?
         switch self.state {
@@ -205,6 +236,10 @@ public actor KafkaConsumer {
         }
     }
 
+    /// Assign the``KafkaConsumer`` to a specific `partition` of a `topic`.
+    /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
+    /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
+    /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
     private func assign(
         topic: String,
         partition: KafkaPartition,
@@ -237,6 +272,7 @@ public actor KafkaConsumer {
         }
     }
 
+    /// Receive new messages and forward the result to the ``messages`` `AsyncSequence`.
     func produceMore() async {
         let messageresult: Element
         do {
@@ -257,11 +293,14 @@ public actor KafkaConsumer {
         }
     }
 
-    // TODO: docc timeout is in ms
-    // TODO: clock API
-    // TODO: ideally: make private
+    /// Request a new message from the Kafka cluster.
+    /// This method blocks for a maximum of `timeout` milliseconds.
+    /// - Parameter timeout: Maximum amount of milliseconds this method waits for a new message.
+    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
     func poll(timeout: Int32 = 100) async throws -> KafkaConsumerMessage? {
-        // TODO: is this state needed here? Are we publishing a result type
+        // TODO: clock API
+        // TODO: ideally: make private
+        // TODO: is this state needed here?
         switch self.state {
         case .started:
             break
@@ -298,8 +337,10 @@ public actor KafkaConsumer {
         }
     }
 
-    // TODO: DocC: Note about enable.auto.commit
-    // TODO: docc: https://github.com/segmentio/kafka-go#explicit-commits note about highest offset
+    /// Mark `message` in the topic as read and request the next message from the topic.
+    /// This method is only used for manual offset management.
+    /// - Parameter message: Last received message that shall be marked as read.
+    /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
         switch self.state {
         case .started:
@@ -311,6 +352,7 @@ public actor KafkaConsumer {
     }
 
     // TODO: commit multiple messages at once -> different topics + test
+    // TODO: docc: https://github.com/segmentio/kafka-go#explicit-commits note about highest offset
     private func _commitSync(_ message: KafkaConsumerMessage) async throws {
         guard self.config.value(forKey: "enable.auto.commit") == "false" else {
             throw KafkaError(description: "Committing manually only works if enable.auto.commit is set to false")
@@ -326,8 +368,10 @@ public actor KafkaConsumer {
             ) else {
                 fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
             }
-            // TODO: DocC: commit offset is the offset where consumption should resume
-            // https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+
+            // The offset committed is always the offset of the next requested message.
+            // Thus, we increase the offset of the current message by one before committing it.
+            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
             partitionPointer.pointee.offset = message.offset + 1
             let result = self.client.withKafkaHandlePointer { handle in
                 rd_kafka_commit(
@@ -344,21 +388,31 @@ public actor KafkaConsumer {
         }
     }
 
-    public func close() throws {
+    /// Stop consuming messages. This step is irreversible.
+    public func close() async throws {
         switch self.state {
         case .started:
             break
         case .closed:
             throw KafkaError(description: "Trying to invoke method on consumer that has been closed.")
         }
-        self._close()
+        try await self._close()
     }
 
-    private func _close() {
-        self.client.withKafkaHandlePointer { handle in
-            rd_kafka_consumer_close(handle)
+    private func _close() async throws {
+        return try await withCheckedThrowingContinuation { continuation in
+            let result = self.client.withKafkaHandlePointer { handle in
+                rd_kafka_consumer_close(handle)
+            }
+
+            rd_kafka_topic_partition_list_destroy(subscribedTopicsPointer)
+            self.state = .closed
+
+            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+                continuation.resume(throwing: KafkaError(rawValue: result.rawValue))
+                return
+            }
+            continuation.resume()
         }
-        rd_kafka_topic_partition_list_destroy(subscribedTopicsPointer)
-        self.state = .closed
     }
 }

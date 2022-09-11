@@ -16,13 +16,24 @@
 import XCTest
 
 // For testing locally on Mac, do the following:
+//
 // 1. Install Kafka and Zookeeper using homebrew
+//
 // https://medium.com/@Ankitthakur/apache-kafka-installation-on-mac-using-homebrew-a367cdefd273
-// 2. Run the following command
-// zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
-// TODO: alternative run command for hombrew M1 installations
+//
+// 2. Start Zookeeper & Kafka Server
+//
+// (Homebrew - Apple Silicon)
 // zookeeper-server-start /opt/homebrew/etc/kafka/zookeeper.properties & kafka-server-start /opt/homebrew/etc/kafka/server.properties
-// TODO: add note that test topics must exist and how to create them
+//
+// (Homebrew - Intel Mac)
+// zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
+//
+// 3. Create topics used for testing (only needs to be done once)
+//
+// kafka-topics --bootstrap-server localhost:9092 --create --topics subscription-test-topic &&
+// kafka-topics --bootstrap-server localhost:9092 --create --topics assignment-test-topic &&
+// kafka-topics --bootstrap-server localhost:9092 --create --topics commit-sync-test-topic
 
 // TODO: test for multiple messages
 final class SwiftKafkaTests: XCTestCase {

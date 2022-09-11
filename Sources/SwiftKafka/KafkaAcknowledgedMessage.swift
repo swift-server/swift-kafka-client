@@ -32,7 +32,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
     /// The offset of the message in its partition.
     public var offset: Int64
 
-    /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
+    /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt) throws {
         self.id = id
 

@@ -15,11 +15,11 @@
 import Crdkafka
 import NIOCore
 
-/// A message produced by the client and acknowledged by the Kafka cluster.
+/// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage: Hashable {
-    /// The topic that the message was sent to.
+    /// The topic that the message was received from.
     public var topic: String
-    /// The partition that the message was sent to.
+    /// The partition that the message was received from.
     public var partition: KafkaPartition
     /// The key of the message.
     public var key: ByteBuffer?
@@ -28,7 +28,7 @@ public struct KafkaConsumerMessage: Hashable {
     /// The offset of the message in its partition.
     public var offset: Int64
 
-    /// Initialize `KafkaAckedMessage` from `rd_kafka_message_t` pointer.
+    /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
@@ -59,8 +59,8 @@ public struct KafkaConsumerMessage: Hashable {
         self.offset = Int64(rdKafkaMessage.offset)
 
         guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
-            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
+//            var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
+//            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
             // TODO: what to do with error string?
             // TODO: handle errors here or in consumer?
