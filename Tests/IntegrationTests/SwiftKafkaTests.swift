@@ -49,7 +49,7 @@ final class SwiftKafkaTests: XCTestCase {
         let topic = "subscription-test-topic"
 
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
-        let consumer = try KafkaConsumer(
+        let consumer = try await KafkaConsumer(
             topics: [topic],
             groupID: "subscription-test-group-id",
             config: config,
@@ -78,7 +78,7 @@ final class SwiftKafkaTests: XCTestCase {
         XCTAssertEqual(testMessage.key, consumedMessage?.key)
         XCTAssertEqual(testMessage.value, consumedMessage?.value)
 
-        try consumer.close()
+        try await consumer.close()
         try await producer.shutdownGracefully()
     }
 
@@ -86,7 +86,7 @@ final class SwiftKafkaTests: XCTestCase {
         let topic = "assignment-test-topic"
 
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
-        let consumer = try KafkaConsumer(
+        let consumer = try await KafkaConsumer(
             topic: topic,
             partition: KafkaPartition(rawValue: 0),
             config: config,
@@ -115,7 +115,7 @@ final class SwiftKafkaTests: XCTestCase {
         XCTAssertEqual(testMessage.key, consumedMessage?.key)
         XCTAssertEqual(testMessage.value, consumedMessage?.value)
 
-        try consumer.close()
+        try await consumer.close()
         try await producer.shutdownGracefully()
     }
 
@@ -125,7 +125,7 @@ final class SwiftKafkaTests: XCTestCase {
         try config.set("false", forKey: "enable.auto.commit")
 
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
-        let consumer = try KafkaConsumer(
+        let consumer = try await KafkaConsumer(
             topics: [topic], // TODO: multiple topics
             groupID: "commit-sync-test-group-id",
             config: config,
@@ -158,7 +158,7 @@ final class SwiftKafkaTests: XCTestCase {
 
         XCTAssertEqual(testMessages.count, consumedMessages.count)
 
-        try consumer.close()
+        try await consumer.close()
         try await producer.shutdownGracefully()
     }
 

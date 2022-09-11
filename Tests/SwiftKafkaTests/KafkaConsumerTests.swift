@@ -39,26 +39,29 @@ final class KafkaConsumerTests: XCTestCase {
     func testSettingAmbigousGroupIDFails() async throws {
         try self.config.set("some-group-id", forKey: "group.id")
 
-        XCTAssertThrowsError(
-            _ = try KafkaConsumer(
+        do {
+            _ = try await KafkaConsumer(
                 topics: ["test-topic"],
                 groupID: "another-group-id",
                 config: self.config,
                 logger: .kafkaTest
             )
-        )
+            XCTFail("Method should have thrown error")
+        } catch {}
     }
 
     func testSettingDuplicateIdenticalGroupIDSucceeds() async throws {
         try self.config.set("some-group-id", forKey: "group.id")
 
-        XCTAssertNoThrow(
-            _ = try KafkaConsumer(
+        do {
+            _ = try await KafkaConsumer(
                 topics: ["test-topic"],
                 groupID: "some-group-id",
                 config: self.config,
                 logger: .kafkaTest
             )
-        )
+        } catch {
+            XCTFail("Method should not have thrown error")
+        }
     }
 }

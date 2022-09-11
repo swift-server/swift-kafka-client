@@ -17,12 +17,36 @@ import struct Foundation.UUID // TODO: can we avoid this Foundation import??
 import Logging
 import NIOCore
 
+actor ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDelegate {
+    weak var consumer: KafkaConsumer?
+
+    // TODO: is it ok to block here -> we can make poll non-async and get rid of the task here
+    nonisolated func produceMore() {
+        Task {
+            await self.consumer?.produceMore()
+        }
+    }
+
+    nonisolated func didTerminate() {
+        return
+    }
+
+    func setConsumer(_ consumer: KafkaConsumer) {
+        self.consumer = consumer
+    }
+}
+
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with something like KafkaConsumerError
-    let wrappedSequence: NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>
+    typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
+    let wrappedSequence: NIOAsyncSequenceProducer<Element, HighLowWatermark, ConsumerMessagesAsyncSequenceDelegate>
 
     public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>.AsyncIterator
+        let wrappedIterator: NIOAsyncSequenceProducer<
+            Element,
+            HighLowWatermark,
+            ConsumerMessagesAsyncSequenceDelegate
+        >.AsyncIterator
 
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
@@ -34,7 +58,7 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     }
 }
 
-public final class KafkaConsumer {
+public actor KafkaConsumer {
     private var state: State
 
     private enum State {
@@ -42,28 +66,25 @@ public final class KafkaConsumer {
         case closed
     }
 
-    // TODO: backpressure??
     // TODO: do we want to allow users to subscribe / assign to more topics during runtime?
     // TODO: function that returns all partitions for topic -> use rd_kafka_metadata, dedicated MetaData class
-    // TODO: is access to the var's thread-safe?
     private var config: KafkaConfig
     private let logger: Logger
     private let client: KafkaClient
     private let subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
-    private var pollTask: Task<Void, Never>?
 
     private typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with a more specific Error type
     private let messagesSource: NIOAsyncSequenceProducer<
         Element,
-        NoBackPressure,
-        NoDelegate
+        ConsumerMessagesAsyncSequence.HighLowWatermark,
+        ConsumerMessagesAsyncSequenceDelegate
     >.Source
-    public let messages: ConsumerMessagesAsyncSequence
+    public nonisolated let messages: ConsumerMessagesAsyncSequence
 
     private init(
         config: KafkaConfig = KafkaConfig(),
         logger: Logger
-    ) throws {
+    ) async throws {
         self.config = config
         self.logger = logger
         self.client = try KafkaClient(type: .consumer, config: self.config, logger: self.logger)
@@ -79,31 +100,25 @@ public final class KafkaConsumer {
             throw KafkaError(rawValue: result.rawValue)
         }
 
+        let backpressureStrategy = ConsumerMessagesAsyncSequence.HighLowWatermark(
+            lowWatermark: 5,
+            highWatermark: 10
+        )
+
+        self.state = .started
+
+        let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate()
         let messagesSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             of: Element.self,
-            backPressureStrategy: NoBackPressure(),
-            delegate: NoDelegate()
+            backPressureStrategy: backpressureStrategy,
+            delegate: messagesSequenceDelegate
         )
         self.messagesSource = messagesSourceAndSequence.source
         self.messages = ConsumerMessagesAsyncSequence(
             wrappedSequence: messagesSourceAndSequence.sequence
         )
 
-        self.state = .started
-
-        // TODO: will messagesSourceAndSequence be captured -> it shouldn't!
-        self.pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                do {
-                    guard let message = try await self?.poll() else {
-                        continue
-                    }
-                    _ = self?.messagesSource.yield(.success(message))
-                } catch {
-                    _ = self?.messagesSource.yield(.failure(error))
-                }
-            }
-        }
+        await messagesSequenceDelegate.setConsumer(self)
     }
 
     // MARK: - Initialize as member of a consumner group
@@ -113,7 +128,7 @@ public final class KafkaConsumer {
         groupID: String,
         config: KafkaConfig = KafkaConfig(),
         logger: Logger
-    ) throws {
+    ) async throws {
         // TODO: make prettier
         // TODO: use inout parameter here?
         var config = config
@@ -125,11 +140,11 @@ public final class KafkaConsumer {
             try config.set(groupID, forKey: "group.id")
         }
 
-        try self.init(
+        try await self.init(
             config: config,
             logger: logger
         )
-        try self.subscribe(topics: topics)
+        try await self.subscribe(topics: topics)
     }
 
     // MARK: - Initialize as assignment to particular topic + partition pair
@@ -140,7 +155,7 @@ public final class KafkaConsumer {
         partition: KafkaPartition,
         config: KafkaConfig = KafkaConfig(),
         logger: Logger
-    ) throws {
+    ) async throws {
         // Althogh an assignment is not related to a consumer group,
         // librdkafka requires us to set a `group.id`.
         // This is a known issue:
@@ -148,11 +163,11 @@ public final class KafkaConsumer {
         var config = config
         try config.set(UUID().uuidString, forKey: "group.id")
 
-        try self.init(
+        try await self.init(
             config: config,
             logger: logger
         )
-        try self.assign(topic: topic, partition: partition)
+        try await self.assign(topic: topic, partition: partition)
     }
 
     deinit {
@@ -219,6 +234,26 @@ public final class KafkaConsumer {
 
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
             throw KafkaError(rawValue: result.rawValue)
+        }
+    }
+
+    func produceMore() async {
+        let messageresult: Element
+        do {
+            guard let message = try await self.poll() else {
+                return
+            }
+            messageresult = .success(message)
+        } catch {
+            messageresult = .failure(error)
+        }
+
+        let yieldresult = self.messagesSource.yield(messageresult)
+        switch yieldresult {
+        case .produceMore:
+            await self.produceMore()
+        case .dropped, .stopProducing:
+            return
         }
     }
 
@@ -320,7 +355,6 @@ public final class KafkaConsumer {
     }
 
     private func _close() {
-        self.pollTask?.cancel()
         self.client.withKafkaHandlePointer { handle in
             rd_kafka_consumer_close(handle)
         }
