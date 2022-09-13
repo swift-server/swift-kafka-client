@@ -45,19 +45,23 @@ final class KafkaClient {
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
-        guard let handle = self.config.withDuplicatePointer({ [errorChars, clientType] duplicateConfig in
-            // Duplicate because rd_kafka_new takes ownership of the pointer and frees it.
-            rd_kafka_new(
+        self.kafkaHandle = try self.config.withDuplicatePointer({ [clientType] duplicateConfig in
+            // Duplicate because rd_kafka_new takes ownership of the pointer and frees it upon success.
+            guard let handle = rd_kafka_new(
                 clientType,
                 duplicateConfig,
                 errorChars,
                 KafkaClient.stringSize
-            )
-        }) else {
-            let errorString = String(cString: errorChars)
-            throw KafkaError(description: errorString)
-        }
-        self.kafkaHandle = handle
+            ) else {
+                // rd_kafka_new only frees the duplicate pointer upon success.
+                rd_kafka_conf_destroy(duplicateConfig)
+
+                let errorString = String(cString: errorChars)
+                throw KafkaError(description: errorString)
+            }
+
+            return handle
+        })
     }
 
     deinit {

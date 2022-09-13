@@ -90,8 +90,6 @@ public actor KafkaProducer {
     private let topicConfig: KafkaTopicConfig
     /// A logger.
     private let logger: Logger
-    /// Object that is passed to the delivery report callback of the ``KafkaProducer``.
-    private let callbackOpaque: OpaqueWrapper
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
     private var topicHandles: [String: OpaquePointer]
     /// Used for handling the connection to the Kafka cluster.
@@ -134,13 +132,12 @@ public actor KafkaProducer {
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
-        self.callbackOpaque = OpaqueWrapper(
+        let callbackOpaque = OpaqueWrapper(
             source: acknowledgementsSourceAndSequence.source,
             logger: self.logger
         )
-
         self.config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
-        self.config.setOpaque(opaque: self.callbackOpaque)
+        self.config.setOpaque(opaque: callbackOpaque)
 
         self.client = try KafkaClient(type: .producer, config: self.config, logger: self.logger)
 
@@ -159,22 +156,23 @@ public actor KafkaProducer {
     ///
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
     /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
-    public func shutdownGracefully() throws {
+    /// - Parameter timeout: Maximum amount of milliseconds this method waits for any outstanding messages to be sent.
+    public func shutdownGracefully(timeout: Int32 = 10000) async {
         switch self.state {
         case .started:
             self.state = .shuttingDown
-            self._shutDownGracefully()
+            await self._shutDownGracefully(timeout: timeout)
         case .shuttingDown, .shutDown:
             return
         }
     }
 
-    // TODO: put to deinit, remove state?
-    private func _shutDownGracefully() {
-        Task {
+    private func _shutDownGracefully(timeout: Int32) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             // Wait 10 seconds for outstanding messages to be sent and callbacks to be called
             self.client.withKafkaHandlePointer { handle in
-                rd_kafka_flush(handle, 10000)
+                rd_kafka_flush(handle, timeout)
+                continuation.resume()
             }
         }
 

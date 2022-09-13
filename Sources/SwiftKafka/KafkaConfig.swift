@@ -25,14 +25,24 @@ public struct KafkaConfig: Hashable, Equatable {
         /// Pointer to the `rd_kafka_conf_t` object managed by `librdkafka`.
         private(set) var pointer: OpaquePointer
 
+        /// References the opaque object passed to the config to ensure ARC retains it as long as the config exists.
+        private var opaque: AnyObject?
+
         /// Initialize internal `KafkaConfig` object through a given `rd_kafka_conf_t` pointer.
-        init(pointer: OpaquePointer) {
+        init(
+            pointer: OpaquePointer,
+            opaque: AnyObject?
+        ) {
             self.pointer = pointer
+            self.opaque = opaque
         }
 
         /// Initialize internal `KafkaConfig` object with default configuration.
         convenience init() {
-            self.init(pointer: rd_kafka_conf_new())
+            self.init(
+                pointer: rd_kafka_conf_new(),
+                opaque: nil
+            )
         }
 
         deinit {
@@ -84,10 +94,13 @@ public struct KafkaConfig: Hashable, Equatable {
             )
         }
 
-        func setOpaque(opaque: AnyObject) {
+        func setOpaque(opaque: AnyObject?) {
+            self.opaque = opaque
+
+            let passedPointer: UnsafeMutableRawPointer? = self.opaque.map { Unmanaged.passUnretained($0).toOpaque() }
             rd_kafka_conf_set_opaque(
                 self.pointer,
-                Unmanaged.passUnretained(opaque).toOpaque()
+                passedPointer
             )
         }
 
@@ -96,7 +109,10 @@ public struct KafkaConfig: Hashable, Equatable {
         }
 
         func createDuplicate() -> _Internal {
-            return .init(pointer: self.createDuplicatePointer())
+            return .init(
+                pointer: self.createDuplicatePointer(),
+                opaque: self.opaque
+            )
         }
 
         // MARK: Hashable
@@ -148,7 +164,7 @@ public struct KafkaConfig: Hashable, Equatable {
 
     /// Set an reference to an object that will be passed to callbacks of the `KafkaClient` using this configuration.
     /// - Parameter opaque: object that will be passed to callbacks.
-    mutating func setOpaque(opaque: AnyObject) {
+    mutating func setOpaque(opaque: AnyObject?) {
         // Copy-on-write mechanism
         if !isKnownUniquelyReferenced(&(self._internal)) {
             self._internal = self._internal.createDuplicate()

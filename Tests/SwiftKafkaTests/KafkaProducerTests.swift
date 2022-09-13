@@ -66,7 +66,7 @@ final class KafkaProducerTests: XCTestCase {
             break
         }
 
-        try await producer.shutdownGracefully()
+        await producer.shutdownGracefully()
     }
 
     func testSendAsyncEmptyMessage() async throws {
@@ -93,7 +93,7 @@ final class KafkaProducerTests: XCTestCase {
             break
         }
 
-        try await producer.shutdownGracefully()
+        await producer.shutdownGracefully()
     }
 
     func testSendAsyncTwoTopics() async throws {
@@ -139,12 +139,12 @@ final class KafkaProducerTests: XCTestCase {
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
 
-        try await producer.shutdownGracefully()
+        await producer.shutdownGracefully()
     }
 
     func testProducerNotUsableAfterShutdown() async throws {
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
-        try await producer.shutdownGracefully()
+        await producer.shutdownGracefully()
 
         let message = KafkaProducerMessage(
             topic: "test-topic",
@@ -163,7 +163,7 @@ final class KafkaProducerTests: XCTestCase {
 
         weak var producerCopy = producer
 
-        try await producer?.shutdownGracefully()
+        await producer?.shutdownGracefully()
         producer = nil
 
         // Wait for rd_kafka_flush to complete

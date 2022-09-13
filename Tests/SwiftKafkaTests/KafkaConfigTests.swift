@@ -15,6 +15,8 @@
 @testable import SwiftKafka
 import XCTest
 
+private final class MockClass {}
+
 final class KafkaConfigTests: XCTestCase {
     func testSettingCorrectValueWorks() throws {
         var config = KafkaConfig()
@@ -76,5 +78,22 @@ final class KafkaConfigTests: XCTestCase {
         XCTAssertNotEqual(configA, configB)
         XCTAssertNotEqual(configA, configC)
         XCTAssertEqual(configB, configC)
+    }
+
+    func testConfigOpaquePropertyRetainedAfterDuplication() throws {
+        var opaque: MockClass! = MockClass()
+        weak var opaqueCopy = opaque
+
+        var configA: KafkaConfig! = KafkaConfig()
+        configA.setOpaque(opaque: opaque)
+        opaque = nil
+
+        // Increase reference count of internal class
+        var configB: KafkaConfig! = configA
+        // Triggers duplication of the internal config object
+        try configB.set("ssl", forKey: "security.protocol")
+        configA = nil
+
+        XCTAssertNotNil(opaqueCopy)
     }
 }
