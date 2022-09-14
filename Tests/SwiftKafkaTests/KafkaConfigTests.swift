@@ -85,7 +85,7 @@ final class KafkaConfigTests: XCTestCase {
         weak var opaqueCopy = opaque
 
         var configA: KafkaConfig! = KafkaConfig()
-        configA.setOpaque(opaque: opaque)
+        configA.setDeliveryReportCallback(opaque: opaque, callback: { _, _, _ in })
         opaque = nil
 
         // Increase reference count of internal class

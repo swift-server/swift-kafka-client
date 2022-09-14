@@ -45,7 +45,7 @@ final class KafkaClient {
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
-        self.kafkaHandle = try self.config.withDuplicatePointer({ [clientType] duplicateConfig in
+        self.kafkaHandle = try self.config.withDuplicatePointer { [clientType] duplicateConfig in
             // Duplicate because rd_kafka_new takes ownership of the pointer and frees it upon success.
             guard let handle = rd_kafka_new(
                 clientType,
@@ -61,7 +61,7 @@ final class KafkaClient {
             }
 
             return handle
-        })
+        }
     }
 
     deinit {

@@ -136,8 +136,10 @@ public actor KafkaProducer {
             source: acknowledgementsSourceAndSequence.source,
             logger: self.logger
         )
-        self.config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
-        self.config.setOpaque(opaque: callbackOpaque)
+        self.config.setDeliveryReportCallback(
+            opaque: callbackOpaque,
+            callback: self.deliveryReportCallback
+        )
 
         self.client = try KafkaClient(type: .producer, config: self.config, logger: self.logger)
 
@@ -235,13 +237,11 @@ public actor KafkaProducer {
 
     // Closure that is executed when a message has been acknowledged by Kafka
     private let deliveryReportCallback: (
-        @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
-    ) = { _, messagePointer, opaquePointer in
-        guard let opaquePointer = opaquePointer else {
-            fatalError("Could not resolve reference to KafkaProducer instance")
+        (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
+    ) = { _, messagePointer, opaqueObject in
+        guard let opaqueWrapper = opaqueObject as? OpaqueWrapper else {
+            fatalError("Opaque object not passed as insance of OpaqueWrapper")
         }
-
-        let opaqueWrapper = Unmanaged<OpaqueWrapper>.fromOpaque(opaquePointer).takeUnretainedValue()
 
         guard let messagePointer = messagePointer else {
             opaqueWrapper.logger.error("Could not resolve acknowledged message")
