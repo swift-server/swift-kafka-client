@@ -237,10 +237,10 @@ public actor KafkaProducer {
 
     // Closure that is executed when a message has been acknowledged by Kafka
     private let deliveryReportCallback: (
-        (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
-    ) = { _, messagePointer, opaqueObject in
-        guard let opaqueWrapper = opaqueObject as? OpaqueWrapper else {
-            fatalError("Opaque object not passed as insance of OpaqueWrapper")
+        (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, OpaqueWrapper?) -> Void
+    ) = { _, messagePointer, opaqueWrapper in
+        guard let opaqueWrapper = opaqueWrapper else {
+            fatalError("Found nil while unwrapping opaqueWrapper")
         }
 
         guard let messagePointer = messagePointer else {

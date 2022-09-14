@@ -73,7 +73,7 @@ final class KafkaConfigTests: XCTestCase {
         let configB = configA
         let configC = configA
 
-        configA.setDeliveryReportCallback { _, _, _ in }
+        configA.setDeliveryReportCallback { (_, _, _: AnyObject?) in }
 
         XCTAssertNotEqual(configA, configB)
         XCTAssertNotEqual(configA, configC)

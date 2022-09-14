@@ -100,11 +100,23 @@ public struct KafkaConfig: Hashable, Equatable {
             }
         }
 
-        func setDeliveryReportCallback(
-            opaque: AnyObject?,
-            callback: @escaping (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
+        func setDeliveryReportCallback<T: AnyObject>(
+            opaque: T?,
+            callback: @escaping (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, T?) -> Void
         ) {
-            self.opaque = Opaque(actual: opaque, callback: callback)
+            // Wrap callback in closure that captures the generic parameter
+            // Reason: C closures cannot capture any context
+            let genericCapturingClosure: (
+                (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
+            ) = { kafkaHandle, messagePointer, opaqueObject in
+                guard let concreteObject = opaqueObject as? T else {
+                    fatalError("Opaque object not passed as insance of \(T.self)")
+                }
+                callback(kafkaHandle, messagePointer, concreteObject)
+            }
+
+            // Pass generic capturing closure as opaque object
+            self.opaque = Opaque(actual: opaque, callback: genericCapturingClosure)
 
             let opaquePointer: UnsafeMutableRawPointer? = self.opaque.map { Unmanaged.passUnretained($0).toOpaque() }
             rd_kafka_conf_set_opaque(
@@ -112,6 +124,7 @@ public struct KafkaConfig: Hashable, Equatable {
                 opaquePointer
             )
 
+            // Wrap callback from opaque object in a C compatible closure called callbackWrapper
             let callbackWrapper: (
                 @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
             ) = { kafkaHandle, messagePointer, opaquePointer in
@@ -180,9 +193,9 @@ public struct KafkaConfig: Hashable, Equatable {
     /// Define a function that is called upon every message acknowledgement.
     /// - Parameter opaque: An object that shall be passed to the C callback closure.
     /// - Parameter callback: A closure that is invoked upon message acknowledgement.
-    mutating func setDeliveryReportCallback(
-        opaque: AnyObject? = nil,
-        callback: @escaping (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
+    mutating func setDeliveryReportCallback<T: AnyObject>(
+        opaque: T? = nil,
+        callback: @escaping (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, T?) -> Void
     ) {
         // Copy-on-write mechanism
         if !isKnownUniquelyReferenced(&(self._internal)) {
