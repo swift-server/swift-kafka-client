@@ -21,18 +21,12 @@ import Crdkafka
 /// For more information on how to configure Kafka, see
 /// [all available configurations](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 public struct KafkaConfig: Hashable, Equatable {
-    /// Class that wraps both the opaque object and the delivery callback callback passed to this config.
-    /// C closures cannot capture context. Therefore we save our context in this wrapper.
-    class Opaque {
-        let actual: AnyObject?
-        let callback: (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
+    private final class CapturedClosure {
+        typealias Closure = (UnsafePointer<rd_kafka_message_t>?) -> Void
+        let closure: Closure
 
-        init(
-            actual: AnyObject? = nil,
-            callback: @escaping (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
-        ) {
-            self.actual = actual
-            self.callback = callback
+        init(_ closure: @escaping Closure) {
+            self.closure = closure
         }
     }
 
@@ -41,12 +35,12 @@ public struct KafkaConfig: Hashable, Equatable {
         private(set) var pointer: OpaquePointer
 
         /// References the opaque object passed to the config to ensure ARC retains it as long as the config exists.
-        private var opaque: Opaque?
+        private var opaque: CapturedClosure?
 
         /// Initialize internal `KafkaConfig` object through a given `rd_kafka_conf_t` pointer.
         init(
             pointer: OpaquePointer,
-            opaque: Opaque?
+            opaque: CapturedClosure?
         ) {
             self.pointer = pointer
             self.opaque = opaque
@@ -100,43 +94,31 @@ public struct KafkaConfig: Hashable, Equatable {
             }
         }
 
-        func setDeliveryReportCallback<T: AnyObject>(
-            opaque: T?,
-            callback: @escaping (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, T?) -> Void
+        func setDeliveryReportCallback(
+            callback: @escaping (UnsafePointer<rd_kafka_message_t>?) -> Void
         ) {
-            // Wrap callback in closure that captures the generic parameter
-            // Reason: C closures cannot capture any context
-            let genericCapturingClosure: (
-                (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, AnyObject?) -> Void
-            ) = { kafkaHandle, messagePointer, opaqueObject in
-                guard let concreteObject = opaqueObject as? T else {
-                    fatalError("Opaque object not passed as insance of \(T.self)")
-                }
-                callback(kafkaHandle, messagePointer, concreteObject)
-            }
+            // Retain captured closure in this config
+            self.opaque = CapturedClosure(callback)
 
-            // Pass generic capturing closure as opaque object
-            self.opaque = Opaque(actual: opaque, callback: genericCapturingClosure)
-
+            // Pass the captured closure to the C closure as an opaque object
             let opaquePointer: UnsafeMutableRawPointer? = self.opaque.map { Unmanaged.passUnretained($0).toOpaque() }
             rd_kafka_conf_set_opaque(
                 self.pointer,
                 opaquePointer
             )
 
-            // Wrap callback from opaque object in a C compatible closure called callbackWrapper
+            // Create a C closure that calls the captured closure
             let callbackWrapper: (
                 @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
-            ) = { kafkaHandle, messagePointer, opaquePointer in
+            ) = { _, messagePointer, opaquePointer in
 
                 guard let opaquePointer = opaquePointer else {
                     fatalError("Could not resolve reference to KafkaProducer instance")
                 }
-                let opaque = Unmanaged<Opaque>.fromOpaque(opaquePointer).takeUnretainedValue()
+                let opaque = Unmanaged<CapturedClosure>.fromOpaque(opaquePointer).takeUnretainedValue()
 
-                let actualCallback = opaque.callback
-                let actualOpaque = opaque.actual
-                actualCallback(kafkaHandle, messagePointer, actualOpaque)
+                let actualCallback = opaque.closure
+                actualCallback(messagePointer)
             }
 
             rd_kafka_conf_set_dr_msg_cb(
@@ -191,21 +173,16 @@ public struct KafkaConfig: Hashable, Equatable {
     }
 
     /// Define a function that is called upon every message acknowledgement.
-    /// - Parameter opaque: An object that shall be passed to the C callback closure.
     /// - Parameter callback: A closure that is invoked upon message acknowledgement.
-    mutating func setDeliveryReportCallback<T: AnyObject>(
-        opaque: T? = nil,
-        callback: @escaping (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, T?) -> Void
+    mutating func setDeliveryReportCallback(
+        callback: @escaping (UnsafePointer<rd_kafka_message_t>?) -> Void
     ) {
         // Copy-on-write mechanism
         if !isKnownUniquelyReferenced(&(self._internal)) {
             self._internal = self._internal.createDuplicate()
         }
 
-        self._internal.setDeliveryReportCallback(
-            opaque: opaque,
-            callback: callback
-        )
+        self._internal.setDeliveryReportCallback(callback: callback)
     }
 
     /// Create a duplicate configuration object in memory and access it through a scoped accessor.

@@ -31,7 +31,8 @@ struct NoDelegate: NIOAsyncSequenceProducerDelegate {
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    let wrappedSequence: NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>
+    let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
     public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
@@ -44,21 +45,6 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 
     public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
         return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
-    }
-}
-
-private class OpaqueWrapper {
-    typealias SequenceSource = NIOAsyncSequenceProducer<
-        AcknowledgedMessagesAsyncSequence.Element,
-        NoBackPressure,
-        NoDelegate
-    >.Source
-    var source: SequenceSource
-    var logger: Logger
-
-    init(source: SequenceSource, logger: Logger) {
-        self.source = source
-        self.logger = logger
     }
 }
 
@@ -84,22 +70,25 @@ public actor KafkaProducer {
     /// Counter that is used to assign each message a unique ID.
     /// Every time a new message is sent to the Kafka cluster, the counter is increased by one.
     private var messageIDCounter: UInt = 0
-    /// The configuration object of the producer client.
-    private var config: KafkaConfig
     /// The ``KafkaTopicConfig`` used for newly created topics.
     private let topicConfig: KafkaTopicConfig
     /// A logger.
     private let logger: Logger
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
     private var topicHandles: [String: OpaquePointer]
+
+    // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
+    /// The configuration object of the producer client.
+    private var config: KafkaConfig!
     /// Used for handling the connection to the Kafka cluster.
-    private let client: KafkaClient
+    private var client: KafkaClient!
     /// Task that polls the Kafka cluster for updates periodically.
-    private let pollTask: Task<Void, Never>
+    private var pollTask: Task<Void, Never>!
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
     public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
+    nonisolated let acknowlegdementsSource: AcknowledgedMessagesAsyncSequence.WrappedSequence.Source
     private typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
 
     /// Initialize a new `KafkaProducer`.
@@ -128,25 +117,19 @@ public actor KafkaProducer {
             backPressureStrategy: NoBackPressure(),
             delegate: NoDelegate()
         )
+        self.acknowlegdementsSource = acknowledgementsSourceAndSequence.source
         self.acknowledgements = AcknowledgedMessagesAsyncSequence(
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
-        let callbackOpaque = OpaqueWrapper(
-            source: acknowledgementsSourceAndSequence.source,
-            logger: self.logger
-        )
-        self.config.setDeliveryReportCallback(
-            opaque: callbackOpaque,
-            callback: self.deliveryReportCallback
-        )
+        self.config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
 
         self.client = try KafkaClient(type: .producer, config: self.config, logger: self.logger)
 
         // Poll Kafka every millisecond
         self.pollTask = Task { [client] in
             while !Task.isCancelled {
-                client.withKafkaHandlePointer { handle in
+                client?.withKafkaHandlePointer { handle in
                     rd_kafka_poll(handle, 0)
                 }
                 try? await Task.sleep(nanoseconds: 1_000_000)
@@ -236,15 +219,9 @@ public actor KafkaProducer {
     }
 
     // Closure that is executed when a message has been acknowledged by Kafka
-    private let deliveryReportCallback: (
-        (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, OpaqueWrapper?) -> Void
-    ) = { _, messagePointer, opaqueWrapper in
-        guard let opaqueWrapper = opaqueWrapper else {
-            fatalError("Found nil while unwrapping opaqueWrapper")
-        }
-
+    private lazy var deliveryReportCallback: (UnsafePointer<rd_kafka_message_t>?) -> Void = { [logger, acknowlegdementsSource] messagePointer in
         guard let messagePointer = messagePointer else {
-            opaqueWrapper.logger.error("Could not resolve acknowledged message")
+            logger.error("Could not resolve acknowledged message")
             return
         }
 
@@ -256,19 +233,19 @@ public actor KafkaProducer {
                 description: "TODO: implement in separate error issue",
                 messageID: messageID
             )
-            _ = opaqueWrapper.source.yield(.failure(error))
+            _ = acknowlegdementsSource.yield(.failure(error))
 
             return
         }
 
         do {
             let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
-            _ = opaqueWrapper.source.yield(.success(message))
+            _ = acknowlegdementsSource.yield(.success(message))
         } catch {
             guard let error = error as? KafkaAcknowledgedMessageError else {
                 fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
             }
-            _ = opaqueWrapper.source.yield(.failure(error))
+            _ = acknowlegdementsSource.yield(.failure(error))
         }
 
         // The messagePointer is automatically destroyed by librdkafka

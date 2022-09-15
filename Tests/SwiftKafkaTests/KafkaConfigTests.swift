@@ -15,8 +15,6 @@
 @testable import SwiftKafka
 import XCTest
 
-private final class MockClass {}
-
 final class KafkaConfigTests: XCTestCase {
     func testSettingCorrectValueWorks() throws {
         var config = KafkaConfig()
@@ -73,27 +71,27 @@ final class KafkaConfigTests: XCTestCase {
         let configB = configA
         let configC = configA
 
-        configA.setDeliveryReportCallback { (_, _, _: AnyObject?) in }
+        configA.setDeliveryReportCallback { _ in }
 
         XCTAssertNotEqual(configA, configB)
         XCTAssertNotEqual(configA, configC)
         XCTAssertEqual(configB, configC)
     }
 
-    func testConfigOpaquePropertyRetainedAfterDuplication() throws {
-        var opaque: MockClass! = MockClass()
-        weak var opaqueCopy = opaque
-
-        var configA: KafkaConfig! = KafkaConfig()
-        configA.setDeliveryReportCallback(opaque: opaque, callback: { _, _, _ in })
-        opaque = nil
-
-        // Increase reference count of internal class
-        var configB: KafkaConfig! = configA
-        // Triggers duplication of the internal config object
-        try configB.set("ssl", forKey: "security.protocol")
-        configA = nil
-
-        XCTAssertNotNil(opaqueCopy)
-    }
+//    func testConfigOpaquePropertyRetainedAfterDuplication() throws {
+//        var opaque: MockClass! = MockClass()
+//        weak var opaqueCopy = opaque
+//
+//        var configA: KafkaConfig! = KafkaConfig()
+//        configA.setDeliveryReportCallback(opaque: opaque, callback: { _, _, _ in })
+//        opaque = nil
+//
+//        // Increase reference count of internal class
+//        var configB: KafkaConfig! = configA
+//        // Triggers duplication of the internal config object
+//        try configB.set("ssl", forKey: "security.protocol")
+//        configA = nil
+//
+//        XCTAssertNotNil(opaqueCopy)
+//    }
 }
