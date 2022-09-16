@@ -22,7 +22,7 @@ import Crdkafka
 public struct KafkaTopicConfig: Hashable, Equatable {
     private final class _Internal: Hashable, Equatable {
         /// Pointer to the `rd_kafka_topic_conf_t` object managed by `librdkafka`
-        private(set) var pointer: OpaquePointer
+        private var pointer: OpaquePointer
 
         /// Initialize internal `KafkaTopicConfig` object with default configuration
         init() {

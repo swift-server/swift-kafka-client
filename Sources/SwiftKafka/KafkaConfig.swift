@@ -32,7 +32,7 @@ public struct KafkaConfig: Hashable, Equatable {
 
     private final class _Internal: Hashable, Equatable {
         /// Pointer to the `rd_kafka_conf_t` object managed by `librdkafka`.
-        private(set) var pointer: OpaquePointer
+        private var pointer: OpaquePointer
 
         /// References the opaque object passed to the config to ensure ARC retains it as long as the config exists.
         private var opaque: CapturedClosure?
