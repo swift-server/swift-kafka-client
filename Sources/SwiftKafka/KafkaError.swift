@@ -12,7 +12,25 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct KafkaError: Error {
+import Crdkafka
+
+struct KafkaError: Error {
     // Preliminary Implementation
-    public let description: String
+    var rawValue: Int32
+    var description: String
+
+    init(rawValue: Int32) {
+        self.rawValue = rawValue
+        self.description = "" // TODO: https://github.com/swift-server/swift-kafka-gsoc/issues/4
+    }
+
+    init(description: String) {
+        self.rawValue = -1
+        self.description = description
+    }
+
+    init(error: rd_kafka_resp_err_t) {
+        self.rawValue = error.rawValue
+        self.description = String(cString: rd_kafka_err2str(error))
+    }
 }

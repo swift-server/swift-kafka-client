@@ -22,7 +22,7 @@ import Crdkafka
 public struct KafkaTopicConfig: Hashable, Equatable {
     private final class _Internal: Hashable, Equatable {
         /// Pointer to the `rd_kafka_topic_conf_t` object managed by `librdkafka`
-        private(set) var pointer: OpaquePointer
+        private var pointer: OpaquePointer
 
         /// Initialize internal `KafkaTopicConfig` object with default configuration
         init() {
@@ -74,9 +74,12 @@ public struct KafkaTopicConfig: Hashable, Equatable {
             }
         }
 
+        func createDuplicatePointer() -> OpaquePointer {
+            rd_kafka_topic_conf_dup(self.pointer)
+        }
+
         func createDuplicate() -> _Internal {
-            let duplicatePointer: OpaquePointer = rd_kafka_topic_conf_dup(self.pointer)
-            return .init(pointer: duplicatePointer)
+            return .init(pointer: self.createDuplicatePointer())
         }
 
         // MARK: Hashable
@@ -98,10 +101,6 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         self._internal = .init()
     }
 
-    var pointer: OpaquePointer {
-        return self._internal.pointer
-    }
-
     /// Retrieve value of topic configuration property for `key`
     public func value(forKey key: String) -> String? {
         return self._internal.value(forKey: key)
@@ -115,5 +114,13 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         }
 
         try self._internal.set(value, forKey: key)
+    }
+
+    /// Create a duplicate topic configuration object in memory and access it through a scoped accessor.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the `OpaquePointer` to the duplicate `rd_kafka_topic_conf_t` object in memory.
+    @discardableResult
+    func withDuplicatePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
+        return try body(self._internal.createDuplicatePointer())
     }
 }

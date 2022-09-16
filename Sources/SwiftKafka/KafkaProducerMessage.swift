@@ -13,16 +13,16 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import Foundation
+import NIOCore
 
 /// Message that is sent by the `KafkaProducer`
 public struct KafkaProducerMessage {
     public var topic: String
     public var partition: KafkaPartition
-    public var key: ContiguousBytes?
-    public var value: ContiguousBytes
+    public var key: ByteBuffer?
+    public var value: ByteBuffer
 
-    /// Create a new `KafkaProducerMessage` with any keys and values pair that conform to the `ContiguousBytes` protocol
+    /// Create a new `KafkaProducerMessage` with a `ByteBuffer` key and value
     /// - Parameter topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
     /// - Parameter partition: The topic partition the message will be sent to. If not set explicitly, the partiotion will be assigned automatically.
     /// - Parameter key: Used to guarantee that messages with the same key will be sent to the same partittion so that their order is preserved.
@@ -30,8 +30,8 @@ public struct KafkaProducerMessage {
     public init(
         topic: String,
         partition: KafkaPartition? = nil,
-        key: ContiguousBytes? = nil,
-        value: ContiguousBytes
+        key: ByteBuffer? = nil,
+        value: ByteBuffer
     ) {
         self.topic = topic
         self.key = key
@@ -55,11 +55,18 @@ public struct KafkaProducerMessage {
         key: String? = nil,
         value: String
     ) {
+        let keyBuffer: ByteBuffer?
+        if let key = key {
+            keyBuffer = ByteBuffer(string: key)
+        } else {
+            keyBuffer = nil
+        }
+
         self.init(
             topic: topic,
             partition: partition,
-            key: key?.data(using: .utf8),
-            value: Data(value.utf8)
+            key: keyBuffer,
+            value: ByteBuffer(string: value)
         )
     }
 }

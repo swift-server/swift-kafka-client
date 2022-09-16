@@ -12,15 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Crdkafka
-
-/// Type for representing the number of a Kafka Partition.
-public struct KafkaPartition: RawRepresentable {
+/// Error caused by the Kafka cluster when trying to process a message produced by ``KafkaProducer``.
+public struct KafkaAcknowledgedMessageError: Error {
+    /// A raw value representing the error code.
     public var rawValue: Int32
-
-    public init(rawValue: Int32) {
-        self.rawValue = rawValue
-    }
-
-    public static let unassigned = KafkaPartition(rawValue: RD_KAFKA_PARTITION_UA)
+    /// A string describing the error.
+    public var description: String?
+    /// Identifier of the message that caused the error.
+    public var messageID: UInt
 }

@@ -17,6 +17,12 @@ import PackageDescription
 
 let package = Package(
     name: "swift-kafka-gsoc",
+    platforms: [
+        .macOS(.v10_15),
+        .iOS(.v13),
+        .watchOS(.v6),
+        .tvOS(.v13),
+    ],
     products: [
         .library(
             name: "SwiftKafka",
@@ -24,6 +30,7 @@ let package = Package(
         ),
     ],
     dependencies: [
+        .package(url: "https://github.com/apple/swift-nio.git", branch: "main"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
     ],
     targets: [
@@ -31,6 +38,7 @@ let package = Package(
             name: "SwiftKafka",
             dependencies: [
                 "Crdkafka",
+                .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
             ]
         ),

@@ -12,7 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import SwiftKafka
-import XCTest
+import Logging
 
-final class SwiftKafkaTests: XCTestCase {}
+extension Logger {
+    static var kafkaTest: Logger {
+        var logger = Logger(label: "kafka.test")
+        logger.logLevel = .info
+        return logger
+    }
+}

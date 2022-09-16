@@ -1,7 +1,30 @@
 # Usage: docker-compose -f docker/docker-compose.yaml run swift-kafka-gsoc
 version: "3.9"
 services:
+
+  zookeeper:
+    image: ubuntu/zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: ubuntu/kafka
+    container_name: kafka_broker
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      ZOOKEEPER_HOST: zookeeper
+      ZOOKEEPER_PORT: 2181
+
   swift-kafka-gsoc:
+    depends_on:
+      - kafka
     build:
       context: ..
       dockerfile: docker/Dockerfile
+    environment:
+      KAFKA_HOST: kafka
+      KAFKA_PORT: 9092
