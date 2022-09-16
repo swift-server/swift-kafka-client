@@ -97,11 +97,10 @@ public struct KafkaConfig: Hashable, Equatable {
         func setDeliveryReportCallback(
             callback: @escaping (UnsafePointer<rd_kafka_message_t>?) -> Void
         ) {
-            // Retain captured closure in this config
-            self.opaque = CapturedClosure(callback)
+            let capturedClosure = CapturedClosure(callback)
 
             // Pass the captured closure to the C closure as an opaque object
-            let opaquePointer: UnsafeMutableRawPointer? = self.opaque.map { Unmanaged.passUnretained($0).toOpaque() }
+            let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
             rd_kafka_conf_set_opaque(
                 self.pointer,
                 opaquePointer
@@ -125,6 +124,10 @@ public struct KafkaConfig: Hashable, Equatable {
                 self.pointer,
                 callbackWrapper
             )
+
+            // Retain captured closure in this config
+            // This shall only happen after rd_kafka_conf_set_dr_msg_cb to avoid potential race-conditions
+            self.opaque = capturedClosure
         }
 
         func createDuplicatePointer() -> OpaquePointer {

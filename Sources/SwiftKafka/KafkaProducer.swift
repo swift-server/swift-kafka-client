@@ -78,8 +78,6 @@ public actor KafkaProducer {
     private var topicHandles: [String: OpaquePointer]
 
     // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
-    /// The configuration object of the producer client.
-    private var config: KafkaConfig!
     /// Used for handling the connection to the Kafka cluster.
     private var client: KafkaClient!
     /// Task that polls the Kafka cluster for updates periodically.
@@ -100,7 +98,6 @@ public actor KafkaProducer {
         topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
         logger: Logger
     ) async throws {
-        self.config = config
         self.topicConfig = topicConfig
         self.logger = logger
         self.topicHandles = [:]
@@ -122,9 +119,10 @@ public actor KafkaProducer {
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
-        self.config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
+        var config = config
+        config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
 
-        self.client = try KafkaClient(type: .producer, config: self.config, logger: self.logger)
+        self.client = try KafkaClient(type: .producer, config: config, logger: self.logger)
 
         // Poll Kafka every millisecond
         self.pollTask = Task { [client] in
