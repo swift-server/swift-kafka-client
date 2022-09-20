@@ -60,7 +60,7 @@ final class SwiftKafkaTests: XCTestCase {
         let topic = "subscription-test-topic"
 
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
-        let consumer = try await KafkaConsumer(
+        let consumer = try KafkaConsumer(
             topics: [topic],
             groupID: "subscription-test-group-id",
             config: config,
@@ -73,7 +73,7 @@ final class SwiftKafkaTests: XCTestCase {
             value: "Hello, World! \(Date().description)"
         )
 
-        try await Self.resetConsumerOffset(consumer)
+        try Self.resetConsumerOffset(consumer)
         try await Self.sendAndAcknowledgeMessages(producer: producer, messages: [testMessage])
 
         var consumedMessage: KafkaConsumerMessage?
@@ -90,14 +90,14 @@ final class SwiftKafkaTests: XCTestCase {
         XCTAssertEqual(testMessage.value, consumedMessage?.value)
 
         try await consumer.close()
-        try await producer.shutdownGracefully()
+        await producer.shutdownGracefully()
     }
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let topic = "assignment-test-topic"
 
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
-        let consumer = try await KafkaConsumer(
+        let consumer = try KafkaConsumer(
             topic: topic,
             partition: KafkaPartition(rawValue: 0),
             config: config,
@@ -110,7 +110,7 @@ final class SwiftKafkaTests: XCTestCase {
             value: "Hello, World! \(Date().description)"
         )
 
-        try await Self.resetConsumerOffset(consumer)
+        try Self.resetConsumerOffset(consumer)
         try await Self.sendAndAcknowledgeMessages(producer: producer, messages: [testMessage])
 
         var consumedMessage: KafkaConsumerMessage?
@@ -127,7 +127,7 @@ final class SwiftKafkaTests: XCTestCase {
         XCTAssertEqual(testMessage.value, consumedMessage?.value)
 
         try await consumer.close()
-        try await producer.shutdownGracefully()
+        await producer.shutdownGracefully()
     }
 
     func testProduceAndConsumeWithCommitSync() async throws {
@@ -136,7 +136,7 @@ final class SwiftKafkaTests: XCTestCase {
         try config.set("false", forKey: "enable.auto.commit")
 
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
-        let consumer = try await KafkaConsumer(
+        let consumer = try KafkaConsumer(
             topics: [topic], // TODO: multiple topics
             groupID: "commit-sync-test-group-id",
             config: config,
@@ -151,7 +151,7 @@ final class SwiftKafkaTests: XCTestCase {
             )
         }
 
-        try await Self.resetConsumerOffset(consumer)
+        try Self.resetConsumerOffset(consumer)
         try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
 
         var consumedMessages = [KafkaConsumerMessage]()
@@ -170,18 +170,28 @@ final class SwiftKafkaTests: XCTestCase {
         XCTAssertEqual(testMessages.count, consumedMessages.count)
 
         try await consumer.close()
-        try await producer.shutdownGracefully()
+        await producer.shutdownGracefully()
+
+        // Additionally test that commit does not work on closed consumer
+        do {
+            guard let consumedMessage = consumedMessages.first else {
+                XCTFail("No messages consumed")
+                return
+            }
+            try await consumer.commitSync(consumedMessage)
+            XCTFail("Invoking commitSync on closed consumer should have failed")
+        } catch {}
     }
 
     // TODO: also test concurrently?
 
     // MARK: - Helpers
 
-    private static func resetConsumerOffset(_ consumer: KafkaConsumer) async throws {
+    private static func resetConsumerOffset(_ consumer: KafkaConsumer) throws {
         let start = Date()
         let timeout = 10.0
         while Date() < start + timeout {
-            _ = try await consumer.poll(timeout: 1000) // TODO: poll needs to be private, do something else here
+            _ = try consumer.poll(timeout: 1000) // TODO: poll needs to be private, do something else here
         }
     }
 
