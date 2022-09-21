@@ -14,30 +14,21 @@
 
 import Crdkafka
 import Dispatch
-import struct Foundation.UUID // TODO: can we avoid this Foundation import??
+import struct Foundation.UUID
 import Logging
-import NIOConcurrencyHelpers
 import NIOCore
 
 /// `NIOAsyncSequenceProducerDelegate` implementation handling backpressure for ``KafkaConsumer``.
-final class ConsumerMessagesAsyncSequenceDelegate: @unchecked Sendable, NIOAsyncSequenceProducerDelegate {
-    private let consumerLock = Lock()
-    private weak var consumer: KafkaConsumer?
+private struct ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDelegate {
+    let produceMoreClosure: @Sendable () -> Void
+    let didTerminateClosure: @Sendable () -> Void
 
     func produceMore() {
-        self.consumerLock.withLockVoid {
-            self.consumer?.produceMore()
-        }
+        produceMoreClosure()
     }
 
     func didTerminate() {
-        return
-    }
-
-    func setConsumer(_ consumer: KafkaConsumer?) {
-        self.consumerLock.withLockVoid {
-            self.consumer = consumer
-        }
+        didTerminateClosure()
     }
 }
 
@@ -45,11 +36,11 @@ final class ConsumerMessagesAsyncSequenceDelegate: @unchecked Sendable, NIOAsync
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with something like KafkaConsumerError
     typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
-    let wrappedSequence: NIOAsyncSequenceProducer<Element, HighLowWatermark, ConsumerMessagesAsyncSequenceDelegate>
+    fileprivate let wrappedSequence: NIOAsyncSequenceProducer<Element, HighLowWatermark, ConsumerMessagesAsyncSequenceDelegate>
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<
+        fileprivate let wrappedIterator: NIOAsyncSequenceProducer<
             Element,
             HighLowWatermark,
             ConsumerMessagesAsyncSequenceDelegate
@@ -67,19 +58,6 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
 
 /// Receive messages from the Kafka cluster.
 public final class KafkaConsumer {
-    /// State of the ``KafkaConsumer``.
-    private var state: State
-
-    /// States that the ``KafkaConsumer`` can have.
-    private enum State {
-        /// The ``KafkaConsumer`` has started and is ready to use.
-        case started
-        /// The ``KafkaConsumer`` has been closed and does not receive any more messages.
-        case closed
-    }
-
-    // TODO: do we want to allow users to subscribe / assign to more topics during runtime?
-    // TODO: function that returns all partitions for topic -> use rd_kafka_metadata, dedicated MetaData class
     /// The configuration object of the consumer client.
     private var config: KafkaConfig
     /// A logger.
@@ -88,19 +66,22 @@ public final class KafkaConsumer {
     private let client: KafkaClient
     /// Pointer to a list of topics + partition pairs.
     private let subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
+    /// Variable to ensure that no operations are invoked on closed consumer.
+    private var closed = false
 
     /// Serial queue used to run all blocking operations. Additionally ensures that no data races occur.
     private let serialQueue: DispatchQueue
 
+    // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
     /// Type of the values returned by the ``messages`` sequence.
     private typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with a more specific Error type
-    private let messagesSource: NIOAsyncSequenceProducer<
+    private var messagesSource: NIOAsyncSequenceProducer<
         Element,
         ConsumerMessagesAsyncSequence.HighLowWatermark,
         ConsumerMessagesAsyncSequenceDelegate
-    >.Source
+    >.Source!
     /// `AsyncSequence` that returns all ``KafkaConsumerMessage`` objects that the consumer receives.
-    public let messages: ConsumerMessagesAsyncSequence
+    public private(set) var messages: ConsumerMessagesAsyncSequence!
 
     /// Initialize a new ``KafkaConsumer``.
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
@@ -108,7 +89,7 @@ public final class KafkaConsumer {
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     private init(
-        config: KafkaConfig = KafkaConfig(),
+        config: KafkaConfig,
         logger: Logger
     ) throws {
         self.config = config
@@ -128,14 +109,16 @@ public final class KafkaConsumer {
 
         self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
 
-        self.state = .started
-
         let backpressureStrategy = ConsumerMessagesAsyncSequence.HighLowWatermark(
             lowWatermark: 5,
             highWatermark: 10
         )
 
-        let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate()
+        let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate { [weak self] in
+            self?.produceMore()
+        } didTerminateClosure: { [weak self] in
+            self?.close()
+        }
         let messagesSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             of: Element.self,
             backPressureStrategy: backpressureStrategy,
@@ -145,7 +128,6 @@ public final class KafkaConsumer {
         self.messages = ConsumerMessagesAsyncSequence(
             wrappedSequence: messagesSourceAndSequence.sequence
         )
-        messagesSequenceDelegate.setConsumer(self)
     }
 
     /// Initialize a new ``KafkaConsumer`` and subscribe to the given list of `topics` as part of
@@ -157,11 +139,9 @@ public final class KafkaConsumer {
     public convenience init(
         topics: [String],
         groupID: String,
-        config: KafkaConfig = KafkaConfig(),
+        config: KafkaConfig,
         logger: Logger
     ) throws {
-        // TODO: make prettier
-        // TODO: use inout parameter here?
         var config = config
         if let configGroupID = config.value(forKey: "group.id") {
             if configGroupID != groupID {
@@ -181,13 +161,15 @@ public final class KafkaConsumer {
     /// Initialize a new ``KafkaConsumer`` and assign it to a specific `partition` of a `topic`.
     /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
     /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
+    /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Note: This consumer ignores the `group.id` property of its `config`.
     public convenience init(
         topic: String,
         partition: KafkaPartition,
-        config: KafkaConfig = KafkaConfig(),
+        offset: Int64 = Int64(RD_KAFKA_OFFSET_END),
+        config: KafkaConfig,
         logger: Logger
     ) throws {
         // Although an assignment is not related to a consumer group,
@@ -201,20 +183,18 @@ public final class KafkaConsumer {
             config: config,
             logger: logger
         )
-        try self.assign(topic: topic, partition: partition)
+        try self.assign(
+            topic: topic,
+            partition: partition,
+            offset: offset
+        )
     }
 
     /// Subscribe to the given list of `topics`.
     /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
     /// - Parameter topics: An array of topic names to subscribe to.
     private func subscribe(topics: [String]) throws {
-        // TODO: is this state needed for a method that is only invoked upon init?
-        switch self.state {
-        case .started:
-            break
-        case .closed:
-            throw KafkaError(description: "Trying to invoke method on consumer that has been closed.")
-        }
+        assert(!closed)
 
         for topic in topics {
             rd_kafka_topic_partition_list_add(
@@ -240,15 +220,9 @@ public final class KafkaConsumer {
     private func assign(
         topic: String,
         partition: KafkaPartition,
-        offset: Int64 = Int64(RD_KAFKA_OFFSET_END)
+        offset: Int64
     ) throws {
-        // TODO: is this state needed for a method that is only invoked upon init?
-        switch self.state {
-        case .started:
-            break
-        case .closed:
-            throw KafkaError(description: "Trying to invoke method on consumer that has been closed.")
-        }
+        assert(!closed)
 
         guard let partitionPointer = rd_kafka_topic_partition_list_add(
             self.subscribedTopicsPointer,
@@ -272,17 +246,22 @@ public final class KafkaConsumer {
     /// Receive new messages and forward the result to the ``messages`` `AsyncSequence`.
     func produceMore() {
         self.serialQueue.async {
-            let messageresult: Element
-            do {
-                guard let message = try self.poll() else {
-                    return
-                }
-                messageresult = .success(message)
-            } catch {
-                messageresult = .failure(error)
+            guard !self.closed else {
+                return
             }
 
-            let yieldresult = self.messagesSource.yield(messageresult)
+            let messageResult: Element
+            do {
+                guard let message = try self.poll() else {
+                    self.produceMore()
+                    return
+                }
+                messageResult = .success(message)
+            } catch {
+                messageResult = .failure(error)
+            }
+
+            let yieldresult = self.messagesSource.yield(messageResult)
             switch yieldresult {
             case .produceMore:
                 self.produceMore()
@@ -296,16 +275,9 @@ public final class KafkaConsumer {
     /// This method blocks for a maximum of `timeout` milliseconds.
     /// - Parameter timeout: Maximum amount of milliseconds this method waits for a new message.
     /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
-    func poll(timeout: Int32 = 100) throws -> KafkaConsumerMessage? {
-        // TODO: clock API
-        // TODO: ideally: make private
-        // TODO: is this state needed here?
-        switch self.state {
-        case .started:
-            break
-        case .closed:
-            throw KafkaError(description: "Trying to invoke method on consumer that has been closed.")
-        }
+    private func poll(timeout: Int32 = 100) throws -> KafkaConsumerMessage? {
+        dispatchPrecondition(condition: .onQueue(self.serialQueue))
+        assert(!closed)
 
         guard let messagePointer = self.client.withKafkaHandlePointer({ handle in
             rd_kafka_consumer_poll(handle, timeout)
@@ -338,15 +310,6 @@ public final class KafkaConsumer {
     /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
         try await self.serializeWithThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            switch self.state {
-            case .started:
-                break
-            case .closed:
-                continuation.resume(
-                    throwing: KafkaError(description: "Trying to invoke method on consumer that has been closed.")
-                )
-                return
-            }
 
             do {
                 try self._commitSync(message)
@@ -357,9 +320,12 @@ public final class KafkaConsumer {
         }
     }
 
-    // TODO: commit multiple messages at once -> different topics + test
-    // TODO: docc: https://github.com/segmentio/kafka-go#explicit-commits note about highest offset
     private func _commitSync(_ message: KafkaConsumerMessage) throws {
+        dispatchPrecondition(condition: .onQueue(self.serialQueue))
+        guard !self.closed else {
+            throw KafkaError(description: "Trying to invoke method on consumer that has been closed.")
+        }
+
         guard self.config.value(forKey: "enable.auto.commit") == "false" else {
             throw KafkaError(description: "Committing manually only works if enable.auto.commit is set to false")
         }
@@ -392,34 +358,25 @@ public final class KafkaConsumer {
     }
 
     /// Stop consuming messages. This step is irreversible.
-    public func close() async throws {
-        try await self.serializeWithThrowingContinuation { continuation in
-            switch self.state {
-            case .started:
-                break
-            case .closed:
-                continuation.resume()
+    func close() {
+        self.serialQueue.async {
+            guard !self.closed else {
                 return
             }
-            do {
-                try self._close()
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
+
+            let result = self.client.withKafkaHandlePointer { handle in
+                rd_kafka_consumer_close(handle)
             }
-        }
-    }
 
-    private func _close() throws {
-        let result = self.client.withKafkaHandlePointer { handle in
-            rd_kafka_consumer_close(handle)
-        }
+            rd_kafka_topic_partition_list_destroy(self.subscribedTopicsPointer)
 
-        rd_kafka_topic_partition_list_destroy(subscribedTopicsPointer)
-        self.state = .closed
+            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+                let error = KafkaError(rawValue: result.rawValue)
+                self.logger.error("Closing KafkaConsumer failed: \(error.description)")
+                return
+            }
 
-        guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError(rawValue: result.rawValue)
+            self.closed = true
         }
     }
 
@@ -428,6 +385,8 @@ public final class KafkaConsumer {
         try await withCheckedThrowingContinuation { continuation in
             self.serialQueue.async {
                 body(continuation)
+                // Note: we do not support cancellation yet
+                // https://github.com/swift-server/swift-kafka-gsoc/issues/33
             }
         }
     }

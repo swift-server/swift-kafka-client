@@ -28,4 +28,3 @@ services:
     environment:
       KAFKA_HOST: kafka
       KAFKA_PORT: 9092
-      KAFKA_CREATE_TOPICS: subscription-test-topic, assignment-test-topic, commit-sync-test-topic

@@ -32,6 +32,22 @@ public struct KafkaConsumerMessage: Hashable {
     init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
+        guard let valuePointer = rdKafkaMessage.payload else {
+            fatalError("Could not resolve payload of acknowledged message")
+        }
+
+        let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
+
+        guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
+            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
+
+            throw KafkaError(
+                rawValue: rdKafkaMessage.err.rawValue,
+                description: errorString ?? ""
+            )
+        }
+
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
             fatalError("Received topic name that is non-valid UTF-8")
         }
@@ -49,22 +65,8 @@ public struct KafkaConsumerMessage: Hashable {
             self.key = nil
         }
 
-        guard let valuePointer = rdKafkaMessage.payload else {
-            fatalError("Could not resolve payload of acknowledged message")
-        }
-
-        let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
-        self.value = .init(bytes: valueBufferPointer)
+        self.value = ByteBuffer(bytes: valueBufferPointer)
 
         self.offset = Int64(rdKafkaMessage.offset)
-
-        guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
-//            var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
-//            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
-
-            // TODO: what to do with error string?
-            // TODO: handle errors here or in consumer?
-            throw KafkaError(rawValue: rdKafkaMessage.err.rawValue)
-        }
     }
 }

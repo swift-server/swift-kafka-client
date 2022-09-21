@@ -29,12 +29,6 @@ import XCTest
 //
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
-//
-// 3. Create topics used for testing (only needs to be done once)
-//
-// kafka-topics --bootstrap-server localhost:9092 --create --topics subscription-test-topic &&
-// kafka-topics --bootstrap-server localhost:9092 --create --topics assignment-test-topic &&
-// kafka-topics --bootstrap-server localhost:9092 --create --topics commit-sync-test-topic
 
 final class KafkaProducerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server

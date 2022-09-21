@@ -61,15 +61,4 @@ final class KafkaConsumerTests: XCTestCase {
             )
         )
     }
-
-    func testClosingClosedConsumerReturns() async throws {
-        let consumer = try KafkaConsumer(
-            topics: ["test-topic"],
-            groupID: "some-group-id",
-            config: self.config,
-            logger: .kafkaTest
-        )
-        try await consumer.close()
-        try await consumer.close()
-    }
 }

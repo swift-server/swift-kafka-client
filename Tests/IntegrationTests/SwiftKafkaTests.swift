@@ -28,130 +28,128 @@ import XCTest
 //
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
-//
-// 3. Create topics used for testing (only needs to be done once)
-//
-// kafka-topics --bootstrap-server localhost:9092 --create --topics subscription-test-topic &&
-// kafka-topics --bootstrap-server localhost:9092 --create --topics assignment-test-topic &&
-// kafka-topics --bootstrap-server localhost:9092 --create --topics commit-sync-test-topic
 
-// TODO: test for multiple messages
 final class SwiftKafkaTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
     var bootstrapServer: String!
-    var config: KafkaConfig!
+    var producerConfig: KafkaConfig!
+    var consumerConfig: KafkaConfig!
+    var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
         self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
 
-        self.config = KafkaConfig()
-        try self.config.set(self.bootstrapServer, forKey: "bootstrap.servers")
-        try self.config.set("v4", forKey: "broker.address.family")
+        self.producerConfig = KafkaConfig()
+        try self.producerConfig.set(self.bootstrapServer, forKey: "bootstrap.servers")
+        try self.producerConfig.set("v4", forKey: "broker.address.family")
+
+        self.consumerConfig = KafkaConfig()
+        try self.consumerConfig.set(self.bootstrapServer, forKey: "bootstrap.servers")
+        try self.consumerConfig.set("v4", forKey: "broker.address.family")
+        // Always read topics from beginning
+        try self.consumerConfig.set("beginning", forKey: "auto.offset.reset")
+
+        // TODO: ok to block here? How to make setup async?
+        let client = try KafkaClient(type: .consumer, config: consumerConfig, logger: .kafkaTest)
+        self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
     }
 
     override func tearDownWithError() throws {
+        // TODO: ok to block here? Problem: Tests may finish before topic is deleted
+        let client = try KafkaClient(type: .consumer, config: consumerConfig, logger: .kafkaTest)
+        try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
+
         self.bootstrapServer = nil
-        self.config = nil
+        self.producerConfig = nil
+        self.consumerConfig = nil
+        self.uniqueTestTopic = nil
     }
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
-        let topic = "subscription-test-topic"
-
-        let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
         let consumer = try KafkaConsumer(
-            topics: [topic],
+            topics: [uniqueTestTopic],
             groupID: "subscription-test-group-id",
-            config: config,
+            config: consumerConfig,
             logger: .kafkaTest
         )
 
-        let testMessage = KafkaProducerMessage(
-            topic: topic,
-            key: "key",
-            value: "Hello, World! \(Date().description)"
-        )
+        let testMessages = Self.creataTestMessages(topic: self.uniqueTestTopic, count: 10)
+        try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
 
-        try Self.resetConsumerOffset(consumer)
-        try await Self.sendAndAcknowledgeMessages(producer: producer, messages: [testMessage])
-
-        var consumedMessage: KafkaConsumerMessage?
+        var consumedMessages = [KafkaConsumerMessage]()
         for await messageResult in consumer.messages {
             guard case .success(let message) = messageResult else {
                 continue
             }
-            consumedMessage = message
-            break
+            consumedMessages.append(message)
+
+            if consumedMessages.count >= testMessages.count {
+                break
+            }
         }
 
-        XCTAssertEqual(testMessage.topic, consumedMessage?.topic)
-        XCTAssertEqual(testMessage.key, consumedMessage?.key)
-        XCTAssertEqual(testMessage.value, consumedMessage?.value)
+        XCTAssertEqual(testMessages.count, consumedMessages.count)
 
-        try await consumer.close()
+        for (index, consumedMessage) in consumedMessages.enumerated() {
+            XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
+            XCTAssertEqual(testMessages[index].key, consumedMessage.key)
+            XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+        }
+
         await producer.shutdownGracefully()
     }
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
-        let topic = "assignment-test-topic"
-
-        let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
         let consumer = try KafkaConsumer(
-            topic: topic,
+            topic: uniqueTestTopic,
             partition: KafkaPartition(rawValue: 0),
-            config: config,
+            offset: 0,
+            config: consumerConfig,
             logger: .kafkaTest
         )
 
-        let testMessage = KafkaProducerMessage(
-            topic: topic,
-            key: "key",
-            value: "Hello, World! \(Date().description)"
-        )
+        let testMessages = Self.creataTestMessages(topic: self.uniqueTestTopic, count: 10)
+        try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
 
-        try Self.resetConsumerOffset(consumer)
-        try await Self.sendAndAcknowledgeMessages(producer: producer, messages: [testMessage])
-
-        var consumedMessage: KafkaConsumerMessage?
+        var consumedMessages = [KafkaConsumerMessage]()
         for await messageResult in consumer.messages {
             guard case .success(let message) = messageResult else {
                 continue
             }
-            consumedMessage = message
-            break
+            consumedMessages.append(message)
+
+            if consumedMessages.count >= testMessages.count {
+                break
+            }
         }
 
-        XCTAssertEqual(testMessage.topic, consumedMessage?.topic)
-        XCTAssertEqual(testMessage.key, consumedMessage?.key)
-        XCTAssertEqual(testMessage.value, consumedMessage?.value)
+        XCTAssertEqual(testMessages.count, consumedMessages.count)
 
-        try await consumer.close()
+        for (index, consumedMessage) in consumedMessages.enumerated() {
+            XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
+            XCTAssertEqual(testMessages[index].key, consumedMessage.key)
+            XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+        }
+
         await producer.shutdownGracefully()
     }
 
     func testProduceAndConsumeWithCommitSync() async throws {
-        let topic = "commit-sync-test-topic"
+        try self.consumerConfig.set("false", forKey: "enable.auto.commit")
 
-        try config.set("false", forKey: "enable.auto.commit")
-
-        let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
         let consumer = try KafkaConsumer(
-            topics: [topic], // TODO: multiple topics
+            topics: [uniqueTestTopic],
             groupID: "commit-sync-test-group-id",
-            config: config,
+            config: consumerConfig,
             logger: .kafkaTest
         )
 
-        let testMessages = Array(0...9).map {
-            KafkaProducerMessage(
-                topic: topic,
-                key: "key",
-                value: "Hello, World! \($0) - \(Date().description)"
-            )
-        }
-
-        try Self.resetConsumerOffset(consumer)
+        let testMessages = Self.creataTestMessages(topic: self.uniqueTestTopic, count: 10)
         try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
 
         var consumedMessages = [KafkaConsumerMessage]()
@@ -169,7 +167,6 @@ final class SwiftKafkaTests: XCTestCase {
 
         XCTAssertEqual(testMessages.count, consumedMessages.count)
 
-        try await consumer.close()
         await producer.shutdownGracefully()
 
         // Additionally test that commit does not work on closed consumer
@@ -187,11 +184,13 @@ final class SwiftKafkaTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static func resetConsumerOffset(_ consumer: KafkaConsumer) throws {
-        let start = Date()
-        let timeout = 10.0
-        while Date() < start + timeout {
-            _ = try consumer.poll(timeout: 1000) // TODO: poll needs to be private, do something else here
+    private static func creataTestMessages(topic: String, count: UInt) -> [KafkaProducerMessage] {
+        return Array(0..<count).map {
+            KafkaProducerMessage(
+                topic: topic,
+                key: "key",
+                value: "Hello, World! \($0) - \(Date().description)"
+            )
         }
     }
 
