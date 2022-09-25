@@ -15,7 +15,6 @@
 import Crdkafka
 
 public struct KafkaError: Error, CustomStringConvertible {
-
     internal enum _Code: CustomStringConvertible {
         case rdKafkaError(rd_kafka_resp_err_t)
         case config(String)

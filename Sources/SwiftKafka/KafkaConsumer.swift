@@ -88,6 +88,7 @@ public final class KafkaConsumer {
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
     private init(
         config: KafkaConfig,
         logger: Logger
@@ -136,6 +137,7 @@ public final class KafkaConsumer {
     /// - Parameter groupID: Name of the consumer group that this ``KafkaConsumer`` will create / join.
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
     public convenience init(
         topics: [String],
         groupID: String,
@@ -164,6 +166,7 @@ public final class KafkaConsumer {
     /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
     /// - Note: This consumer ignores the `group.id` property of its `config`.
     public convenience init(
         topic: String,
@@ -193,6 +196,7 @@ public final class KafkaConsumer {
     /// Subscribe to the given list of `topics`.
     /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
     /// - Parameter topics: An array of topic names to subscribe to.
+    /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     private func subscribe(topics: [String]) throws {
         assert(!closed)
 
@@ -217,6 +221,7 @@ public final class KafkaConsumer {
     /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
     /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
     /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
+    /// - Throws: A ``KafkaError`` if the consumer could not be assigned to the topic + partition pair.
     private func assign(
         topic: String,
         partition: KafkaPartition,
@@ -278,6 +283,7 @@ public final class KafkaConsumer {
     /// This method blocks for a maximum of `timeout` milliseconds.
     /// - Parameter timeout: Maximum amount of milliseconds this method waits for a new message.
     /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     private func poll(timeout: Int32 = 100) throws -> KafkaConsumerMessage? {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
         assert(!closed)
@@ -310,6 +316,7 @@ public final class KafkaConsumer {
     /// Mark `message` in the topic as read and request the next message from the topic.
     /// This method is only used for manual offset management.
     /// - Parameter message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
     /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
         try await self.serializeWithThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in

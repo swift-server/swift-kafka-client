@@ -41,6 +41,7 @@ extension KafkaClient {
     /// Blocks for a maximum of `timeout` milliseconds.
     /// - Parameter timeout: Timeout in milliseconds.
     /// - Returns: Name of newly created topic.
+    /// - Throws: A ``KafkaError`` if the topic creation failed.
     func _createUniqueTopic(timeout: Int32) throws -> String {
         let uniqueTopicName = UUID().uuidString
 
@@ -125,6 +126,7 @@ extension KafkaClient {
     /// Blocks for a maximum of `timeout` milliseconds.
     /// - Parameter topic: Topic to delete.
     /// - Parameter timeout: Timeout in milliseconds.
+    /// - Throws: A ``KafkaError`` if the topic deletion failed.
     func _deleteTopic(_ topic: String, timeout: Int32) throws {
         let deleteTopic = rd_kafka_DeleteTopic_new(topic)
         defer { rd_kafka_DeleteTopic_destroy(deleteTopic) }

@@ -93,6 +93,7 @@ public actor KafkaProducer {
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     public init(
         config: KafkaConfig = KafkaConfig(),
         topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
@@ -171,6 +172,7 @@ public actor KafkaProducer {
     /// This function is non-blocking.
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     /// - Returns: Unique message identifier matching the `id` property of the corresponding ``KafkaAcknowledgedMessage``
+    /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
     public func sendAsync(_ message: KafkaProducerMessage) throws -> UInt {
         switch self.state {

@@ -29,6 +29,7 @@ public struct KafkaConsumerMessage: Hashable {
     public var offset: Int64
 
     /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 

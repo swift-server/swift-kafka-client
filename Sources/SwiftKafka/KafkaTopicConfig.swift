@@ -107,6 +107,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
     }
 
     /// Set topic configuration `value` for `key`
+    /// - Throws: A ``KafkaError`` if setting the value failed.
     public mutating func set(_ value: String, forKey key: String) throws {
         // Copy-on-write mechanism
         if !isKnownUniquelyReferenced(&(self._internal)) {

@@ -33,6 +33,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
     public var offset: Int64
 
     /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
+    /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt) throws {
         self.id = id
 

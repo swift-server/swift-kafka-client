@@ -36,8 +36,8 @@ public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
         messageID: UInt,
         error: rd_kafka_resp_err_t,
         file: String = #fileID,
-        line: Int = #line)
-    -> Self {
+        line: Int = #line
+    ) -> Self {
         .init(
             messageID: messageID,
             description: String(cString: rd_kafka_err2str(error)),
@@ -50,8 +50,8 @@ public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
         messageID: UInt,
         message: String,
         file: String = #fileID,
-        line: Int = #line)
-    -> Self {
+        line: Int = #line
+    ) -> Self {
         .init(
             messageID: messageID,
             description: "Acknowledgement Error: \(message)",
