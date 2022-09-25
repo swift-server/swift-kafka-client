@@ -177,7 +177,7 @@ public actor KafkaProducer {
         case .started:
             return try self._sendAsync(message)
         case .shuttingDown, .shutDown:
-            throw KafkaError(description: "Trying to invoke method on producer that has been shut down.")
+            throw KafkaError.anyError(description: "Trying to invoke method on producer that has been shut down.")
         }
     }
 
@@ -210,7 +210,7 @@ public actor KafkaProducer {
         }
 
         guard responseCode == 0 else {
-            throw KafkaError(rawValue: responseCode)
+            throw KafkaError.rdKafkaError(rd_kafka_last_error())
         }
 
         return self.messageIDCounter

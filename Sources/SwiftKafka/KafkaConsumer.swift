@@ -34,7 +34,7 @@ private struct ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDe
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
-    public typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with something like KafkaConsumerError
+    public typealias Element = Result<KafkaConsumerMessage, KafkaError>
     typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
     fileprivate let wrappedSequence: NIOAsyncSequenceProducer<Element, HighLowWatermark, ConsumerMessagesAsyncSequenceDelegate>
 
@@ -74,7 +74,7 @@ public final class KafkaConsumer {
 
     // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
     /// Type of the values returned by the ``messages`` sequence.
-    private typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with a more specific Error type
+    private typealias Element = Result<KafkaConsumerMessage, KafkaError>
     private var messagesSource: NIOAsyncSequenceProducer<
         Element,
         ConsumerMessagesAsyncSequence.HighLowWatermark,
@@ -104,7 +104,7 @@ public final class KafkaConsumer {
             rd_kafka_poll_set_consumer(handle)
         }
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError(rawValue: result.rawValue)
+            throw KafkaError.rdKafkaError(result)
         }
 
         self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
@@ -145,7 +145,7 @@ public final class KafkaConsumer {
         var config = config
         if let configGroupID = config.value(forKey: "group.id") {
             if configGroupID != groupID {
-                throw KafkaError(description: "Group ID does not match with group ID found in the configuration")
+                throw KafkaError.anyError(description: "Group ID does not match with group ID found in the configuration")
             }
         } else {
             try config.set(groupID, forKey: "group.id")
@@ -208,8 +208,8 @@ public final class KafkaConsumer {
             rd_kafka_subscribe(handle, subscribedTopicsPointer)
         }
 
-        guard result.rawValue == 0 else {
-            throw KafkaError(rawValue: result.rawValue)
+        guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            throw KafkaError.rdKafkaError(result)
         }
     }
 
@@ -239,7 +239,7 @@ public final class KafkaConsumer {
         }
 
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError(rawValue: result.rawValue)
+            throw KafkaError.rdKafkaError(result)
         }
     }
 
@@ -257,8 +257,11 @@ public final class KafkaConsumer {
                     return
                 }
                 messageResult = .success(message)
+            } catch let kafkaError as KafkaError {
+                messageResult = .failure(kafkaError)
             } catch {
-                messageResult = .failure(error)
+                self.logger.error("KafkaConsumer caught error: \(error)")
+                return
             }
 
             let yieldresult = self.messagesSource.yield(messageResult)
@@ -323,11 +326,11 @@ public final class KafkaConsumer {
     private func _commitSync(_ message: KafkaConsumerMessage) throws {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
         guard !self.closed else {
-            throw KafkaError(description: "Trying to invoke method on consumer that has been closed.")
+            throw KafkaError.anyError(description: "Trying to invoke method on consumer that has been closed.")
         }
 
         guard self.config.value(forKey: "enable.auto.commit") == "false" else {
-            throw KafkaError(description: "Committing manually only works if enable.auto.commit is set to false")
+            throw KafkaError.anyError(description: "Committing manually only works if enable.auto.commit is set to false")
         }
 
         let changesList = rd_kafka_topic_partition_list_new(1)
@@ -352,7 +355,7 @@ public final class KafkaConsumer {
             )
         }
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError(rawValue: result.rawValue)
+            throw KafkaError.rdKafkaError(result)
         }
         return
     }
@@ -371,7 +374,7 @@ public final class KafkaConsumer {
             rd_kafka_topic_partition_list_destroy(self.subscribedTopicsPointer)
 
             guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                let error = KafkaError(rawValue: result.rawValue)
+                let error = KafkaError.rdKafkaError(result)
                 self.logger.error("Closing KafkaConsumer failed: \(error.description)")
                 return
             }

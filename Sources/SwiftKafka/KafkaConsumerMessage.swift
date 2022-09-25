@@ -42,10 +42,11 @@ public struct KafkaConsumerMessage: Hashable {
             var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
             let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
-            throw KafkaError(
-                rawValue: rdKafkaMessage.err.rawValue,
-                description: errorString ?? ""
-            )
+            if let errorString {
+                throw KafkaError.anyError(description: errorString)
+            } else {
+                throw KafkaError.rdKafkaError(rdKafkaMessage.err)
+            }
         }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {

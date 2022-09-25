@@ -14,21 +14,43 @@
 
 import Crdkafka
 
-struct KafkaError: Error {
-    // Preliminary Implementation
-    var rawValue: Int32
-    var description: String
+public struct KafkaError: Error, CustomStringConvertible {
 
-    init(
-        rawValue: Int32 = -1,
-        description: String = ""
-    ) {
-        self.rawValue = rawValue
-        self.description = description // TODO: https://github.com/swift-server/swift-kafka-gsoc/issues/4
+    internal enum _Code: CustomStringConvertible {
+        case rdKafkaError(rd_kafka_resp_err_t)
+        case anyError(description: String) // TODO: replace
+
+        var description: String {
+            switch self {
+            case .rdKafkaError(let error):
+                return String(cString: rd_kafka_err2str(error))
+            case .anyError(description: let description):
+                return description
+            }
+        }
     }
 
-    init(error: rd_kafka_resp_err_t) {
-        self.rawValue = error.rawValue
-        self.description = String(cString: rd_kafka_err2str(error))
+    let _code: _Code
+
+    var file: String
+
+    var line: Int
+
+    init(_code: _Code, file: String, line: Int) {
+        self._code = _code
+        self.file = file
+        self.line = line
+    }
+
+    public static func rdKafkaError(_ error: rd_kafka_resp_err_t, file: String = #fileID, line: Int = #line) -> Self {
+        .init(_code: .rdKafkaError(error), file: file, line: line)
+    }
+
+    public static func anyError(description: String, file: String = #fileID, line: Int = #line) -> Self {
+        .init(_code: .anyError(description: description), file: file, line: line)
+    }
+
+    public var description: String {
+        self._code.description
     }
 }
