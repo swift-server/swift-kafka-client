@@ -41,15 +41,15 @@ public struct KafkaAcknowledgedMessage: Hashable {
         let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
         self.value = ByteBuffer(bytes: valueBufferPointer)
 
-        guard rdKafkaMessage.err.rawValue == 0 else {
+        guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
             var errorStringBuffer = self.value
             let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
-            throw KafkaAcknowledgedMessageError(
-                rawValue: rdKafkaMessage.err.rawValue,
-                description: errorString,
-                messageID: self.id
-            )
+            if let errorString {
+                throw KafkaAcknowledgedMessageError.fromMessage(messageID: self.id, message: errorString)
+            } else {
+                throw KafkaAcknowledgedMessageError.fromRDKafkaError(messageID: self.id, error: rdKafkaMessage.err)
+            }
         }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {

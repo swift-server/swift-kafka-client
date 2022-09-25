@@ -225,17 +225,6 @@ public actor KafkaProducer {
 
         let messageID = UInt(bitPattern: messagePointer.pointee._private)
 
-        guard messagePointer.pointee.err.rawValue == 0 else {
-            let error = KafkaAcknowledgedMessageError(
-                rawValue: messagePointer.pointee.err.rawValue,
-                description: "TODO: implement in separate error issue",
-                messageID: messageID
-            )
-            _ = acknowlegdementsSource.yield(.failure(error))
-
-            return
-        }
-
         do {
             let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
             _ = acknowlegdementsSource.yield(.success(message))
