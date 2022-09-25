@@ -90,7 +90,7 @@ public struct KafkaConfig: Hashable, Equatable {
 
             if configResult != RD_KAFKA_CONF_OK {
                 let errorString = String(cString: errorChars)
-                throw KafkaError.anyError(description: errorString)
+                throw KafkaError.config(errorString)
             }
         }
 

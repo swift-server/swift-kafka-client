@@ -145,7 +145,7 @@ public final class KafkaConsumer {
         var config = config
         if let configGroupID = config.value(forKey: "group.id") {
             if configGroupID != groupID {
-                throw KafkaError.anyError(description: "Group ID does not match with group ID found in the configuration")
+                throw KafkaError.config("Group ID does not match with group ID found in the configuration")
             }
         } else {
             try config.set(groupID, forKey: "group.id")
@@ -326,11 +326,11 @@ public final class KafkaConsumer {
     private func _commitSync(_ message: KafkaConsumerMessage) throws {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
         guard !self.closed else {
-            throw KafkaError.anyError(description: "Trying to invoke method on consumer that has been closed.")
+            throw KafkaError.connectionClosed()
         }
 
         guard self.config.value(forKey: "enable.auto.commit") == "false" else {
-            throw KafkaError.anyError(description: "Committing manually only works if enable.auto.commit is set to false")
+            throw KafkaError.config("Committing manually only works if enable.auto.commit is set to false")
         }
 
         let changesList = rd_kafka_topic_partition_list_new(1)
