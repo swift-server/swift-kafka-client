@@ -172,16 +172,16 @@ public actor KafkaProducer {
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     /// - Returns: Unique message identifier matching the `id` property of the corresponding ``KafkaAcknowledgedMessage``
     @discardableResult
-    public func sendAsync(message: KafkaProducerMessage) throws -> UInt {
+    public func sendAsync(_ message: KafkaProducerMessage) throws -> UInt {
         switch self.state {
         case .started:
-            return try self._sendAsync(message: message)
+            return try self._sendAsync(message)
         case .shuttingDown, .shutDown:
             throw KafkaError(description: "Trying to invoke method on producer that has been shut down.")
         }
     }
 
-    private func _sendAsync(message: KafkaProducerMessage) throws -> UInt {
+    private func _sendAsync(_ message: KafkaProducerMessage) throws -> UInt {
         let topicHandle = self.createTopicHandleIfNeeded(topic: message.topic)
 
         let keyBytes: [UInt8]?

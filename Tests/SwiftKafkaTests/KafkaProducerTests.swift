@@ -60,7 +60,7 @@ final class KafkaProducerTests: XCTestCase {
             value: "Hello, World!"
         )
 
-        let messageID = try await producer.sendAsync(message: message)
+        let messageID = try await producer.sendAsync(message)
 
         for await messageResult in producer.acknowledgements {
             guard case .success(let acknowledgedMessage) = messageResult else {
@@ -87,7 +87,7 @@ final class KafkaProducerTests: XCTestCase {
             value: ByteBuffer()
         )
 
-        let messageID = try await producer.sendAsync(message: message)
+        let messageID = try await producer.sendAsync(message)
 
         for await messageResult in producer.acknowledgements {
             guard case .success(let acknowledgedMessage) = messageResult else {
@@ -121,8 +121,8 @@ final class KafkaProducerTests: XCTestCase {
 
         var messageIDs = Set<UInt>()
 
-        messageIDs.insert(try await producer.sendAsync(message: message1))
-        messageIDs.insert(try await producer.sendAsync(message: message2))
+        messageIDs.insert(try await producer.sendAsync(message1))
+        messageIDs.insert(try await producer.sendAsync(message2))
 
         var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
@@ -161,7 +161,7 @@ final class KafkaProducerTests: XCTestCase {
         )
 
         do {
-            try await producer.sendAsync(message: message)
+            try await producer.sendAsync(message)
             XCTFail("Method should have thrown error")
         } catch {}
     }

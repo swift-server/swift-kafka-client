@@ -201,7 +201,7 @@ final class SwiftKafkaTests: XCTestCase {
         var messageIDs = Set<UInt>()
 
         for message in messages {
-            messageIDs.insert(try await producer.sendAsync(message: message))
+            messageIDs.insert(try await producer.sendAsync(message))
         }
 
         var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
