@@ -19,14 +19,12 @@ struct KafkaError: Error {
     var rawValue: Int32
     var description: String
 
-    init(rawValue: Int32) {
+    init(
+        rawValue: Int32 = -1,
+        description: String = ""
+    ) {
         self.rawValue = rawValue
-        self.description = "" // TODO: https://github.com/swift-server/swift-kafka-gsoc/issues/4
-    }
-
-    init(description: String) {
-        self.rawValue = -1
-        self.description = description
+        self.description = description // TODO: https://github.com/swift-server/swift-kafka-gsoc/issues/4
     }
 
     init(error: rd_kafka_resp_err_t) {

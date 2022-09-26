@@ -16,6 +16,20 @@ import NIOCore
 @testable import SwiftKafka
 import XCTest
 
+// For testing locally on Mac, do the following:
+//
+// 1. Install Kafka and Zookeeper using homebrew
+//
+// https://medium.com/@Ankitthakur/apache-kafka-installation-on-mac-using-homebrew-a367cdefd273
+//
+// 2. Start Zookeeper & Kafka Server
+//
+// (Homebrew - Apple Silicon)
+// zookeeper-server-start /opt/homebrew/etc/kafka/zookeeper.properties & kafka-server-start /opt/homebrew/etc/kafka/server.properties
+//
+// (Homebrew - Intel Mac)
+// zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
+
 final class KafkaProducerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
@@ -36,11 +50,6 @@ final class KafkaProducerTests: XCTestCase {
         self.config = nil
     }
 
-    // For testing locally on Mac, do the following:
-    // 1. Install Kafka and Zookeeper using homebrew
-    // https://medium.com/@Ankitthakur/apache-kafka-installation-on-mac-using-homebrew-a367cdefd273
-    // 2. Run the following command
-    // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
     func testSendAsync() async throws {
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
 

@@ -1,4 +1,4 @@
-// swift-tools-version: 5.6
+// swift-tools-version: 5.7
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the swift-kafka-gsoc open source project
@@ -52,6 +52,10 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftKafkaTests",
+            dependencies: ["SwiftKafka"]
+        ),
+        .testTarget(
+            name: "IntegrationTests",
             dependencies: ["SwiftKafka"]
         ),
     ]

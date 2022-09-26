@@ -15,15 +15,11 @@
 import Crdkafka
 import NIOCore
 
-/// A message produced by the client and acknowledged by the Kafka cluster.
-public struct KafkaAcknowledgedMessage: Hashable {
-    /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
-    /// The same identifier is returned by ``KafkaProducer/sendAsync(message:)`` and can be used to correlate
-    /// a sent message and an acknowledged message.
-    public var id: UInt
-    /// The topic that the message was sent to.
+/// A message received from the Kafka cluster.
+public struct KafkaConsumerMessage: Hashable {
+    /// The topic that the message was received from.
     public var topic: String
-    /// The partition that the message was sent to.
+    /// The partition that the message was received from.
     public var partition: KafkaPartition
     /// The key of the message.
     public var key: ByteBuffer?
@@ -32,23 +28,23 @@ public struct KafkaAcknowledgedMessage: Hashable {
     /// The offset of the message in its partition.
     public var offset: Int64
 
-    /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
-    init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt) throws {
-        self.id = id
-
+    /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
+    init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
-        let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
-        self.value = ByteBuffer(bytes: valueBufferPointer)
+        guard let valuePointer = rdKafkaMessage.payload else {
+            fatalError("Could not resolve payload of acknowledged message")
+        }
 
-        guard rdKafkaMessage.err.rawValue == 0 else {
-            var errorStringBuffer = self.value
+        let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
+
+        guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
             let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
-            throw KafkaAcknowledgedMessageError(
+            throw KafkaError(
                 rawValue: rdKafkaMessage.err.rawValue,
-                description: errorString,
-                messageID: self.id
+                description: errorString ?? ""
             )
         }
 
@@ -68,6 +64,8 @@ public struct KafkaAcknowledgedMessage: Hashable {
         } else {
             self.key = nil
         }
+
+        self.value = ByteBuffer(bytes: valueBufferPointer)
 
         self.offset = Int64(rdKafkaMessage.offset)
     }

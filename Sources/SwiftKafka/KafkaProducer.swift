@@ -49,7 +49,7 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 }
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``shutdownGracefully()`` when the `KafkaProducer` is not used anymore.
+/// Please make sure to explicitly call ``shutdownGracefully()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
@@ -89,8 +89,8 @@ public actor KafkaProducer {
     nonisolated let acknowlegdementsSource: AcknowledgedMessagesAsyncSequence.WrappedSequence.Source
     private typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
 
-    /// Initialize a new `KafkaProducer`.
-    /// - Parameter config: The ``KafkaConfig`` for configuring the `KafkaProducer`.
+    /// Initialize a new ``KafkaProducer``.
+    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     public init(
