@@ -110,7 +110,7 @@ public actor KafkaProducer {
         // This is due to the fact that deiniting the sequence is used as part of a trigger to
         // terminate the underlying source.
         let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            of: Acknowledgement.self,
+            elementType: Acknowledgement.self,
             backPressureStrategy: NoBackPressure(),
             delegate: NoDelegate()
         )
