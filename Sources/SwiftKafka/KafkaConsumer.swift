@@ -120,7 +120,7 @@ public final class KafkaConsumer {
             self?.close()
         }
         let messagesSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            of: Element.self,
+            elementType: Element.self,
             backPressureStrategy: backpressureStrategy,
             delegate: messagesSequenceDelegate
         )
