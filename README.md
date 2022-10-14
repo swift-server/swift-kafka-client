@@ -1,9 +1,10 @@
-# 🚧WIP🚧: swift-kafka-gsoc
+# 🚧WIP🚧: SwiftKafka
 
-This package is currently under development as part of the Google Summer of Code 2022.
-It aims to provide a library to interact with Apache Kafka.
+SwiftKafka is a Swift Package in development that provides a convenient way to communicate with [Apache Kafka](https://kafka.apache.org) servers. The main goal was to create an API that leverages [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). Under the hood, this package uses the [`librdkafka`](github.com/edenhill/librdkafka) C library.
 
-## Installing Dependencies
+## Getting Started
+
+### Installing Dependencies
 
 Please make sure to have the [`librdkafka`](https://github.com/edenhill/librdkafka) library installed before building.
 
@@ -15,11 +16,20 @@ brew install librdkafka
 
 #### Linux
 
+We recommend building [`librdkafka`](https://github.com/edenhill/librdkafka) from source, as the `apt-get` package for the library is outdated.
+
 ```bash
-apt-get install librdkafka-dev
+cd ~
+apt-get update && apt-get install -y --no-install-recommends \
+    libzstd-dev \
+    libsasl2-dev \
+    libssl-dev \
+    zlib1g-dev
+git clone --depth 1 https://github.com/edenhill/librdkafka
+cd librdkafka && ./configure && make && make install && ldconfig
 ```
 
-## Building the Project
+### Building the Project
 
 #### macOS
 
@@ -47,12 +57,117 @@ env PKG_CONFIG_PATH=$(brew --prefix)/opt/openssl@1.1/lib/pkgconfig xed .
 swift build
 ```
 
-## 🚧WIP🚧: Docker
+### Docker
 
-As part of developing for Linux, we also provide a Docker environment for this package. It only contains a proof-of-concept program but will be expanded in the future.
-
-To run the proof-of-concept program, use:
+We also provide a Docker environment for this package. This will automatically start a local Kafka server and run the package tests.
 
 ```bash
 docker-compose -f docker/docker-compose.yaml run swift-kafka-gsoc
+```
+
+## Overview
+
+### Producer API
+
+The `sendAsync(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
+
+```swift
+var config = KafkaConfig()
+try config.set("localhost:9092", forKey: "bootstrap.servers")
+
+let producer = try await KafkaProducer(
+    config: config,
+    logger: .kafkaTest // Your logger here
+)
+
+let messageID = try await producer.sendAsync(
+    KafkaProducerMessage(
+        topic: "topic-name",
+        value: "Hello, World!"
+    )
+)
+
+for await acknowledgement in producer.acknowledgements {
+    // Check if acknowledgement belongs to the sent message
+}
+
+// Required
+await producer.shutdownGracefully()
+```
+
+### Consumer API
+
+After initializing the `KafkaConsumer` with a topic-partition pair to read from, messages can be consumed using the `messages` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence).
+
+```swift
+var config = KafkaConfig()
+try config.set("localhost:9092", forKey: "bootstrap.servers")
+
+let consumer = try KafkaConsumer(
+    topic: "topic-name",
+    partition: KafkaPartition(rawValue: 0),
+    config: config,
+    logger: .kafkaTest // Your logger here
+)
+
+for await messageResult in consumer.messages {
+    switch messageResult {
+    case .success(let message):
+        // Do something with message
+    case .failure(let error):
+        // Handle error
+    }
+}
+```
+
+#### Consumer Groups
+
+SwiftKafka also allows users to subscribe to an array of topics as part of a consumer group.
+
+```swift
+var config = KafkaConfig()
+try config.set("localhost:9092", forKey: "bootstrap.servers")
+
+let consumer = try KafkaConsumer(
+    topics: ["topic-name"],
+    groupID: "example-group",
+    config: config,
+    logger: .kafkaTest // Your logger here
+)
+
+for await messageResult in consumer.messages {
+    switch messageResult {
+    case .success(let message):
+        // Do something with message
+    case .failure(let error):
+        // Handle error
+    }
+}
+```
+
+#### Manual commits
+
+By default, the `KafkaConsumer` automatically commits message offsets after receiving the corresponding message. However, we allow users to disable this setting and commit message offsets manually.
+
+```swift
+var config = KafkaConfig()
+try config.set("localhost:9092", forKey: "bootstrap.servers")
+try config.set("false", forKey: "enable.auto.commit")
+
+let consumer = try KafkaConsumer(
+    topics: ["topic-name"],
+    groupID: "example-group",
+    config: config,
+    logger: .kafkaTest // Your logger here
+)
+
+for await messageResult in consumer.messages {
+    switch messageResult {
+    case .success(let message):
+        // Do something with message
+        try await consumer.commitSync(message)
+    case .failure(let error):
+        // Handle error
+    }
+}
 ```
