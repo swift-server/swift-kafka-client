@@ -1,21 +1,15 @@
 ARG swift_version=5.7
-ARG ubuntu_version=focal
+ARG ubuntu_version=jammy
 ARG base_image=swift:$swift_version-$ubuntu_version
 FROM $base_image
 
-# Build librdkafka from source because apt-get
-# only supports librdkafka-dev version 1.2.1
-
-# Install librdkafka dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    make \
-    gcc \
-    libzstd-dev \
-    libsasl2-dev \
-    libssl-dev \
-    zlib1g-dev
-RUN git clone --depth 1 https://github.com/edenhill/librdkafka
-RUN cd librdkafka && ./configure && make && make install && ldconfig
+# Use Confluent repository for downloading librdkafka-dev because
+# apt-get only supports librdkafka-dev version 1.2.1
+RUN apt-get update
+RUN apt-get install wget software-properties-common gnupg -y
+RUN wget -qO - http://packages.confluent.io/deb/7.2/archive.key | apt-key add -
+RUN add-apt-repository "deb http://packages.confluent.io/deb/ $(lsb_release -cs) main" -y
+RUN apt-get install librdkafka-dev -y
 
 WORKDIR /swift-kafka-gsoc
 
