@@ -16,7 +16,7 @@ brew install librdkafka
 
 #### Linux
 
-The default `apt-get` package for the library is outdated. Therefore, we recommend installing [`librdkafka`](https://github.com/edenhill/librdkafka) from the [official Confluence package repository](https://docs.confluent.io/platform/current/installation/installing_cp/deb-ubuntu.html#get-the-software).
+The default `apt-get` package for the library is outdated. Therefore, we recommend installing [`librdkafka`](https://github.com/edenhill/librdkafka) from the [official Confluent package repository](https://docs.confluent.io/platform/current/installation/installing_cp/deb-ubuntu.html#get-the-software).
 
 ```bash
 wget -qO - http://packages.confluent.io/deb/7.2/archive.key | sudo apt-key add -
