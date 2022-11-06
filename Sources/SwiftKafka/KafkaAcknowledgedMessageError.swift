@@ -18,31 +18,31 @@ import Crdkafka
 public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
     /// Identifier of the message that caused the error.
     public var messageID: UInt
-    /// A string describing the error.
-    public var description: String
+    /// The underlying ``KafkaError``.
+    public let error: KafkaError
 
-    var file: String
-
-    var line: Int
-
-    init(messageID: UInt, description: String, file: String, line: Int) {
+    init(messageID: UInt, error: KafkaError) {
         self.messageID = messageID
-        self.description = description
-        self.file = file
-        self.line = line
+        self.error = error
+    }
+
+    public var description: String {
+        self.error.description
     }
 
     static func fromRDKafkaError(
         messageID: UInt,
         error: rd_kafka_resp_err_t,
         file: String = #fileID,
-        line: Int = #line
+        line: UInt = #line
     ) -> Self {
         .init(
             messageID: messageID,
-            description: String(cString: rd_kafka_err2str(error)),
-            file: file,
-            line: line
+            error: .rdKafkaError(
+                wrapping: error,
+                file: file,
+                line: line
+            )
         )
     }
 
@@ -50,13 +50,15 @@ public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
         messageID: UInt,
         message: String,
         file: String = #fileID,
-        line: Int = #line
+        line: UInt = #line
     ) -> Self {
         .init(
             messageID: messageID,
-            description: "Acknowledgement Error: \(message)",
-            file: file,
-            line: line
+            error: .acknowledgement(
+                reason: message,
+                file: file,
+                line: line
+            )
         )
     }
 }
