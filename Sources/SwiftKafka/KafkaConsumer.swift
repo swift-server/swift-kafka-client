@@ -105,7 +105,7 @@ public final class KafkaConsumer {
             rd_kafka_poll_set_consumer(handle)
         }
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(result)
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
 
         self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
@@ -147,7 +147,7 @@ public final class KafkaConsumer {
         var config = config
         if let configGroupID = config.value(forKey: "group.id") {
             if configGroupID != groupID {
-                throw KafkaError.config("Group ID does not match with group ID found in the configuration")
+                throw KafkaError.config(reason: "Group ID does not match with group ID found in the configuration")
             }
         } else {
             try config.set(groupID, forKey: "group.id")
@@ -213,7 +213,7 @@ public final class KafkaConsumer {
         }
 
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(result)
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
     }
 
@@ -244,7 +244,7 @@ public final class KafkaConsumer {
         }
 
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(result)
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
     }
 
@@ -333,11 +333,11 @@ public final class KafkaConsumer {
     private func _commitSync(_ message: KafkaConsumerMessage) throws {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
         guard !self.closed else {
-            throw KafkaError.connectionClosed()
+            throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
         }
 
         guard self.config.value(forKey: "enable.auto.commit") == "false" else {
-            throw KafkaError.config("Committing manually only works if enable.auto.commit is set to false")
+            throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
         }
 
         let changesList = rd_kafka_topic_partition_list_new(1)
@@ -362,7 +362,7 @@ public final class KafkaConsumer {
             )
         }
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(result)
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
         return
     }
@@ -381,7 +381,7 @@ public final class KafkaConsumer {
             rd_kafka_topic_partition_list_destroy(self.subscribedTopicsPointer)
 
             guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                let error = KafkaError.rdKafkaError(result)
+                let error = KafkaError.rdKafkaError(wrapping: result)
                 self.logger.error("Closing KafkaConsumer failed: \(error.description)")
                 return
             }

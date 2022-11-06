@@ -56,7 +56,7 @@ extension KafkaClient {
             KafkaClient.stringSize
         ) else {
             let errorString = String(cString: errorChars)
-            throw KafkaError.topicCreation(errorString)
+            throw KafkaError.topicCreation(reason: errorString)
         }
         defer { rd_kafka_NewTopic_destroy(newTopic) }
 
@@ -74,17 +74,17 @@ extension KafkaClient {
             )
 
             guard let resultEvent = rd_kafka_queue_poll(resultQueue, timeout) else {
-                throw KafkaError.topicCreation("No CreateTopics result after 10s timeout")
+                throw KafkaError.topicCreation(reason: "No CreateTopics result after 10s timeout")
             }
             defer { rd_kafka_event_destroy(resultEvent) }
 
             let resultCode = rd_kafka_event_error(resultEvent)
             guard resultCode == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                throw KafkaError.rdKafkaError(resultCode)
+                throw KafkaError.rdKafkaError(wrapping: resultCode)
             }
 
             guard let topicsResultEvent = rd_kafka_event_CreateTopics_result(resultEvent) else {
-                throw KafkaError.topicCreation("Received event that is not of type rd_kafka_CreateTopics_result_t")
+                throw KafkaError.topicCreation(reason: "Received event that is not of type rd_kafka_CreateTopics_result_t")
             }
 
             var resultTopicCount = 0
@@ -94,17 +94,17 @@ extension KafkaClient {
             )
 
             guard resultTopicCount == 1, let topicResult = topicResults?[0] else {
-                throw KafkaError.topicCreation("Received less/more than one topic result")
+                throw KafkaError.topicCreation(reason: "Received less/more than one topic result")
             }
 
             let topicResultError = rd_kafka_topic_result_error(topicResult)
             guard topicResultError == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                throw KafkaError.rdKafkaError(topicResultError)
+                throw KafkaError.rdKafkaError(wrapping: topicResultError)
             }
 
             let receivedTopicName = String(cString: rd_kafka_topic_result_name(topicResult))
             guard receivedTopicName == uniqueTopicName else {
-                throw KafkaError.topicCreation("Received topic result for topic with different name")
+                throw KafkaError.topicCreation(reason: "Received topic result for topic with different name")
             }
         }
 
@@ -145,17 +145,17 @@ extension KafkaClient {
             )
 
             guard let resultEvent = rd_kafka_queue_poll(resultQueue, timeout) else {
-                throw KafkaError.topicDeletion("No DeleteTopics result after 10s timeout")
+                throw KafkaError.topicDeletion(reason: "No DeleteTopics result after 10s timeout")
             }
             defer { rd_kafka_event_destroy(resultEvent) }
 
             let resultCode = rd_kafka_event_error(resultEvent)
             guard resultCode == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                throw KafkaError.rdKafkaError(resultCode)
+                throw KafkaError.rdKafkaError(wrapping: resultCode)
             }
 
             guard let topicsResultEvent = rd_kafka_event_DeleteTopics_result(resultEvent) else {
-                throw KafkaError.topicDeletion("Received event that is not of type rd_kafka_DeleteTopics_result_t")
+                throw KafkaError.topicDeletion(reason: "Received event that is not of type rd_kafka_DeleteTopics_result_t")
             }
 
             var resultTopicCount = 0
@@ -165,17 +165,17 @@ extension KafkaClient {
             )
 
             guard resultTopicCount == 1, let topicResult = topicResults?[0] else {
-                throw KafkaError.topicDeletion("Received less/more than one topic result")
+                throw KafkaError.topicDeletion(reason: "Received less/more than one topic result")
             }
 
             let topicResultError = rd_kafka_topic_result_error(topicResult)
             guard topicResultError == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                throw KafkaError.rdKafkaError(topicResultError)
+                throw KafkaError.rdKafkaError(wrapping: topicResultError)
             }
 
             let receivedTopicName = String(cString: rd_kafka_topic_result_name(topicResult))
             guard receivedTopicName == topic else {
-                throw KafkaError.topicDeletion("Received topic result for topic with different name")
+                throw KafkaError.topicDeletion(reason: "Received topic result for topic with different name")
             }
         }
     }

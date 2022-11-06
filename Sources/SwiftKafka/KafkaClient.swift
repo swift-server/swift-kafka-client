@@ -57,7 +57,7 @@ final class KafkaClient {
                 rd_kafka_conf_destroy(duplicateConfig)
 
                 let errorString = String(cString: errorChars)
-                throw KafkaError.client(errorString)
+                throw KafkaError.client(reason: errorString)
             }
 
             return handle

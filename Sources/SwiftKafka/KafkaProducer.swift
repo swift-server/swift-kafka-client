@@ -49,7 +49,7 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 }
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``shutdownGracefully()`` when the ``KafkaProducer`` is not used anymore.
+/// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
@@ -179,7 +179,7 @@ public actor KafkaProducer {
         case .started:
             return try self._sendAsync(message)
         case .shuttingDown, .shutDown:
-            throw KafkaError.connectionClosed()
+            throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
         }
     }
 
@@ -212,7 +212,7 @@ public actor KafkaProducer {
         }
 
         guard responseCode == 0 else {
-            throw KafkaError.rdKafkaError(rd_kafka_last_error())
+            throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
         }
 
         return self.messageIDCounter

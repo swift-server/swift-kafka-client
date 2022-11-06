@@ -14,84 +14,204 @@
 
 import Crdkafka
 
-public struct KafkaError: Error, CustomStringConvertible {
-    internal enum _Code: CustomStringConvertible {
-        case rdKafkaError(rd_kafka_resp_err_t)
-        case config(String)
-        case topicConfig(String)
-        case connectionClosed
-        case client(String)
-        case messageConsumption(String)
-        case topicCreation(String)
-        case topicDeletion(String)
+public struct KafkaError: Error, Hashable, CustomStringConvertible {
+    private var backing: Backing
 
-        var description: String {
-            switch self {
-            case .rdKafkaError(let error):
-                return String(cString: rd_kafka_err2str(error))
-            case .config(let message):
-                return "Configuration Error: \(message)"
-            case .topicConfig(let message):
-                return "Topic Configuration Error: \(message)"
-            case .connectionClosed:
-                return "Connection closed"
-            case .client(let message):
-                return "Client Error: \(message)"
-            case .messageConsumption(let message):
-                return "Message Consumption Error: \(message)"
-            case .topicCreation(let message):
-                return "Topic Creation Error: \(message)"
-            case .topicDeletion(let message):
-                return "Topic Deletion Error: \(message)"
-            }
+    /// Represents the kind of error that was encountered.
+    public var code: ErrorCode {
+        get {
+            self.backing.code
+        }
+        set {
+            self.makeUnique()
+            self.backing.code = newValue
         }
     }
 
-    let _code: _Code
-
-    var file: String
-
-    var line: Int
-
-    init(_code: _Code, file: String, line: Int) {
-        self._code = _code
-        self.file = file
-        self.line = line
+    private var reason: String {
+        self.backing.reason
     }
 
-    static func rdKafkaError(_ error: rd_kafka_resp_err_t, file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .rdKafkaError(error), file: file, line: line)
+    private var file: String {
+        self.backing.file
     }
 
-    static func config(_ message: String, file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .config(message), file: file, line: line)
-    }
-
-    static func topicConfig(_ message: String, file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .topicConfig(message), file: file, line: line)
-    }
-
-    static func connectionClosed(file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .connectionClosed, file: file, line: line)
-    }
-
-    static func client(_ message: String, file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .client(message), file: file, line: line)
-    }
-
-    static func messageConsumption(_ message: String, file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .messageConsumption(message), file: file, line: line)
-    }
-
-    static func topicCreation(_ message: String, file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .topicCreation(message), file: file, line: line)
-    }
-
-    static func topicDeletion(_ message: String, file: String = #fileID, line: Int = #line) -> Self {
-        .init(_code: .topicDeletion(message), file: file, line: line)
+    private var line: UInt {
+        self.backing.line
     }
 
     public var description: String {
-        self._code.description
+        "KafkaError.\(self.code): \(self.reason) \(self.file):\(self.line)"
+    }
+
+    private mutating func makeUnique() {
+        if !isKnownUniquelyReferenced(&self.backing) {
+            self.backing = self.backing.copy()
+        }
+    }
+
+    static func rdKafkaError(
+        wrapping error: rd_kafka_resp_err_t, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        let errorMessage = String(cString: rd_kafka_err2str(error))
+        return KafkaError(
+            backing: .init(
+                code: .rdKafkaError, reason: errorMessage, file: file, line: line
+            )
+        )
+    }
+
+    static func config(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .config, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func topicConfig(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .topicConfig, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func client(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .client, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func connectionClosed(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .connectionClosed, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func messageConsumption(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .messageConsumption, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func topicCreation(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .topicCreation, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func topicDeletion(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .topicDeletion, reason: reason, file: file, line: line
+            )
+        )
+    }
+}
+
+extension KafkaError {
+    /// Represents the kind of error.
+    ///
+    /// The same error may be thrown from more than one place for more than one reason.
+    /// This type represents only a relatively high-level error:
+    /// use the string representation of ``KafkaError`` to get more details about the specific cause.
+    public struct ErrorCode: Hashable, Sendable, CustomStringConvertible {
+        fileprivate enum BackingCode {
+            case rdKafkaError
+            case config
+            case topicConfig
+            case connectionClosed
+            case client
+            case messageConsumption
+            case topicCreation
+            case topicDeletion
+        }
+
+        fileprivate var backingCode: BackingCode
+
+        fileprivate init(_ backingCode: BackingCode) {
+            self.backingCode = backingCode
+        }
+
+        /// Errors caused by the underlying `librdkafka` library.
+        public static let rdKafkaError = ErrorCode(.rdKafkaError)
+        /// There is an error in the Kafka client configuration.
+        public static let config = ErrorCode(.config)
+        /// There is an error in the Kafka topic configuration.
+        public static let topicConfig = ErrorCode(.topicConfig)
+        /// Something or somebody tried to access a client that ended its connection to Kafka.
+        public static let connectionClosed = ErrorCode(.connectionClosed)
+        /// Establishing a connection to Kafka failed.
+        public static let client = ErrorCode(.client)
+        /// Consuming a message failed.
+        public static let messageConsumption = ErrorCode(.messageConsumption)
+        /// Creating a topic failed.
+        public static let topicCreation = ErrorCode(.topicCreation)
+        /// Deleting a topic failed.
+        public static let topicDeletion = ErrorCode(.topicDeletion)
+
+        public var description: String {
+            return String(describing: self.backingCode)
+        }
+    }
+}
+
+extension KafkaError {
+    final class Backing: Hashable {
+        var code: KafkaError.ErrorCode
+
+        let reason: String
+
+        let file: String
+
+        let line: UInt
+
+        fileprivate init(
+            code: KafkaError.ErrorCode,
+            reason: String,
+            file: String,
+            line: UInt
+        ) {
+            self.code = code
+            self.reason = reason
+            self.file = file
+            self.line = line
+        }
+
+        // Only the error code matters for equality.
+        static func ==(lhs: Backing, rhs: Backing) -> Bool {
+            return lhs.code == rhs.code
+        }
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(self.code)
+        }
+
+        fileprivate func copy() -> Backing {
+            return Backing(code: self.code, reason: self.reason, file: self.file, line: self.line)
+        }
     }
 }

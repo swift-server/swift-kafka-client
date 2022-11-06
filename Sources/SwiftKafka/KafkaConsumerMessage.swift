@@ -44,9 +44,9 @@ public struct KafkaConsumerMessage: Hashable {
             let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
             if let errorString {
-                throw KafkaError.messageConsumption(errorString)
+                throw KafkaError.messageConsumption(reason: errorString)
             } else {
-                throw KafkaError.rdKafkaError(rdKafkaMessage.err)
+                throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
             }
         }
 
