@@ -14,62 +14,128 @@
 
 public struct ProducerConfig: ClientConfig {
     // TODO: some properties missing, check with franz
-    public var transactionalID: String = "" // TODO: Use empty string or nil for "no value"?
-    public var transactionalTimeoutMs: UInt = 60000
-    public var enableIdempotence: Bool = false
-    public var queueBufferingMaxMessages: UInt = 100000
-    public var queueBufferingMaxKBytes: UInt = 1048576
-    public var queueBufferingMaxMs: UInt = 5
-    public var messageSendMaxRetries: UInt = 2147483647
+    public var properties: [String: String] = [:]
 
-    // MARK: - ClientConfig
+    public var transactionalID: String { // TODO: Use optional or empty string for "no value"?
+        get { self.getString("transactional.id") ?? "" }
+        set { self.properties["transactional.id"] = newValue }
+    }
 
-    public var clientID: String = "rdkafka"
+    public var transactionTimeoutMs: UInt {
+        get { self.getUInt("transaction.timeout.ms") ?? 60000 }
+        set { self.properties["transaction.timeout.ms"] = String(newValue) }
+    }
 
-    public var bootstrapServers: [String] = []
+    public var enableIdempotence: Bool {
+        get { self.getBool("enable.idempotence") ?? false }
+        set { self.properties["enable.idempotence"] = String(newValue) }
+    }
 
-    public var messageMaxBytes: UInt = 1000000
-    public var messageCopyMaxBytes: UInt = 65535
+    public var queueBufferingMaxMessages: UInt {
+        get { self.getUInt("queue.buffering.max.messages") ?? 100_000 }
+        set { self.properties["queue.buffering.max.messages"] = String(newValue) }
+    }
 
-    public var recieveMessageMaxBytes: UInt = 100000000
-    public var maxInFlightRequestsPerConnection: UInt = 1000000
-    public var metadataMaxAgeMs: UInt = 900000
+    public var queueBufferingMaxKBytes: UInt {
+        get { self.getUInt("queue.buffering.max.kbytes") ?? 1_048_576 }
+        set { self.properties["queue.buffering.max.kbytes"] = String(newValue) }
+    }
 
-    public var topicMetadataRefreshIntervalMs: Int = 300000
-    public var topicMetadataRefreshFastIntervalMs: UInt = 250
-    public var topicMetadataRefreshSparse: Bool = true
-    public var topicMetadataPropagationMaxMs: UInt = 30000
-    public var topicDenylist: [String] = []
+    public var queueBufferingMaxMs: UInt {
+        get { self.getUInt("queue.buffering.max.ms") ?? 5 }
+        set { self.properties["queue.buffering.max.ms"] = String(newValue) }
+    }
 
-    public var debug: [DebugOption] = []
+    public var messageSendMaxRetries: UInt {
+        get { self.getUInt("message.send.max.retries") ?? 2_147_483_647 }
+        set { self.properties["message.send.max.retries"] = String(newValue) }
+    }
 
-    public var socketTimeoutMs: UInt = 60000
-    public var socketSendBufferBytes: UInt = 0
-    public var socketReceiveBufferBytes: UInt = 0
-    public var socketKeepaliveEnable: Bool = false
-    public var socketNagleDisable: Bool = false
-    public var socketMaxFails: UInt = 1
-    public var socketConnectionSetupTimeoutMs: UInt = 30000
-
-    public var brokerAddressTTL: UInt = 1000
-    public var brokerAddressFamily: IPAddressFamily = .any
-
-    public var reconnectBackoffMs: UInt = 100
-    public var reconnectBackoffMaxMs: UInt = 10000
-
-    public var allowAutoCreateTopics: Bool = true
-
-    public var securityProtocol: SecurityProtocol = .plaintext
-
-    public var sslKeyLocation: String = ""
-    public var sslKeyPassword: String = ""
-    public var sslCertificateLocation: String = ""
-    public var sslCALocation: String = ""
-    public var sslCRLLocation: String = ""
-    public var sslKeystoreLocation: String = ""
-    public var sslKeystorePassword: String = ""
-
-    public var saslMechanism: SASLMechanism = .gssapi
-    public var saslUsername: String = ""
-    public var saslPassword: String = ""
+    public init(
+        transactionalID: String = "",
+        transactionalTimeoutMs: UInt = 60000,
+        enableIdempotence: Bool = false,
+        queueBufferingMaxMessages: UInt = 100_000,
+        queueBufferingMaxKBytes: UInt = 1_048_576,
+        queueBufferingMaxMs: UInt = 5,
+        messageSendMaxRetries: UInt = 2_147_483_647,
+        clientID: String = "rdkafka",
+        bootstrapServers: [String] = [],
+        messageMaxBytes: UInt = 1_000_000,
+        messageCopyMaxBytes: UInt = 65535,
+        receiveMessageMaxBytes: UInt = 100_000_000,
+        maxInFlightRequestsPerConnection: UInt = 1_000_000,
+        metadataMaxAgeMs: UInt = 900_000,
+        topicMetadataRefreshIntervalMs: Int = 300_000,
+        topicMetadataRefreshFastIntervalMs: UInt = 250,
+        topicMetadataRefreshSparse: Bool = true,
+        topicMetadataPropagationMaxMs: UInt = 30000,
+        topicDenylist: [String] = [],
+        debug: [DebugOption] = [],
+        socketTimeoutMs: UInt = 60000,
+        socketSendBufferBytes: UInt = 0,
+        socketReceiveBufferBytes: UInt = 0,
+        socketKeepaliveEnable: Bool = false,
+        socketNagleDisable: Bool = false,
+        socketMaxFails: UInt = 1,
+        socketConnectionSetupTimeoutMs: UInt = 30000,
+        brokerAddressTTL: UInt = 1000,
+        brokerAddressFamily: IPAddressFamily = .any,
+        reconnectBackoffMs: UInt = 100,
+        reconnectBackoffMaxMs: UInt = 10000,
+        securityProtocol: SecurityProtocol = .plaintext,
+        sslKeyLocation: String = "",
+        sslKeyPassword: String = "",
+        sslCertificateLocation: String = "",
+        sslCALocation: String = "",
+        sslCRLLocation: String = "",
+        sslKeystoreLocation: String = "",
+        sslKeystorePassword: String = "",
+        saslMechanism: SASLMechanism? = nil,
+        saslUsername: String? = nil,
+        saslPassword: String? = nil
+    ) {
+        self.transactionalID = transactionalID
+        self.transactionTimeoutMs = transactionalTimeoutMs
+        self.enableIdempotence = enableIdempotence
+        self.queueBufferingMaxMessages = queueBufferingMaxMessages
+        self.queueBufferingMaxKBytes = queueBufferingMaxKBytes
+        self.queueBufferingMaxMs = queueBufferingMaxMs
+        self.messageSendMaxRetries = messageSendMaxRetries
+        self.clientID = clientID
+        self.bootstrapServers = bootstrapServers
+        self.messageMaxBytes = messageMaxBytes
+        self.messageCopyMaxBytes = messageCopyMaxBytes
+        self.receiveMessageMaxBytes = receiveMessageMaxBytes
+        self.maxInFlightRequestsPerConnection = maxInFlightRequestsPerConnection
+        self.metadataMaxAgeMs = metadataMaxAgeMs
+        self.topicMetadataRefreshIntervalMs = topicMetadataRefreshIntervalMs
+        self.topicMetadataRefreshFastIntervalMs = topicMetadataRefreshFastIntervalMs
+        self.topicMetadataRefreshSparse = topicMetadataRefreshSparse
+        self.topicMetadataPropagationMaxMs = topicMetadataPropagationMaxMs
+        self.topicDenylist = topicDenylist
+        self.debug = debug
+        self.socketTimeoutMs = socketTimeoutMs
+        self.socketSendBufferBytes = socketSendBufferBytes
+        self.socketReceiveBufferBytes = socketReceiveBufferBytes
+        self.socketKeepaliveEnable = socketKeepaliveEnable
+        self.socketNagleDisable = socketNagleDisable
+        self.socketMaxFails = socketMaxFails
+        self.socketConnectionSetupTimeoutMs = socketConnectionSetupTimeoutMs
+        self.brokerAddressTTL = brokerAddressTTL
+        self.brokerAddressFamily = brokerAddressFamily
+        self.reconnectBackoffMs = reconnectBackoffMs
+        self.reconnectBackoffMaxMs = reconnectBackoffMaxMs
+        self.securityProtocol = securityProtocol
+        self.sslKeyLocation = sslKeyLocation
+        self.sslKeyPassword = sslKeyPassword
+        self.sslCertificateLocation = sslCertificateLocation
+        self.sslCALocation = sslCALocation
+        self.sslCRLLocation = sslCRLLocation
+        self.sslKeystoreLocation = sslKeystoreLocation
+        self.sslKeystorePassword = sslKeystorePassword
+        self.saslMechanism = saslMechanism
+        self.saslUsername = saslUsername
+        self.saslPassword = saslPassword
+    }
 }

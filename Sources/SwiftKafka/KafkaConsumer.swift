@@ -193,6 +193,39 @@ public final class KafkaConsumer {
         )
     }
 
+    // MARK: - Initialisers with new config
+
+    // TODO: refactor into single initializer for KafkaConsumer and determine assignment/subscription via config
+
+    public convenience init(
+        topics: [String], // TODO: pass topics via config?
+        config: ConsumerConfig = ConsumerConfig(),
+        logger: Logger
+    ) throws {
+        try self.init(
+            topics: topics,
+            groupID: config.groupID,
+            config: KafkaConfig(clientConfig: config),
+            logger: logger
+        )
+    }
+
+    public convenience init(
+        topic: String, // TODO: pass topic via config?
+        partition: KafkaPartition,
+        offset: Int64,
+        config: ConsumerConfig = ConsumerConfig(),
+        logger: Logger
+    ) throws {
+        try self.init(
+            topic: topic,
+            partition: partition,
+            offset: offset,
+            config: KafkaConfig(clientConfig: config),
+            logger: logger
+        )
+    }
+
     /// Subscribe to the given list of `topics`.
     /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
     /// - Parameter topics: An array of topic names to subscribe to.

@@ -46,6 +46,18 @@ public struct KafkaConfig: Hashable, Equatable {
             self.opaque = opaque
         }
 
+        // TODO: docc
+        convenience init(clientConfig: any ClientConfig) throws {
+            self.init(
+                pointer: rd_kafka_conf_new(),
+                opaque: nil
+            )
+
+            try clientConfig.properties.forEach { key, value in
+                try self.set(value, forKey: key)
+            }
+        }
+
         /// Initialize internal `KafkaConfig` object with default configuration.
         convenience init() {
             self.init(
@@ -158,6 +170,11 @@ public struct KafkaConfig: Hashable, Equatable {
 
     public init() {
         self._internal = .init()
+    }
+
+    // TODO: docc new public interface for config
+    init(clientConfig: any ClientConfig) throws {
+        self._internal = try .init(clientConfig: clientConfig)
     }
 
     /// Retrieve value of configuration property for `key`

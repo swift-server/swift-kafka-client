@@ -136,6 +136,16 @@ public actor KafkaProducer {
         }
     }
 
+    // MARK: - Initialiser with new config
+
+    public init(
+        config: ProducerConfig = ProducerConfig(),
+        topicConfig: KafkaTopicConfig = KafkaTopicConfig(), // TODO: new topic config
+        logger: Logger
+    ) async throws {
+        try await self.init(config: KafkaConfig(clientConfig: config), topicConfig: topicConfig, logger: logger)
+    }
+
     /// Method to shutdown the ``KafkaProducer``.
     ///
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
