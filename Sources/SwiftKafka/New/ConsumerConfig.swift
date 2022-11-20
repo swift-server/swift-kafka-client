@@ -161,4 +161,30 @@ public struct ConsumerConfig: ClientConfig {
         self.saslUsername = saslUsername
         self.saslPassword = saslPassword
     }
+
+    // MARK: - Helpers
+
+    func getAutoOffsetReset() -> ConfigEnums.AutoOffsetReset? {
+        guard let value = properties["auto.offset.reset"] else {
+            return nil
+        }
+        return ConfigEnums.AutoOffsetReset(description: value)
+    }
+}
+
+// MARK: - ConfigEnums + AutoOffsetReset
+
+extension ConfigEnums {
+    // TODO: docc
+    public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
+        public let description: String
+
+        public static let smallest = AutoOffsetReset(description: "smallest")
+        public static let earliest = AutoOffsetReset(description: "earliest")
+        public static let beginning = AutoOffsetReset(description: "beginning")
+        public static let largest = AutoOffsetReset(description: "largest")
+        public static let latest = AutoOffsetReset(description: "latest")
+        public static let end = AutoOffsetReset(description: "end")
+        public static let error = AutoOffsetReset(description: "error")
+    }
 }

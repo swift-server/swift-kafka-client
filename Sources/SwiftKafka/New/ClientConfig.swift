@@ -18,10 +18,8 @@
 // TODO: DocC: inherit documentation?
 // TODO: DocC: take from lirbdkafka official documentation
 // TODO: Topic config -> see KafkaConfig in SwiftKafka
-// TODO: create empty init for substructs to disable free initializer?
 // TODO: test that values get set accordingly
 // TODO: remove old config tests
-// TODO: magic nums for default values?
 public protocol ClientConfig: Hashable, Equatable {
     // TODO: docc
     var properties: [String: String] { set get }
@@ -277,13 +275,4 @@ extension ClientConfig {
         }
         return ConfigEnums.SASLMechanism(description: value)
     }
-
-    // TODO: move to Consumer
-    func getAutoOffsetReset() -> ConfigEnums.AutoOffsetReset? {
-        guard let value = properties["auto.offset.reset"] else {
-            return nil
-        }
-        return ConfigEnums.AutoOffsetReset(description: value)
-    }
 }
-

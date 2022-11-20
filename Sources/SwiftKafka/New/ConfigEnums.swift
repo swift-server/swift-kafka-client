@@ -14,7 +14,6 @@
 
 // TODO: docc
 public struct ConfigEnums {
-
     public struct DebugOption: Hashable, Equatable, CustomStringConvertible {
         public let description: String
 
@@ -62,18 +61,5 @@ public struct ConfigEnums {
         public static let scramSHA256 = SASLMechanism(description: "SCRAM-SHA-256")
         public static let scramSHA512 = SASLMechanism(description: "SCRAM-SHA-512")
         public static let oauthbearer = SASLMechanism(description: "OAUTHBEARER")
-    }
-
-    // TODO: move to consumer? -> only used there
-    public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
-        public let description: String
-
-        public static let smallest = AutoOffsetReset(description: "smallest")
-        public static let earliest = AutoOffsetReset(description: "earliest")
-        public static let beginning = AutoOffsetReset(description: "beginning")
-        public static let largest = AutoOffsetReset(description: "largest")
-        public static let latest = AutoOffsetReset(description: "latest")
-        public static let end = AutoOffsetReset(description: "end")
-        public static let error = AutoOffsetReset(description: "error")
     }
 }
