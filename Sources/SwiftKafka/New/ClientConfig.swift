@@ -18,7 +18,6 @@
 // TODO: DocC: inherit documentation?
 // TODO: DocC: take from lirbdkafka official documentation
 // TODO: Topic config -> see KafkaConfig in SwiftKafka
-// TODO: make IPAddressFamily etc. part of some ConfigProperty like type to avoid cluttering docc
 // TODO: create empty init for substructs to disable free initializer?
 // TODO: test that values get set accordingly
 // TODO: remove old config tests
@@ -91,7 +90,7 @@ extension ClientConfig {
         set { self.properties["topic.blacklist"] = newValue.joined(separator: ",") }
     }
 
-    public var debug: [DebugOption] {
+    public var debug: [ConfigEnums.DebugOption] {
         get { self.getDebugOptions() }
         set {
             if !newValue.isEmpty {
@@ -140,7 +139,7 @@ extension ClientConfig {
         set { self.properties["broker.address.ttl"] = String(newValue) }
     }
 
-    public var brokerAddressFamily: IPAddressFamily {
+    public var brokerAddressFamily: ConfigEnums.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.properties["broker.address.family"] = newValue.description }
     }
@@ -155,7 +154,7 @@ extension ClientConfig {
         set { self.properties["reconnect.backoff.max.ms"] = String(newValue) }
     }
 
-    public var securityProtocol: SecurityProtocol {
+    public var securityProtocol: ConfigEnums.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.properties["security.protocol"] = newValue.description }
     }
@@ -195,7 +194,7 @@ extension ClientConfig {
         set { self.properties["ssl.keystore.password"] = newValue }
     }
 
-    public var saslMechanism: SASLMechanism? {
+    public var saslMechanism: ConfigEnums.SASLMechanism? {
         get { self.getSASLMechanism() }
         set {
             if let newValue {
@@ -250,104 +249,41 @@ extension ClientConfig {
         return Bool(value)
     }
 
-    func getDebugOptions() -> [DebugOption] {
+    func getDebugOptions() -> [ConfigEnums.DebugOption] {
         guard let options = properties["debug"] else {
             return []
         }
         return options.components(separatedBy: ",")
-            .map { DebugOption(description: $0) }
+            .map { ConfigEnums.DebugOption(description: $0) }
     }
 
-    func getIPAddressFamily() -> IPAddressFamily? {
+    func getIPAddressFamily() -> ConfigEnums.IPAddressFamily? {
         guard let value = properties["broker.address.family"] else {
             return nil
         }
-        return IPAddressFamily(description: value)
+        return ConfigEnums.IPAddressFamily(description: value)
     }
 
-    func getSecurityProtocol() -> SecurityProtocol? {
+    func getSecurityProtocol() -> ConfigEnums.SecurityProtocol? {
         guard let value = properties["security.protocol"] else {
             return nil
         }
-        return SecurityProtocol(description: value)
+        return ConfigEnums.SecurityProtocol(description: value)
     }
 
-    func getSASLMechanism() -> SASLMechanism? {
+    func getSASLMechanism() -> ConfigEnums.SASLMechanism? {
         guard let value = properties["sasl.mechanism"] else {
             return nil
         }
-        return SASLMechanism(description: value)
+        return ConfigEnums.SASLMechanism(description: value)
     }
 
     // TODO: move to Consumer
-    func getAutoOffsetReset() -> AutoOffsetReset? {
+    func getAutoOffsetReset() -> ConfigEnums.AutoOffsetReset? {
         guard let value = properties["auto.offset.reset"] else {
             return nil
         }
-        return AutoOffsetReset(description: value)
+        return ConfigEnums.AutoOffsetReset(description: value)
     }
 }
 
-// MARK: - Auxiliary Types
-
-public struct DebugOption: Hashable, Equatable, CustomStringConvertible {
-    public let description: String
-
-    public static let generic = DebugOption(description: "generic")
-    public static let broker = DebugOption(description: "broker")
-    public static let topic = DebugOption(description: "topic")
-    public static let metadata = DebugOption(description: "metadata")
-    public static let feature = DebugOption(description: "feature")
-    public static let queue = DebugOption(description: "queue")
-    public static let msg = DebugOption(description: "msg")
-    public static let `protocol` = DebugOption(description: "protocol")
-    public static let cgrp = DebugOption(description: "cgrp")
-    public static let security = DebugOption(description: "security")
-    public static let fetch = DebugOption(description: "fetch")
-    public static let interceptor = DebugOption(description: "interceptor")
-    public static let plugin = DebugOption(description: "plugin")
-    public static let consumer = DebugOption(description: "consumer")
-    public static let admin = DebugOption(description: "admin")
-    public static let eos = DebugOption(description: "eos")
-    public static let all = DebugOption(description: "all")
-}
-
-public struct IPAddressFamily: Hashable, Equatable, CustomStringConvertible {
-    public let description: String
-
-    public static let any = IPAddressFamily(description: "any")
-    public static let v4 = IPAddressFamily(description: "v4")
-    public static let v6 = IPAddressFamily(description: "v6")
-}
-
-public struct SecurityProtocol: Hashable, Equatable, CustomStringConvertible {
-    public let description: String
-
-    public static let plaintext = SecurityProtocol(description: "plaintext")
-    public static let ssl = SecurityProtocol(description: "ssl")
-    public static let saslPlaintext = SecurityProtocol(description: "sasl_plaintext")
-    public static let saslSSL = SecurityProtocol(description: "sasl_ssl")
-}
-
-public struct SASLMechanism: Hashable, Equatable, CustomStringConvertible {
-    public let description: String
-
-    public static let gssapi = SASLMechanism(description: "GSSAPI")
-    public static let plain = SASLMechanism(description: "PLAIN")
-    public static let scramSHA256 = SASLMechanism(description: "SCRAM-SHA-256")
-    public static let scramSHA512 = SASLMechanism(description: "SCRAM-SHA-512")
-    public static let oauthbearer = SASLMechanism(description: "OAUTHBEARER")
-}
-
-// TODO: move to consumer? -> only used there
-public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
-    public let description: String
-
-    public static let smallest = AutoOffsetReset(description: "smallest")
-    public static let earliest = AutoOffsetReset(description: "earliest")
-    public static let beginning = AutoOffsetReset(description: "beginning")
-    public static let largest = AutoOffsetReset(description: "largest")
-    public static let latest = AutoOffsetReset(description: "latest")
-    public static let end = AutoOffsetReset(description: "end")
-    public static let error = AutoOffsetReset(description: "error")
-}

@@ -47,7 +47,7 @@ public struct ConsumerConfig: ClientConfig {
         set { self.properties["auto.commit.interval.ms"] = String(newValue) }
     }
 
-    public var autoOffsetReset: AutoOffsetReset {
+    public var autoOffsetReset: ConfigEnums.AutoOffsetReset {
         get { self.getAutoOffsetReset() ?? .largest }
         set { self.properties["auto.offset.reset"] = newValue.description }
     }
@@ -75,7 +75,7 @@ public struct ConsumerConfig: ClientConfig {
         enableAutoCommit: Bool = true,
         autoCommitIntervalMs: UInt = 5000,
         enableAutoOffsetStore: Bool = true,
-        autoOffsetReset: AutoOffsetReset = .largest,
+        autoOffsetReset: ConfigEnums.AutoOffsetReset = .largest,
         enablePartitionEOF: Bool = false,
         allowAutoCreateTopics: Bool = false,
         clientID: String = "rdkafka",
@@ -90,7 +90,7 @@ public struct ConsumerConfig: ClientConfig {
         topicMetadataRefreshSparse: Bool = true,
         topicMetadataPropagationMaxMs: UInt = 30000,
         topicDenylist: [String] = [],
-        debug: [DebugOption] = [],
+        debug: [ConfigEnums.DebugOption] = [],
         socketTimeoutMs: UInt = 60000,
         socketSendBufferBytes: UInt = 0,
         socketReceiveBufferBytes: UInt = 0,
@@ -99,10 +99,10 @@ public struct ConsumerConfig: ClientConfig {
         socketMaxFails: UInt = 1,
         socketConnectionSetupTimeoutMs: UInt = 30000,
         brokerAddressTTL: UInt = 1000,
-        brokerAddressFamily: IPAddressFamily = .any,
+        brokerAddressFamily: ConfigEnums.IPAddressFamily = .any,
         reconnectBackoffMs: UInt = 100,
         reconnectBackoffMaxMs: UInt = 10000,
-        securityProtocol: SecurityProtocol = .plaintext,
+        securityProtocol: ConfigEnums.SecurityProtocol = .plaintext,
         sslKeyLocation: String = "",
         sslKeyPassword: String = "",
         sslCertificateLocation: String = "",
@@ -110,7 +110,7 @@ public struct ConsumerConfig: ClientConfig {
         sslCRLLocation: String = "",
         sslKeystoreLocation: String = "",
         sslKeystorePassword: String = "",
-        saslMechanism: SASLMechanism? = nil,
+        saslMechanism: ConfigEnums.SASLMechanism? = nil,
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
