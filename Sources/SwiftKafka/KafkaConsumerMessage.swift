@@ -29,6 +29,7 @@ public struct KafkaConsumerMessage: Hashable {
     public var offset: Int64
 
     /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
@@ -42,10 +43,11 @@ public struct KafkaConsumerMessage: Hashable {
             var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
             let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
-            throw KafkaError(
-                rawValue: rdKafkaMessage.err.rawValue,
-                description: errorString ?? ""
-            )
+            if let errorString {
+                throw KafkaError.messageConsumption(reason: errorString)
+            } else {
+                throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
+            }
         }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {

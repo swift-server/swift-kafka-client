@@ -49,7 +49,7 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 }
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``shutdownGracefully()`` when the ``KafkaProducer`` is not used anymore.
+/// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
@@ -93,6 +93,7 @@ public actor KafkaProducer {
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     public init(
         config: KafkaConfig = KafkaConfig(),
         topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
@@ -171,13 +172,14 @@ public actor KafkaProducer {
     /// This function is non-blocking.
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     /// - Returns: Unique message identifier matching the `id` property of the corresponding ``KafkaAcknowledgedMessage``
+    /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
     public func sendAsync(_ message: KafkaProducerMessage) throws -> UInt {
         switch self.state {
         case .started:
             return try self._sendAsync(message)
         case .shuttingDown, .shutDown:
-            throw KafkaError(description: "Trying to invoke method on producer that has been shut down.")
+            throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
         }
     }
 
@@ -210,7 +212,7 @@ public actor KafkaProducer {
         }
 
         guard responseCode == 0 else {
-            throw KafkaError(rawValue: responseCode)
+            throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
         }
 
         return self.messageIDCounter
@@ -224,17 +226,6 @@ public actor KafkaProducer {
         }
 
         let messageID = UInt(bitPattern: messagePointer.pointee._private)
-
-        guard messagePointer.pointee.err.rawValue == 0 else {
-            let error = KafkaAcknowledgedMessageError(
-                rawValue: messagePointer.pointee.err.rawValue,
-                description: "TODO: implement in separate error issue",
-                messageID: messageID
-            )
-            _ = acknowlegdementsSource.yield(.failure(error))
-
-            return
-        }
 
         do {
             let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)

@@ -34,7 +34,7 @@ private struct ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDe
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
-    public typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with something like KafkaConsumerError
+    public typealias Element = Result<KafkaConsumerMessage, KafkaError>
     typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
     fileprivate let wrappedSequence: NIOAsyncSequenceProducer<Element, HighLowWatermark, ConsumerMessagesAsyncSequenceDelegate>
 
@@ -74,7 +74,7 @@ public final class KafkaConsumer {
 
     // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
     /// Type of the values returned by the ``messages`` sequence.
-    private typealias Element = Result<KafkaConsumerMessage, Error> // TODO: replace with a more specific Error type
+    private typealias Element = Result<KafkaConsumerMessage, KafkaError>
     private var messagesSource: NIOAsyncSequenceProducer<
         Element,
         ConsumerMessagesAsyncSequence.HighLowWatermark,
@@ -88,6 +88,7 @@ public final class KafkaConsumer {
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
     private init(
         config: KafkaConfig,
         logger: Logger
@@ -104,7 +105,7 @@ public final class KafkaConsumer {
             rd_kafka_poll_set_consumer(handle)
         }
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError(rawValue: result.rawValue)
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
 
         self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
@@ -136,6 +137,7 @@ public final class KafkaConsumer {
     /// - Parameter groupID: Name of the consumer group that this ``KafkaConsumer`` will create / join.
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
     public convenience init(
         topics: [String],
         groupID: String,
@@ -145,7 +147,7 @@ public final class KafkaConsumer {
         var config = config
         if let configGroupID = config.value(forKey: "group.id") {
             if configGroupID != groupID {
-                throw KafkaError(description: "Group ID does not match with group ID found in the configuration")
+                throw KafkaError.config(reason: "Group ID does not match with group ID found in the configuration")
             }
         } else {
             try config.set(groupID, forKey: "group.id")
@@ -164,6 +166,7 @@ public final class KafkaConsumer {
     /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
     /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
     /// - Note: This consumer ignores the `group.id` property of its `config`.
     public convenience init(
         topic: String,
@@ -193,6 +196,7 @@ public final class KafkaConsumer {
     /// Subscribe to the given list of `topics`.
     /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
     /// - Parameter topics: An array of topic names to subscribe to.
+    /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     private func subscribe(topics: [String]) throws {
         assert(!closed)
 
@@ -208,8 +212,8 @@ public final class KafkaConsumer {
             rd_kafka_subscribe(handle, subscribedTopicsPointer)
         }
 
-        guard result.rawValue == 0 else {
-            throw KafkaError(rawValue: result.rawValue)
+        guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
     }
 
@@ -217,6 +221,7 @@ public final class KafkaConsumer {
     /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
     /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
     /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
+    /// - Throws: A ``KafkaError`` if the consumer could not be assigned to the topic + partition pair.
     private func assign(
         topic: String,
         partition: KafkaPartition,
@@ -239,7 +244,7 @@ public final class KafkaConsumer {
         }
 
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError(rawValue: result.rawValue)
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
     }
 
@@ -257,8 +262,11 @@ public final class KafkaConsumer {
                     return
                 }
                 messageResult = .success(message)
+            } catch let kafkaError as KafkaError {
+                messageResult = .failure(kafkaError)
             } catch {
-                messageResult = .failure(error)
+                self.logger.error("KafkaConsumer caught error: \(error)")
+                return
             }
 
             let yieldresult = self.messagesSource.yield(messageResult)
@@ -275,6 +283,7 @@ public final class KafkaConsumer {
     /// This method blocks for a maximum of `timeout` milliseconds.
     /// - Parameter timeout: Maximum amount of milliseconds this method waits for a new message.
     /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     private func poll(timeout: Int32 = 100) throws -> KafkaConsumerMessage? {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
         assert(!closed)
@@ -307,6 +316,7 @@ public final class KafkaConsumer {
     /// Mark `message` in the topic as read and request the next message from the topic.
     /// This method is only used for manual offset management.
     /// - Parameter message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
     /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
         try await self.serializeWithThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -323,11 +333,11 @@ public final class KafkaConsumer {
     private func _commitSync(_ message: KafkaConsumerMessage) throws {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
         guard !self.closed else {
-            throw KafkaError(description: "Trying to invoke method on consumer that has been closed.")
+            throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
         }
 
         guard self.config.value(forKey: "enable.auto.commit") == "false" else {
-            throw KafkaError(description: "Committing manually only works if enable.auto.commit is set to false")
+            throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
         }
 
         let changesList = rd_kafka_topic_partition_list_new(1)
@@ -352,7 +362,7 @@ public final class KafkaConsumer {
             )
         }
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError(rawValue: result.rawValue)
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
         return
     }
@@ -371,7 +381,7 @@ public final class KafkaConsumer {
             rd_kafka_topic_partition_list_destroy(self.subscribedTopicsPointer)
 
             guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                let error = KafkaError(rawValue: result.rawValue)
+                let error = KafkaError.rdKafkaError(wrapping: result)
                 self.logger.error("Closing KafkaConsumer failed: \(error.description)")
                 return
             }

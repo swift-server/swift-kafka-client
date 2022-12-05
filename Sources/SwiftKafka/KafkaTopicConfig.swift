@@ -70,7 +70,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
 
             if configResult != RD_KAFKA_CONF_OK {
                 let errorString = String(cString: errorChars)
-                throw KafkaError(description: errorString)
+                throw KafkaError.topicConfig(reason: errorString)
             }
         }
 
@@ -107,6 +107,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
     }
 
     /// Set topic configuration `value` for `key`
+    /// - Throws: A ``KafkaError`` if setting the value failed.
     public mutating func set(_ value: String, forKey key: String) throws {
         // Copy-on-write mechanism
         if !isKnownUniquelyReferenced(&(self._internal)) {

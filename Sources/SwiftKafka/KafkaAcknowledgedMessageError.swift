@@ -12,12 +12,53 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
+
 /// Error caused by the Kafka cluster when trying to process a message produced by ``KafkaProducer``.
-public struct KafkaAcknowledgedMessageError: Error {
-    /// A raw value representing the error code.
-    public var rawValue: Int32
-    /// A string describing the error.
-    public var description: String?
+public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
     /// Identifier of the message that caused the error.
     public var messageID: UInt
+    /// The underlying ``KafkaError``.
+    public let error: KafkaError
+
+    init(messageID: UInt, error: KafkaError) {
+        self.messageID = messageID
+        self.error = error
+    }
+
+    public var description: String {
+        self.error.description
+    }
+
+    static func fromRDKafkaError(
+        messageID: UInt,
+        error: rd_kafka_resp_err_t,
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> Self {
+        .init(
+            messageID: messageID,
+            error: .rdKafkaError(
+                wrapping: error,
+                file: file,
+                line: line
+            )
+        )
+    }
+
+    static func fromMessage(
+        messageID: UInt,
+        message: String,
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> Self {
+        .init(
+            messageID: messageID,
+            error: .acknowledgement(
+                reason: message,
+                file: file,
+                line: line
+            )
+        )
+    }
 }

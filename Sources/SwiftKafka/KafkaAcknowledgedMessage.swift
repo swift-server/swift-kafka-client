@@ -18,7 +18,7 @@ import NIOCore
 /// A message produced by the client and acknowledged by the Kafka cluster.
 public struct KafkaAcknowledgedMessage: Hashable {
     /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
-    /// The same identifier is returned by ``KafkaProducer/sendAsync(message:)`` and can be used to correlate
+    /// The same identifier is returned by ``KafkaProducer/sendAsync(_:)`` and can be used to correlate
     /// a sent message and an acknowledged message.
     public var id: UInt
     /// The topic that the message was sent to.
@@ -33,6 +33,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
     public var offset: Int64
 
     /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
+    /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
     init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt) throws {
         self.id = id
 
@@ -41,15 +42,15 @@ public struct KafkaAcknowledgedMessage: Hashable {
         let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
         self.value = ByteBuffer(bytes: valueBufferPointer)
 
-        guard rdKafkaMessage.err.rawValue == 0 else {
+        guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
             var errorStringBuffer = self.value
             let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
-            throw KafkaAcknowledgedMessageError(
-                rawValue: rdKafkaMessage.err.rawValue,
-                description: errorString,
-                messageID: self.id
-            )
+            if let errorString {
+                throw KafkaAcknowledgedMessageError.fromMessage(messageID: self.id, message: errorString)
+            } else {
+                throw KafkaAcknowledgedMessageError.fromRDKafkaError(messageID: self.id, error: rdKafkaMessage.err)
+            }
         }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
