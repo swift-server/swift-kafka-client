@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO: dict add manually by key (unsafe api)?
 // TODO: support PEMs?
 // TODO: support OAuth?
 // TODO: DocC: inherit documentation?
@@ -23,7 +22,7 @@
 public struct ConsumerConfig: Hashable, Equatable {
     // TODO: some properties missing, check with franz
     // TODO: how to handle assignment / subscription?
-    public var properties: [String: String] = [:]
+    var properties: [String: String] = [:]
 
     // MARK: - Consumer-specific Config Properties
 

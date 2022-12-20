@@ -14,7 +14,7 @@
 
 public struct ProducerConfig: Hashable, Equatable {
     // TODO: some properties missing, check with franz
-    public var properties: [String: String] = [:]
+    var properties: [String: String] = [:]
 
     // MARK: - Producer-specific Config Properties
 
