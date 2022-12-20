@@ -205,7 +205,7 @@ public final class KafkaConsumer {
         try self.init(
             topics: topics,
             groupID: config.groupID,
-            config: KafkaConfig(clientConfig: config),
+            config: KafkaConfig(consumerConfig: config),
             logger: logger
         )
     }
@@ -221,7 +221,7 @@ public final class KafkaConsumer {
             topic: topic,
             partition: partition,
             offset: offset,
-            config: KafkaConfig(clientConfig: config),
+            config: KafkaConfig(consumerConfig: config),
             logger: logger
         )
     }

@@ -143,7 +143,7 @@ public actor KafkaProducer {
         topicConfig: KafkaTopicConfig = KafkaTopicConfig(), // TODO: new topic config
         logger: Logger
     ) async throws {
-        try await self.init(config: KafkaConfig(clientConfig: config), topicConfig: topicConfig, logger: logger)
+        try await self.init(config: KafkaConfig(producerConfig: config), topicConfig: topicConfig, logger: logger)
     }
 
     /// Method to shutdown the ``KafkaProducer``.

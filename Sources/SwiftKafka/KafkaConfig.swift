@@ -47,13 +47,25 @@ public struct KafkaConfig: Hashable, Equatable {
         }
 
         // TODO: docc
-        convenience init(clientConfig: any ClientConfig) throws {
+        convenience init(producerConfig: ProducerConfig) throws {
             self.init(
                 pointer: rd_kafka_conf_new(),
                 opaque: nil
             )
 
-            try clientConfig.properties.forEach { key, value in
+            try producerConfig.properties.forEach { key, value in
+                try self.set(value, forKey: key)
+            }
+        }
+
+        // TODO: docc
+        convenience init(consumerConfig: ConsumerConfig) throws {
+            self.init(
+                pointer: rd_kafka_conf_new(),
+                opaque: nil
+            )
+
+            try consumerConfig.properties.forEach { key, value in
                 try self.set(value, forKey: key)
             }
         }
@@ -173,8 +185,13 @@ public struct KafkaConfig: Hashable, Equatable {
     }
 
     // TODO: docc new public interface for config
-    init(clientConfig: any ClientConfig) throws {
-        self._internal = try .init(clientConfig: clientConfig)
+    init(producerConfig: ProducerConfig) throws {
+        self._internal = try .init(producerConfig: producerConfig)
+    }
+
+    // TODO: docc new public interface for config
+    init(consumerConfig: ConsumerConfig) throws {
+        self._internal = try .init(consumerConfig: consumerConfig)
     }
 
     /// Retrieve value of configuration property for `key`
