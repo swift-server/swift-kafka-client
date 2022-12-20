@@ -34,6 +34,15 @@ public struct KafkaTopicConfig: Hashable, Equatable {
             self.pointer = pointer
         }
 
+        // TODO: docc
+        convenience init(topicConfig: TopicConfig) throws {
+            self.init()
+
+            try topicConfig.properties.forEach { key, value in
+                try self.set(value, forKey: key)
+            }
+        }
+
         deinit {
             rd_kafka_topic_conf_destroy(pointer)
         }
@@ -99,6 +108,11 @@ public struct KafkaTopicConfig: Hashable, Equatable {
 
     public init() {
         self._internal = .init()
+    }
+
+    // TODO: docc new public interface for config
+    init(topicConfig: TopicConfig) throws {
+        self._internal = try .init(topicConfig: topicConfig)
     }
 
     /// Retrieve value of topic configuration property for `key`

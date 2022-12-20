@@ -14,11 +14,11 @@
 
 // TODO: support PEMs?
 // TODO: support OAuth?
-// TODO: DocC: inherit documentation?
 // TODO: DocC: take from lirbdkafka official documentation
 // TODO: Topic config -> see KafkaConfig in SwiftKafka
 // TODO: test that values get set accordingly
 // TODO: remove old config tests
+// TODO: only use official kafka properties rather than all properties from librdkafka (for all configs)
 public struct ConsumerConfig: Hashable, Equatable {
     // TODO: some properties missing, check with franz
     // TODO: how to handle assignment / subscription?
@@ -366,6 +366,7 @@ public struct ConsumerConfig: Hashable, Equatable {
 
     // MARK: - Helpers
 
+    // TODO: deduplicate
     // TODO: docc
     func getString(_ key: String) -> String? {
         self.properties[key]
