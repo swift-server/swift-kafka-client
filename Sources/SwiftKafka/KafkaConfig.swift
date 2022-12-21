@@ -53,7 +53,7 @@ public struct KafkaConfig: Hashable, Equatable {
                 opaque: nil
             )
 
-            try producerConfig.properties.forEach { key, value in
+            try producerConfig.dictionary.forEach { key, value in
                 try self.set(value, forKey: key)
             }
         }
@@ -65,7 +65,7 @@ public struct KafkaConfig: Hashable, Equatable {
                 opaque: nil
             )
 
-            try consumerConfig.properties.forEach { key, value in
+            try consumerConfig.dictionary.forEach { key, value in
                 try self.set(value, forKey: key)
             }
         }

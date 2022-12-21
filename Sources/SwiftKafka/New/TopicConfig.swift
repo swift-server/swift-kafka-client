@@ -12,37 +12,37 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct TopicConfig: Hashable, Equatable {
-    var properties: [String: String] = [:]
+public struct TopicConfig: Hashable, Equatable, StringDictionaryRepresentable {
+    var dictionary: [String: String] = [:]
 
     public var acks: Int {
-        get { self.getInt("acks") ?? -1 }
-        set { self.properties["acks"] = String(newValue) }
+        get { self.dictionary.getInt("acks") ?? -1 }
+        set { self.dictionary["acks"] = String(newValue) }
     }
 
     public var requestTimeoutMs: UInt {
-        get { self.getUInt("request.timeout.ms") ?? 30000 }
-        set { self.properties["request.timeout.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("request.timeout.ms") ?? 30000 }
+        set { self.dictionary["request.timeout.ms"] = String(newValue) }
     }
 
     public var messageTimeoutMs: UInt {
-        get { self.getUInt("message.timeout.ms") ?? 300000 }
-        set { self.properties["message.timeout.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("message.timeout.ms") ?? 300000 }
+        set { self.dictionary["message.timeout.ms"] = String(newValue) }
     }
 
     public var partitioner: ConfigEnums.Partitioner {
         get { self.getPartitioner() ?? .consistentRandom }
-        set { self.properties["partitioner"] = newValue.description }
+        set { self.dictionary["partitioner"] = newValue.description }
     }
 
     public var compressionCodec: ConfigEnums.CompressionCodec {
         get { self.getCompressionCodec() ?? .inherit }
-        set { self.properties["compression.codec"] = newValue.description }
+        set { self.dictionary["compression.codec"] = newValue.description }
     }
 
     public var compressionLevel: Int {
-        get { self.getInt("compression.level") ?? -1 }
-        set { self.properties["compression.level"] = String(newValue) }
+        get { self.dictionary.getInt("compression.level") ?? -1 }
+        set { self.dictionary["compression.level"] = String(newValue) }
     }
 
     public init(
@@ -63,30 +63,15 @@ public struct TopicConfig: Hashable, Equatable {
 
     // MARK: - Helpers
 
-    // TODO: docc
-    func getInt(_ key: String) -> Int? {
-        guard let value = properties[key] else {
-            return nil
-        }
-        return Int(value)
-    }
-
-    func getUInt(_ key: String) -> UInt? {
-        guard let value = properties[key] else {
-            return nil
-        }
-        return UInt(value)
-    }
-
     func getPartitioner() -> ConfigEnums.Partitioner? {
-        guard let value = properties["partitioner"] else {
+        guard let value = dictionary["partitioner"] else {
             return nil
         }
         return ConfigEnums.Partitioner(description: value)
     }
 
     func getCompressionCodec() -> ConfigEnums.CompressionCodec? {
-        guard let value = properties["compression.codec"] else {
+        guard let value = dictionary["compression.codec"] else {
             return nil
         }
         return ConfigEnums.CompressionCodec(description: value)

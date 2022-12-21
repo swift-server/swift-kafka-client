@@ -38,7 +38,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         convenience init(topicConfig: TopicConfig) throws {
             self.init()
 
-            try topicConfig.properties.forEach { key, value in
+            try topicConfig.dictionary.forEach { key, value in
                 try self.set(value, forKey: key)
             }
         }

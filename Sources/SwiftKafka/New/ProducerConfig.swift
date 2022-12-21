@@ -12,236 +12,236 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct ProducerConfig: Hashable, Equatable {
-    // TODO: some properties missing, check with franz
-    var properties: [String: String] = [:]
+public struct ProducerConfig: Hashable, Equatable, StringDictionaryRepresentable {
+    // TODO: some dictionary missing, check with franz
+    var dictionary: [String: String] = [:]
 
     // MARK: - Producer-specific Config Properties
 
     public var transactionalID: String { // TODO: Use optional or empty string for "no value"?
-        get { self.getString("transactional.id") ?? "" }
-        set { self.properties["transactional.id"] = newValue }
+        get { self.dictionary["transactional.id"] ?? "" }
+        set { self.dictionary["transactional.id"] = newValue }
     }
 
     public var transactionTimeoutMs: UInt {
-        get { self.getUInt("transaction.timeout.ms") ?? 60000 }
-        set { self.properties["transaction.timeout.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("transaction.timeout.ms") ?? 60000 }
+        set { self.dictionary["transaction.timeout.ms"] = String(newValue) }
     }
 
     public var enableIdempotence: Bool {
-        get { self.getBool("enable.idempotence") ?? false }
-        set { self.properties["enable.idempotence"] = String(newValue) }
+        get { self.dictionary.getBool("enable.idempotence") ?? false }
+        set { self.dictionary["enable.idempotence"] = String(newValue) }
     }
 
     public var queueBufferingMaxMessages: UInt {
-        get { self.getUInt("queue.buffering.max.messages") ?? 100_000 }
-        set { self.properties["queue.buffering.max.messages"] = String(newValue) }
+        get { self.dictionary.getUInt("queue.buffering.max.messages") ?? 100_000 }
+        set { self.dictionary["queue.buffering.max.messages"] = String(newValue) }
     }
 
     public var queueBufferingMaxKBytes: UInt {
-        get { self.getUInt("queue.buffering.max.kbytes") ?? 1_048_576 }
-        set { self.properties["queue.buffering.max.kbytes"] = String(newValue) }
+        get { self.dictionary.getUInt("queue.buffering.max.kbytes") ?? 1_048_576 }
+        set { self.dictionary["queue.buffering.max.kbytes"] = String(newValue) }
     }
 
     public var queueBufferingMaxMs: UInt {
-        get { self.getUInt("queue.buffering.max.ms") ?? 5 }
-        set { self.properties["queue.buffering.max.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("queue.buffering.max.ms") ?? 5 }
+        set { self.dictionary["queue.buffering.max.ms"] = String(newValue) }
     }
 
     public var messageSendMaxRetries: UInt {
-        get { self.getUInt("message.send.max.retries") ?? 2_147_483_647 }
-        set { self.properties["message.send.max.retries"] = String(newValue) }
+        get { self.dictionary.getUInt("message.send.max.retries") ?? 2_147_483_647 }
+        set { self.dictionary["message.send.max.retries"] = String(newValue) }
     }
 
     // MARK: - Common Client Config Properties
 
     public var clientID: String {
-        get { self.getString("client.id") ?? "rdkafka" }
-        set { self.properties["client.id"] = newValue }
+        get { self.dictionary["client.id"] ?? "rdkafka" }
+        set { self.dictionary["client.id"] = newValue }
     }
 
     public var bootstrapServers: [String] {
-        get { self.getString("bootstrap.servers")?.components(separatedBy: ",") ?? [] }
-        set { self.properties["bootstrap.servers"] = newValue.joined(separator: ",") }
+        get { self.dictionary["bootstrap.servers"]?.components(separatedBy: ",") ?? [] }
+        set { self.dictionary["bootstrap.servers"] = newValue.joined(separator: ",") }
     }
 
     public var messageMaxBytes: UInt {
-        get { self.getUInt("message.max.bytes") ?? 1_000_000 }
-        set { self.properties["message.max.bytes"] = String(newValue) }
+        get { self.dictionary.getUInt("message.max.bytes") ?? 1_000_000 }
+        set { self.dictionary["message.max.bytes"] = String(newValue) }
     }
 
     public var messageCopyMaxBytes: UInt {
-        get { self.getUInt("message.copy.max.bytes") ?? 65535 }
-        set { self.properties["message.copy.max.bytes"] = String(newValue) }
+        get { self.dictionary.getUInt("message.copy.max.bytes") ?? 65535 }
+        set { self.dictionary["message.copy.max.bytes"] = String(newValue) }
     }
 
     public var receiveMessageMaxBytes: UInt {
-        get { self.getUInt("receive.message.max.bytes") ?? 100_000_000 }
-        set { self.properties["receive.message.max.bytes"] = String(newValue) }
+        get { self.dictionary.getUInt("receive.message.max.bytes") ?? 100_000_000 }
+        set { self.dictionary["receive.message.max.bytes"] = String(newValue) }
     }
 
     public var maxInFlightRequestsPerConnection: UInt {
-        get { self.getUInt("max.in.flight.requests.per.connection") ?? 1_000_000 }
-        set { self.properties["max.in.flight.requests.per.connection"] = String(newValue) }
+        get { self.dictionary.getUInt("max.in.flight.requests.per.connection") ?? 1_000_000 }
+        set { self.dictionary["max.in.flight.requests.per.connection"] = String(newValue) }
     }
 
     public var metadataMaxAgeMs: UInt {
-        get { self.getUInt("metadata.max.age.ms") ?? 900_000 }
-        set { self.properties["metadata.max.age.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("metadata.max.age.ms") ?? 900_000 }
+        set { self.dictionary["metadata.max.age.ms"] = String(newValue) }
     }
 
     public var topicMetadataRefreshIntervalMs: Int {
-        get { self.getInt("topic.metadata.refresh.interval.ms") ?? 300_000 }
-        set { self.properties["topic.metadata.refresh.interval.ms"] = String(newValue) }
+        get { self.dictionary.getInt("topic.metadata.refresh.interval.ms") ?? 300_000 }
+        set { self.dictionary["topic.metadata.refresh.interval.ms"] = String(newValue) }
     }
 
     public var topicMetadataRefreshFastIntervalMs: UInt {
-        get { self.getUInt("topic.metadata.refresh.fast.interval.ms") ?? 250 }
-        set { self.properties["topic.metadata.refresh.fast.interval.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("topic.metadata.refresh.fast.interval.ms") ?? 250 }
+        set { self.dictionary["topic.metadata.refresh.fast.interval.ms"] = String(newValue) }
     }
 
     public var topicMetadataRefreshSparse: Bool {
-        get { self.getBool("topic.metadata.refresh.sparse") ?? true }
-        set { self.properties["topic.metadata.refresh.sparse"] = newValue.description }
+        get { self.dictionary.getBool("topic.metadata.refresh.sparse") ?? true }
+        set { self.dictionary["topic.metadata.refresh.sparse"] = newValue.description }
     }
 
     public var topicMetadataPropagationMaxMs: UInt {
-        get { self.getUInt("topic.metadata.propagation.max.ms") ?? 30000 }
-        set { self.properties["topic.metadata.propagation.max.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("topic.metadata.propagation.max.ms") ?? 30000 }
+        set { self.dictionary["topic.metadata.propagation.max.ms"] = String(newValue) }
     }
 
     public var topicDenylist: [String] {
-        get { self.getString("topic.blacklist")?.components(separatedBy: ",") ?? [] }
-        set { self.properties["topic.blacklist"] = newValue.joined(separator: ",") }
+        get { self.dictionary["topic.blacklist"]?.components(separatedBy: ",") ?? [] }
+        set { self.dictionary["topic.blacklist"] = newValue.joined(separator: ",") }
     }
 
     public var debug: [ConfigEnums.DebugOption] {
         get { self.getDebugOptions() }
         set {
             if !newValue.isEmpty {
-                self.properties["debug"] = newValue.map(\.description).joined(separator: ",")
+                self.dictionary["debug"] = newValue.map(\.description).joined(separator: ",")
             }
         }
     }
 
     public var socketTimeoutMs: UInt {
-        get { self.getUInt("socket.timeout.ms") ?? 60000 }
-        set { self.properties["socket.timeout.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("socket.timeout.ms") ?? 60000 }
+        set { self.dictionary["socket.timeout.ms"] = String(newValue) }
     }
 
     public var socketSendBufferBytes: UInt {
-        get { self.getUInt("socket.send.buffer.bytes") ?? 0 }
-        set { self.properties["socket.send.buffer.bytes"] = String(newValue) }
+        get { self.dictionary.getUInt("socket.send.buffer.bytes") ?? 0 }
+        set { self.dictionary["socket.send.buffer.bytes"] = String(newValue) }
     }
 
     public var socketReceiveBufferBytes: UInt {
-        get { self.getUInt("socket.receive.buffer.bytes") ?? 0 }
-        set { self.properties["socket.receive.buffer.bytes"] = String(newValue) }
+        get { self.dictionary.getUInt("socket.receive.buffer.bytes") ?? 0 }
+        set { self.dictionary["socket.receive.buffer.bytes"] = String(newValue) }
     }
 
     public var socketKeepaliveEnable: Bool {
-        get { self.getBool("socket.keepalive.enable") ?? false }
-        set { self.properties["socket.keepalive.enable"] = String(newValue) }
+        get { self.dictionary.getBool("socket.keepalive.enable") ?? false }
+        set { self.dictionary["socket.keepalive.enable"] = String(newValue) }
     }
 
     public var socketNagleDisable: Bool {
-        get { self.getBool("socket.nagle.disable") ?? false }
-        set { self.properties["socket.nagle.disable"] = String(newValue) }
+        get { self.dictionary.getBool("socket.nagle.disable") ?? false }
+        set { self.dictionary["socket.nagle.disable"] = String(newValue) }
     }
 
     public var socketMaxFails: UInt {
-        get { self.getUInt("socket.max.fails") ?? 1 }
-        set { self.properties["socket.max.fails"] = String(newValue) }
+        get { self.dictionary.getUInt("socket.max.fails") ?? 1 }
+        set { self.dictionary["socket.max.fails"] = String(newValue) }
     }
 
     public var socketConnectionSetupTimeoutMs: UInt {
-        get { self.getUInt("socket.connection.setup.timeout.ms") ?? 30000 }
-        set { self.properties["socket.connection.setup.timeout.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("socket.connection.setup.timeout.ms") ?? 30000 }
+        set { self.dictionary["socket.connection.setup.timeout.ms"] = String(newValue) }
     }
 
     public var brokerAddressTTL: UInt {
-        get { self.getUInt("broker.address.ttl") ?? 1000 }
-        set { self.properties["broker.address.ttl"] = String(newValue) }
+        get { self.dictionary.getUInt("broker.address.ttl") ?? 1000 }
+        set { self.dictionary["broker.address.ttl"] = String(newValue) }
     }
 
     public var brokerAddressFamily: ConfigEnums.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
-        set { self.properties["broker.address.family"] = newValue.description }
+        set { self.dictionary["broker.address.family"] = newValue.description }
     }
 
     public var reconnectBackoffMs: UInt {
-        get { self.getUInt("reconnect.backoff.ms") ?? 100 }
-        set { self.properties["reconnect.backoff.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("reconnect.backoff.ms") ?? 100 }
+        set { self.dictionary["reconnect.backoff.ms"] = String(newValue) }
     }
 
     public var reconnectBackoffMaxMs: UInt {
-        get { self.getUInt("reconnect.backoff.max.ms") ?? 10000 }
-        set { self.properties["reconnect.backoff.max.ms"] = String(newValue) }
+        get { self.dictionary.getUInt("reconnect.backoff.max.ms") ?? 10000 }
+        set { self.dictionary["reconnect.backoff.max.ms"] = String(newValue) }
     }
 
     public var securityProtocol: ConfigEnums.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
-        set { self.properties["security.protocol"] = newValue.description }
+        set { self.dictionary["security.protocol"] = newValue.description }
     }
 
     public var sslKeyLocation: String {
-        get { self.getString("ssl.key.location") ?? "" }
-        set { self.properties["ssl.key.location"] = newValue }
+        get { self.dictionary["ssl.key.location"] ?? "" }
+        set { self.dictionary["ssl.key.location"] = newValue }
     }
 
     public var sslKeyPassword: String {
-        get { self.getString("ssl.key.password") ?? "" }
-        set { self.properties["ssl.key.password"] = newValue }
+        get { self.dictionary["ssl.key.password"] ?? "" }
+        set { self.dictionary["ssl.key.password"] = newValue }
     }
 
     public var sslCertificateLocation: String {
-        get { self.getString("ssl.certificate.location") ?? "" }
-        set { self.properties["ssl.certificate.location"] = newValue }
+        get { self.dictionary["ssl.certificate.location"] ?? "" }
+        set { self.dictionary["ssl.certificate.location"] = newValue }
     }
 
     public var sslCALocation: String {
-        get { self.getString("ssl.ca.location") ?? "" }
-        set { self.properties["ssl.ca.location"] = newValue }
+        get { self.dictionary["ssl.ca.location"] ?? "" }
+        set { self.dictionary["ssl.ca.location"] = newValue }
     }
 
     public var sslCRLLocation: String {
-        get { self.getString("ssl.crl.location") ?? "" }
-        set { self.properties["ssl.crl.location"] = newValue }
+        get { self.dictionary["ssl.crl.location"] ?? "" }
+        set { self.dictionary["ssl.crl.location"] = newValue }
     }
 
     public var sslKeystoreLocation: String {
-        get { self.getString("ssl.keystore.location") ?? "" }
-        set { self.properties["ssl.keystore.location"] = newValue }
+        get { self.dictionary["ssl.keystore.location"] ?? "" }
+        set { self.dictionary["ssl.keystore.location"] = newValue }
     }
 
     public var sslKeystorePassword: String {
-        get { self.getString("ssl.keystore.password") ?? "" }
-        set { self.properties["ssl.keystore.password"] = newValue }
+        get { self.dictionary["ssl.keystore.password"] ?? "" }
+        set { self.dictionary["ssl.keystore.password"] = newValue }
     }
 
     public var saslMechanism: ConfigEnums.SASLMechanism? {
         get { self.getSASLMechanism() }
         set {
             if let newValue {
-                self.properties["sasl.mechanism"] = newValue.description
+                self.dictionary["sasl.mechanism"] = newValue.description
             }
         }
     }
 
     public var saslUsername: String? {
-        get { self.getString("sasl.username") }
+        get { self.dictionary["sasl.username"] }
         set {
             if let newValue {
-                self.properties["sasl.username"] = newValue
+                self.dictionary["sasl.username"] = newValue
             }
         }
     }
 
     public var saslPassword: String? {
-        get { self.getString("sasl.password") }
+        get { self.dictionary["sasl.password"] }
         set {
             if let newValue {
-                self.properties["sasl.password"] = newValue
+                self.dictionary["sasl.password"] = newValue
             }
         }
     }
@@ -337,33 +337,8 @@ public struct ProducerConfig: Hashable, Equatable {
     // MARK: - Helpers
 
     // TODO: docc
-    func getString(_ key: String) -> String? {
-        self.properties[key]
-    }
-
-    func getInt(_ key: String) -> Int? {
-        guard let value = properties[key] else {
-            return nil
-        }
-        return Int(value)
-    }
-
-    func getUInt(_ key: String) -> UInt? {
-        guard let value = properties[key] else {
-            return nil
-        }
-        return UInt(value)
-    }
-
-    func getBool(_ key: String) -> Bool? {
-        guard let value = properties[key] else {
-            return nil
-        }
-        return Bool(value)
-    }
-
     func getDebugOptions() -> [ConfigEnums.DebugOption] {
-        guard let options = properties["debug"] else {
+        guard let options = dictionary["debug"] else {
             return []
         }
         return options.components(separatedBy: ",")
@@ -371,21 +346,21 @@ public struct ProducerConfig: Hashable, Equatable {
     }
 
     func getIPAddressFamily() -> ConfigEnums.IPAddressFamily? {
-        guard let value = properties["broker.address.family"] else {
+        guard let value = dictionary["broker.address.family"] else {
             return nil
         }
         return ConfigEnums.IPAddressFamily(description: value)
     }
 
     func getSecurityProtocol() -> ConfigEnums.SecurityProtocol? {
-        guard let value = properties["security.protocol"] else {
+        guard let value = dictionary["security.protocol"] else {
             return nil
         }
         return ConfigEnums.SecurityProtocol(description: value)
     }
 
     func getSASLMechanism() -> ConfigEnums.SASLMechanism? {
-        guard let value = properties["sasl.mechanism"] else {
+        guard let value = dictionary["sasl.mechanism"] else {
             return nil
         }
         return ConfigEnums.SASLMechanism(description: value)
