@@ -30,7 +30,7 @@ public struct TopicConfig: Hashable, Equatable, StringDictionaryRepresentable {
 
     /// Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery. A time of 0 is infinite. This is the maximum time librdkafka may use to deliver a message (including retries). Delivery error occurs when either the retry count or the message timeout are exceeded. The message timeout is automatically adjusted to transaction.timeout.ms if transactional.id is configured.
     public var messageTimeoutMs: UInt {
-        get { self.dictionary.getUInt("message.timeout.ms") ?? 300000 }
+        get { self.dictionary.getUInt("message.timeout.ms") ?? 300_000 }
         set { self.dictionary["message.timeout.ms"] = String(newValue) }
     }
 
@@ -55,7 +55,7 @@ public struct TopicConfig: Hashable, Equatable, StringDictionaryRepresentable {
     public init(
         acks: Int = -1,
         requestTimeoutMs: UInt = 30000,
-        messageTimeoutMs: UInt = 300000,
+        messageTimeoutMs: UInt = 300_000,
         partitioner: ConfigEnums.Partitioner = .consistentRandom,
         compressionCodec: ConfigEnums.CompressionCodec = .inherit,
         compressionLevel: Int = -1

@@ -34,7 +34,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
             self.pointer = pointer
         }
 
-        // TODO: docc
+        /// Initialize internal `KafkaTopicConfig` object from a ``TopicConfig`` provided by the new API.
         convenience init(topicConfig: TopicConfig) throws {
             self.init()
 
@@ -110,7 +110,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         self._internal = .init()
     }
 
-    // TODO: docc new public interface for config
+    /// Initialize a legacy ``KafkaTopicConfig`` from a ``TopicConfig`` provided by the new API.
     init(topicConfig: TopicConfig) throws {
         self._internal = try .init(topicConfig: topicConfig)
     }

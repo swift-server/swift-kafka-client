@@ -12,10 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO: test that values get set accordingly
-// TODO: remove old config tests
-// TODO: only use official kafka dictionary rather than all dictionary from librdkafka (for all configs)
-// TODO: how to handle assignment / subscription? -> follow up task
 public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable {
     var dictionary: [String: String] = [:]
 
@@ -398,7 +394,6 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
 
     // MARK: - Helpers
 
-    // TODO: docc
     func getDebugOptions() -> [ConfigEnums.DebugOption] {
         guard let options = dictionary["debug"] else {
             return []
@@ -439,7 +434,6 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
 // MARK: - ConfigEnums + AutoOffsetReset
 
 extension ConfigEnums {
-
     /// Available actions to take when there is no initial offset in offset store / offset is out of range.
     public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
         public let description: String

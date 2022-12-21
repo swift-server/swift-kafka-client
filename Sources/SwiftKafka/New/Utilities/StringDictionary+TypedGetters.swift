@@ -12,9 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// This `Dictionary` extension allows us to retrieve `String` values as `Int`, `UInt` or `Bool`.
 extension Dictionary where Key == String, Value == String {
-
-    // TODO: docc
     func getInt(_ key: String) -> Int? {
         guard let value = self[key] else {
             return nil

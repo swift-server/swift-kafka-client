@@ -195,10 +195,8 @@ public final class KafkaConsumer {
 
     // MARK: - Initialisers with new config
 
-    // TODO: refactor into single initializer for KafkaConsumer and determine assignment/subscription via config
-
     public convenience init(
-        topics: [String], // TODO: pass topics via config? -> follow-up task
+        topics: [String],
         config: ConsumerConfig = ConsumerConfig(),
         logger: Logger
     ) throws {
@@ -211,7 +209,7 @@ public final class KafkaConsumer {
     }
 
     public convenience init(
-        topic: String, // TODO: pass topic via config? -> follow-up task
+        topic: String,
         partition: KafkaPartition,
         offset: Int64,
         config: ConsumerConfig = ConsumerConfig(),
