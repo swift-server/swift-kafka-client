@@ -438,17 +438,17 @@ extension ConfigEnums {
     public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
         public let description: String
 
-        /// Automatically resert the offset to the smallest offset.
+        /// Automatically reset the offset to the smallest offset.
         public static let smallest = AutoOffsetReset(description: "smallest")
-        /// Automatically resert the offset to the earliest offset.
+        /// Automatically reset the offset to the earliest offset.
         public static let earliest = AutoOffsetReset(description: "earliest")
-        /// Automatically resert the offset to the beginning of a topic.
+        /// Automatically reset the offset to the beginning of a topic.
         public static let beginning = AutoOffsetReset(description: "beginning")
-        /// Automatically resert the offset to the largest offset.
+        /// Automatically reset the offset to the largest offset.
         public static let largest = AutoOffsetReset(description: "largest")
-        /// Automatically resert the offset to the latest offset.
+        /// Automatically reset the offset to the latest offset.
         public static let latest = AutoOffsetReset(description: "latest")
-        /// Automatically resert the offset to the end offset.
+        /// Automatically reset the offset to the end offset.
         public static let end = AutoOffsetReset(description: "end")
         /// Trigger an error when there is no initial offset / offset is out of range.
         public static let error = AutoOffsetReset(description: "error")
