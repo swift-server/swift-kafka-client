@@ -34,6 +34,15 @@ public struct KafkaTopicConfig: Hashable, Equatable {
             self.pointer = pointer
         }
 
+        /// Initialize internal `KafkaTopicConfig` object from a ``TopicConfig`` provided by the new API.
+        convenience init(topicConfig: TopicConfig) throws {
+            self.init()
+
+            try topicConfig.dictionary.forEach { key, value in
+                try self.set(value, forKey: key)
+            }
+        }
+
         deinit {
             rd_kafka_topic_conf_destroy(pointer)
         }
@@ -99,6 +108,11 @@ public struct KafkaTopicConfig: Hashable, Equatable {
 
     public init() {
         self._internal = .init()
+    }
+
+    /// Initialize a legacy ``KafkaTopicConfig`` from a ``TopicConfig`` provided by the new API.
+    init(topicConfig: TopicConfig) throws {
+        self._internal = try .init(topicConfig: topicConfig)
     }
 
     /// Retrieve value of topic configuration property for `key`

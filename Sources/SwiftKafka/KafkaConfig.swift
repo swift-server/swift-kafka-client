@@ -46,6 +46,30 @@ public struct KafkaConfig: Hashable, Equatable {
             self.opaque = opaque
         }
 
+        /// Initialize internal `KafkaConfig` object from a ``ProducerConfig`` provided by the new API.
+        convenience init(producerConfig: ProducerConfig) throws {
+            self.init(
+                pointer: rd_kafka_conf_new(),
+                opaque: nil
+            )
+
+            try producerConfig.dictionary.forEach { key, value in
+                try self.set(value, forKey: key)
+            }
+        }
+
+        /// Initialize internal `KafkaConfig` object from a ``ConsumerConfig`` provided by the new API.
+        convenience init(consumerConfig: ConsumerConfig) throws {
+            self.init(
+                pointer: rd_kafka_conf_new(),
+                opaque: nil
+            )
+
+            try consumerConfig.dictionary.forEach { key, value in
+                try self.set(value, forKey: key)
+            }
+        }
+
         /// Initialize internal `KafkaConfig` object with default configuration.
         convenience init() {
             self.init(
@@ -158,6 +182,16 @@ public struct KafkaConfig: Hashable, Equatable {
 
     public init() {
         self._internal = .init()
+    }
+
+    /// Initialize a legacy ``KafkaConfig`` from a ``ProducerConfig`` provided by the new API.
+    init(producerConfig: ProducerConfig) throws {
+        self._internal = try .init(producerConfig: producerConfig)
+    }
+
+    /// Initialize a legacy ``KafkaConfig`` from a ``ConsumerConfig`` provided by the new API.
+    init(consumerConfig: ConsumerConfig) throws {
+        self._internal = try .init(consumerConfig: consumerConfig)
     }
 
     /// Retrieve value of configuration property for `key`
