@@ -43,14 +43,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
         self.value = ByteBuffer(bytes: valueBufferPointer)
 
         guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            var errorStringBuffer = self.value
-            let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
-
-            if let errorString {
-                throw KafkaAcknowledgedMessageError.fromMessage(messageID: self.id, message: errorString)
-            } else {
-                throw KafkaAcknowledgedMessageError.fromRDKafkaError(messageID: self.id, error: rdKafkaMessage.err)
-            }
+            throw KafkaAcknowledgedMessageError.fromRDKafkaError(messageID: self.id, error: rdKafkaMessage.err)
         }
 
         guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
