@@ -86,7 +86,7 @@ public final class KafkaConsumer {
     /// Initialize a new ``KafkaConsumer``.
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
-    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter config: The ``ConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     private init(
@@ -135,7 +135,7 @@ public final class KafkaConsumer {
     /// the consumer group specified in `groupID`.
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Parameter groupID: Name of the consumer group that this ``KafkaConsumer`` will create / join.
-    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter config: The ``ConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public convenience init(
@@ -154,7 +154,7 @@ public final class KafkaConsumer {
     /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
     /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
     /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
-    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter config: The ``ConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     /// - Note: This consumer ignores the `group.id` property of its `config`.

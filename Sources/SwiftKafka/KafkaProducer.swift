@@ -90,7 +90,7 @@ public actor KafkaProducer {
     private typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
 
     /// Initialize a new ``KafkaProducer``.
-    /// - Parameter config: The ``KafkaConfig`` for configuring the ``KafkaProducer``.
+    /// - Parameter config: The ``ProducerConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
