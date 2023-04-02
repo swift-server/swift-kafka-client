@@ -180,10 +180,11 @@ public struct ProducerConfig: Hashable, Equatable, StringDictionaryRepresentable
     }
 
     /// Maximum time allowed for broker connection setup (TCP connection setup as well SSL and SASL handshake). If the connection to the broker is not fully functional after this the connection will be closed and retried.
-    public var socketConnectionSetupTimeoutMs: UInt {
-        get { self.dictionary.getUInt("socket.connection.setup.timeout.ms") ?? 30000 }
-        set { self.dictionary["socket.connection.setup.timeout.ms"] = String(newValue) }
-    }
+    // TODO: fix issue with librdkafka version being too old on Linux
+    // public var socketConnectionSetupTimeoutMs: UInt {
+    //    get { self.dictionary.getUInt("socket.connection.setup.timeout.ms") ?? 30000 }
+    //    set { self.dictionary["socket.connection.setup.timeout.ms"] = String(newValue) }
+    // }
 
     /// How long to cache the broker address resolving results (milliseconds).
     public var brokerAddressTTL: UInt {
@@ -314,7 +315,7 @@ public struct ProducerConfig: Hashable, Equatable, StringDictionaryRepresentable
         socketKeepaliveEnable: Bool = false,
         socketNagleDisable: Bool = false,
         socketMaxFails: UInt = 1,
-        socketConnectionSetupTimeoutMs: UInt = 30000,
+        /* socketConnectionSetupTimeoutMs: UInt = 30000, */
         brokerAddressTTL: UInt = 1000,
         brokerAddressFamily: ConfigEnums.IPAddressFamily = .any,
         reconnectBackoffMs: UInt = 100,
@@ -357,7 +358,7 @@ public struct ProducerConfig: Hashable, Equatable, StringDictionaryRepresentable
         self.socketKeepaliveEnable = socketKeepaliveEnable
         self.socketNagleDisable = socketNagleDisable
         self.socketMaxFails = socketMaxFails
-        self.socketConnectionSetupTimeoutMs = socketConnectionSetupTimeoutMs
+        /* self.socketConnectionSetupTimeoutMs = socketConnectionSetupTimeoutMs */ // TODO: issue with librd on Linux
         self.brokerAddressTTL = brokerAddressTTL
         self.brokerAddressFamily = brokerAddressFamily
         self.reconnectBackoffMs = reconnectBackoffMs
