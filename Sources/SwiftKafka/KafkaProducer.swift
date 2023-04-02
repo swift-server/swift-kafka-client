@@ -95,11 +95,11 @@ public actor KafkaProducer {
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     public init(
-        config: KafkaConfig = KafkaConfig(),
-        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
+        config: ProducerConfig = ProducerConfig(),
+        topicConfig: TopicConfig = TopicConfig(),
         logger: Logger
     ) async throws {
-        self.topicConfig = topicConfig
+        self.topicConfig = try KafkaTopicConfig(topicConfig: topicConfig) // TODO: new impl
         self.logger = logger
         self.topicHandles = [:]
         self.state = .started
@@ -120,10 +120,12 @@ public actor KafkaProducer {
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
-        var config = config
-        config.setDeliveryReportCallback(callback: self.deliveryReportCallback)
-
-        self.client = try KafkaClient(type: .producer, config: config, logger: self.logger)
+        self.client = try KafkaClient(
+            type: .producer,
+            configDictionary: config.dictionary,
+            callback: self.deliveryReportCallback,
+            logger: self.logger
+        )
 
         // Poll Kafka every millisecond
         self.pollTask = Task { [client] in
@@ -134,20 +136,6 @@ public actor KafkaProducer {
                 try? await Task.sleep(nanoseconds: 1_000_000)
             }
         }
-    }
-
-    // MARK: - Initialiser with new config
-
-    public init(
-        config: ProducerConfig = ProducerConfig(),
-        topicConfig: TopicConfig = TopicConfig(),
-        logger: Logger
-    ) async throws {
-        try await self.init(
-            config: KafkaConfig(producerConfig: config),
-            topicConfig: KafkaTopicConfig(topicConfig: topicConfig),
-            logger: logger
-        )
     }
 
     /// Method to shutdown the ``KafkaProducer``.

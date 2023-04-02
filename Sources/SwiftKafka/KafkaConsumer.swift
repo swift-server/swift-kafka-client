@@ -59,7 +59,7 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
 /// Receive messages from the Kafka cluster.
 public final class KafkaConsumer {
     /// The configuration object of the consumer client.
-    private var config: KafkaConfig
+    private var config: ConsumerConfig
     /// A logger.
     private let logger: Logger
     /// Used for handling the connection to the Kafka cluster.
@@ -90,12 +90,12 @@ public final class KafkaConsumer {
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     private init(
-        config: KafkaConfig,
+        config: ConsumerConfig,
         logger: Logger
     ) throws {
         self.config = config
         self.logger = logger
-        self.client = try KafkaClient(type: .consumer, config: self.config, logger: self.logger)
+        self.client = try KafkaClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)
 
         self.subscribedTopicsPointer = rd_kafka_topic_partition_list_new(1)
 
@@ -140,19 +140,9 @@ public final class KafkaConsumer {
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public convenience init(
         topics: [String],
-        groupID: String,
-        config: KafkaConfig,
+        config: ConsumerConfig,
         logger: Logger
     ) throws {
-        var config = config
-        if let configGroupID = config.value(forKey: "group.id") {
-            if configGroupID != groupID {
-                throw KafkaError.config(reason: "Group ID does not match with group ID found in the configuration")
-            }
-        } else {
-            try config.set(groupID, forKey: "group.id")
-        }
-
         try self.init(
             config: config,
             logger: logger
@@ -172,15 +162,17 @@ public final class KafkaConsumer {
         topic: String,
         partition: KafkaPartition,
         offset: Int64 = Int64(RD_KAFKA_OFFSET_END),
-        config: KafkaConfig,
+        config: ConsumerConfig,
         logger: Logger
     ) throws {
         // Although an assignment is not related to a consumer group,
         // librdkafka requires us to set a `group.id`.
         // This is a known issue:
         // https://github.com/edenhill/librdkafka/issues/3261
+        // TODO: validate
+        // TODO: what is default group id of ConsumerConfig?
         var config = config
-        try config.set(UUID().uuidString, forKey: "group.id")
+        config.groupID = UUID().uuidString
 
         try self.init(
             config: config,
@@ -190,37 +182,6 @@ public final class KafkaConsumer {
             topic: topic,
             partition: partition,
             offset: offset
-        )
-    }
-
-    // MARK: - Initialisers with new config
-
-    public convenience init(
-        topics: [String],
-        config: ConsumerConfig = ConsumerConfig(),
-        logger: Logger
-    ) throws {
-        try self.init(
-            topics: topics,
-            groupID: config.groupID,
-            config: KafkaConfig(consumerConfig: config),
-            logger: logger
-        )
-    }
-
-    public convenience init(
-        topic: String,
-        partition: KafkaPartition,
-        offset: Int64,
-        config: ConsumerConfig = ConsumerConfig(),
-        logger: Logger
-    ) throws {
-        try self.init(
-            topic: topic,
-            partition: partition,
-            offset: offset,
-            config: KafkaConfig(consumerConfig: config),
-            logger: logger
         )
     }
 
@@ -367,7 +328,7 @@ public final class KafkaConsumer {
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
         }
 
-        guard self.config.value(forKey: "enable.auto.commit") == "false" else {
+        guard self.config.enableAutoCommit == false else {
             throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
         }
 

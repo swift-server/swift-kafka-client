@@ -15,20 +15,22 @@
 @testable import SwiftKafka
 import XCTest
 
+// TODO: this test collection can be removed completely
 /// - Note: Please see IntegrationTests/SwiftKafkaTests for tests concerning the consumption of sent messages.
 final class KafkaConsumerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
     var bootstrapServer: String!
-    var config: KafkaConfig!
+    var config: ConsumerConfig!
 
     override func setUpWithError() throws {
         self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
 
-        self.config = KafkaConfig()
-        try self.config.set(self.bootstrapServer, forKey: "bootstrap.servers")
-        try self.config.set("v4", forKey: "broker.address.family")
+        self.config = ConsumerConfig(
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
     }
 
     override func tearDownWithError() throws {
@@ -36,29 +38,29 @@ final class KafkaConsumerTests: XCTestCase {
         self.config = nil
     }
 
-    func testSettingAmbigousGroupIDFails() throws {
-        try self.config.set("some-group-id", forKey: "group.id")
+    /* func testSettingAmbigousGroupIDFails() throws { */
+    /*     self.config.groupID = "some-group-id" */
 
-        XCTAssertThrowsError(
-            _ = try KafkaConsumer(
-                topics: ["test-topic"],
-                groupID: "another-group-id",
-                config: self.config,
-                logger: .kafkaTest
-            )
-        )
-    }
+    /*     XCTAssertThrowsError( */
+    /*         _ = try KafkaConsumer( */
+    /*             topics: ["test-topic"], */
+    /*             groupID: "another-group-id", */
+    /*             config: self.config, */
+    /*             logger: .kafkaTest */
+    /*         ) */
+    /*     ) */
+    /* } */
 
-    func testSettingDuplicateIdenticalGroupIDSucceeds() throws {
-        try self.config.set("some-group-id", forKey: "group.id")
+    /* func testSettingDuplicateIdenticalGroupIDSucceeds() throws { */
+    /*     try self.config.set("some-group-id", forKey: "group.id") */
 
-        XCTAssertNoThrow(
-            _ = try KafkaConsumer(
-                topics: ["test-topic"],
-                groupID: "some-group-id",
-                config: self.config,
-                logger: .kafkaTest
-            )
-        )
-    }
+    /*     XCTAssertNoThrow( */
+    /*         _ = try KafkaConsumer( */
+    /*             topics: ["test-topic"], */
+    /*             groupID: "some-group-id", */
+    /*             config: self.config, */
+    /*             logger: .kafkaTest */
+    /*         ) */
+    /*     ) */
+    /* } */
 }
