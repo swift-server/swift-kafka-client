@@ -70,8 +70,8 @@ public actor KafkaProducer {
     /// Counter that is used to assign each message a unique ID.
     /// Every time a new message is sent to the Kafka cluster, the counter is increased by one.
     private var messageIDCounter: UInt = 0
-    /// The ``KafkaTopicConfig`` used for newly created topics.
-    private let topicConfig: KafkaTopicConfig
+    /// The ``TopicConfig`` used for newly created topics.
+    private let topicConfig: TopicConfig
     /// A logger.
     private let logger: Logger
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
@@ -91,7 +91,7 @@ public actor KafkaProducer {
 
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``ProducerConfig`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
+    /// - Parameter topicConfig: The ``TopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     public init(
@@ -99,7 +99,7 @@ public actor KafkaProducer {
         topicConfig: TopicConfig = TopicConfig(),
         logger: Logger
     ) async throws {
-        self.topicConfig = try KafkaTopicConfig(topicConfig: topicConfig) // TODO: new impl
+        self.topicConfig = topicConfig
         self.logger = logger
         self.topicHandles = [:]
         self.state = .started
@@ -186,7 +186,7 @@ public actor KafkaProducer {
     }
 
     private func _sendAsync(_ message: KafkaProducerMessage) throws -> UInt {
-        let topicHandle = self.createTopicHandleIfNeeded(topic: message.topic)
+        let topicHandle = try self.createTopicHandleIfNeeded(topic: message.topic)
 
         let keyBytes: [UInt8]?
         if var key = message.key {
@@ -245,19 +245,18 @@ public actor KafkaProducer {
 
     /// Check `topicHandles` for a handle matching the topic name and create a new handle if needed.
     /// - Parameter topic: The name of the topic that is addressed.
-    private func createTopicHandleIfNeeded(topic: String) -> OpaquePointer? {
+    private func createTopicHandleIfNeeded(topic: String) throws -> OpaquePointer? {
         if let handle = self.topicHandles[topic] {
             return handle
         } else {
-            let newHandle = self.client.withKafkaHandlePointer { handle in
-                self.topicConfig.withDuplicatePointer { duplicatePointer in
-                    // Duplicate because rd_kafka_topic_new deallocates config object
-                    rd_kafka_topic_new(
-                        handle,
-                        topic,
-                        duplicatePointer
-                    )
-                }
+            let newHandle = try self.client.withKafkaHandlePointer { handle in
+                let rdTopicConf = try RDKafkaTopicConfig.createFrom(topicConfig: self.topicConfig)
+                return rd_kafka_topic_new(
+                    handle,
+                    topic,
+                    rdTopicConf
+                )
+                // rd_kafka_topic_new deallocates topic config object
             }
             if newHandle != nil {
                 self.topicHandles[topic] = newHandle
