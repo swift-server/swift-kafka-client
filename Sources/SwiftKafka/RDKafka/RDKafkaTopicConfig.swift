@@ -16,7 +16,6 @@ import Crdkafka
 
 /// A collection of helper functions wrapping common `rd_kafka_topic_conf_*` functions in Swift.
 struct RDKafkaTopicConfig {
-
     /// Create a new `rd_kafka_topic_conf_t` object in memory and initialize it with the given configuration properties.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used to initialize the `rd_kafka_topic_conf_t` object.
     /// - Returns: An `OpaquePointer` pointing to the newly created `rd_kafka_topic_conf_t` object in memory.
