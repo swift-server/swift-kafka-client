@@ -49,7 +49,7 @@ final class KafkaClient {
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
         if let callback {
             // CapturedClosure must be retained by KafkaClient as long as message acknowledgements are received
-            self.opaque = RDKafkaConfig.setDeliveryCallback(configPointer: rdConfig, callback)
+            self.opaque = RDKafkaConfig.setDeliveryReportCallback(configPointer: rdConfig, callback)
         }
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)

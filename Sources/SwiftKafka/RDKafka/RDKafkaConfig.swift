@@ -67,7 +67,7 @@ struct RDKafkaConfig {
     /// - Parameter configPointer: An `OpaquePointer` pointing to the `rd_kafka_conf_t` object in memory.
     /// - Parameter callback: A closure that is invoked upon message acknowledgement.
     /// - Returns: A ``CapturedClosure`` object that must me retained by the caller as long as acknowledgements are received.
-    static func setDeliveryCallback(
+    static func setDeliveryReportCallback(
         configPointer: OpaquePointer,
         _ callback: @escaping ((UnsafePointer<rd_kafka_message_t>?) -> Void)
     ) -> CapturedClosure {
