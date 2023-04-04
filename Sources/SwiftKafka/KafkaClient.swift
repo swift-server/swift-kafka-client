@@ -37,7 +37,6 @@ final class KafkaClient {
         case consumer
     }
 
-    // TODO: refactor into two separate initializers for Producer and consumer?
     init(
         type: Type,
         configDictionary: [String: String],

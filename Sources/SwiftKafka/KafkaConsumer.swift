@@ -169,8 +169,6 @@ public final class KafkaConsumer {
         // librdkafka requires us to set a `group.id`.
         // This is a known issue:
         // https://github.com/edenhill/librdkafka/issues/3261
-        // TODO: validate
-        // TODO: what is default group id of ConsumerConfig?
         var config = config
         config.groupID = UUID().uuidString
 
