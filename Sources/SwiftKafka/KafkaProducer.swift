@@ -71,7 +71,7 @@ public actor KafkaProducer {
     /// Every time a new message is sent to the Kafka cluster, the counter is increased by one.
     private var messageIDCounter: UInt = 0
     /// The ``TopicConfig`` used for newly created topics.
-    private let topicConfig: TopicConfig
+    private let topicConfig: KafkaTopicConfig
     /// A logger.
     private let logger: Logger
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
@@ -90,13 +90,13 @@ public actor KafkaProducer {
     private typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
 
     /// Initialize a new ``KafkaProducer``.
-    /// - Parameter config: The ``ProducerConfig`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``TopicConfig`` used for newly created topics.
+    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     public init(
-        config: ProducerConfig = ProducerConfig(),
-        topicConfig: TopicConfig = TopicConfig(),
+        config: KafkaProducerConfig = KafkaProducerConfig(),
+        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
         logger: Logger
     ) async throws {
         self.topicConfig = topicConfig

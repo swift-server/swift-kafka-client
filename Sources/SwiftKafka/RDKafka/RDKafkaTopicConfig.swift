@@ -18,10 +18,10 @@ import Crdkafka
 struct RDKafkaTopicConfig {
 
     /// Create a new `rd_kafka_topic_conf_t` object in memory and initialize it with the given configuration properties.
-    /// - Parameter topicConfig: The ``TopicConfig`` used to initialize the `rd_kafka_topic_conf_t` object.
+    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used to initialize the `rd_kafka_topic_conf_t` object.
     /// - Returns: An `OpaquePointer` pointing to the newly created `rd_kafka_topic_conf_t` object in memory.
     /// - Throws: A ``KafkaError`` if setting a config value failed.
-    static func createFrom(topicConfig: TopicConfig) throws -> OpaquePointer {
+    static func createFrom(topicConfig: KafkaTopicConfig) throws -> OpaquePointer {
         let configPointer: OpaquePointer = rd_kafka_topic_conf_new()
         try topicConfig.dictionary.forEach { key, value in
             try Self.set(configPointer: configPointer, key: key, value: value)

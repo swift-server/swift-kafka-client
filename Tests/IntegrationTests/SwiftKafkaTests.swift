@@ -34,19 +34,19 @@ final class SwiftKafkaTests: XCTestCase {
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
     var bootstrapServer: String!
-    var producerConfig: ProducerConfig!
-    var consumerConfig: ConsumerConfig!
+    var producerConfig: KafkaProducerConfig!
+    var consumerConfig: KafkaConsumerConfig!
     var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
         self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
 
-        self.producerConfig = ProducerConfig(
+        self.producerConfig = KafkaProducerConfig(
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )
 
-        self.consumerConfig = ConsumerConfig(
+        self.consumerConfig = KafkaConsumerConfig(
             autoOffsetReset: .beginning, // Always read topics from beginning
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4

@@ -59,7 +59,7 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
 /// Receive messages from the Kafka cluster.
 public final class KafkaConsumer {
     /// The configuration object of the consumer client.
-    private var config: ConsumerConfig
+    private var config: KafkaConsumerConfig
     /// A logger.
     private let logger: Logger
     /// Used for handling the connection to the Kafka cluster.
@@ -86,11 +86,11 @@ public final class KafkaConsumer {
     /// Initialize a new ``KafkaConsumer``.
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
-    /// - Parameter config: The ``ConsumerConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     private init(
-        config: ConsumerConfig,
+        config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
         self.config = config
@@ -135,12 +135,12 @@ public final class KafkaConsumer {
     /// the consumer group specified in `groupID`.
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Parameter groupID: Name of the consumer group that this ``KafkaConsumer`` will create / join.
-    /// - Parameter config: The ``ConsumerConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public convenience init(
         topics: [String],
-        config: ConsumerConfig,
+        config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
         try self.init(
@@ -154,7 +154,7 @@ public final class KafkaConsumer {
     /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
     /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
     /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
-    /// - Parameter config: The ``ConsumerConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     /// - Note: This consumer ignores the `group.id` property of its `config`.
@@ -162,7 +162,7 @@ public final class KafkaConsumer {
         topic: String,
         partition: KafkaPartition,
         offset: Int64 = Int64(RD_KAFKA_OFFSET_END),
-        config: ConsumerConfig,
+        config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
         // Although an assignment is not related to a consumer group,

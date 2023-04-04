@@ -12,63 +12,51 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable {
+public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresentable {
     var dictionary: [String: String] = [:]
 
-    // MARK: - Consumer-specific Config Properties
+    // MARK: - Producer-specific Config Properties
 
-    /// Client group id string. All clients sharing the same group.id belong to the same group.
-    public var groupID: String {
-        get { self.dictionary["group.id"] ?? "" }
-        set { self.dictionary["group.id"] = String(newValue) }
+    /// Enables the transactional producer. The transactional.id is used to identify the same transactional producer instance across process restarts. It allows the producer to guarantee that transactions corresponding to earlier instances of the same producer have been finalized prior to starting any new transactions, and that any zombie instances are fenced off. If no transactional.id is provided, then the producer is limited to idempotent delivery (if enable.idempotence is set). Requires broker version >= 0.11.0.
+    public var transactionalID: String { // TODO: Use optional or empty string for "no value"?
+        get { self.dictionary["transactional.id"] ?? "" }
+        set { self.dictionary["transactional.id"] = newValue }
     }
 
-    /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
-    public var sessionTimeoutMs: UInt {
-        get { self.dictionary.getUInt("session.timeout.ms") ?? 45000 }
-        set { self.dictionary["session.timeout.ms"] = String(newValue) }
+    /// The maximum amount of time in milliseconds that the transaction coordinator will wait for a transaction status update from the producer before proactively aborting the ongoing transaction. If this value is larger than the transaction.max.timeout.ms setting in the broker, the init_transactions() call will fail with ERR_INVALID_TRANSACTION_TIMEOUT. The transaction timeout automatically adjusts message.timeout.ms and socket.timeout.ms, unless explicitly configured in which case they must not exceed the transaction timeout (socket.timeout.ms must be at least 100ms lower than transaction.timeout.ms). This is also the default timeout value if no timeout (-1) is supplied to the transactional API methods.
+    public var transactionTimeoutMs: UInt {
+        get { self.dictionary.getUInt("transaction.timeout.ms") ?? 60000 }
+        set { self.dictionary["transaction.timeout.ms"] = String(newValue) }
     }
 
-    /// Group session keepalive heartbeat interval.
-    public var heartbeatIntervalMs: UInt {
-        get { self.dictionary.getUInt("heartbeat.interval.ms") ?? 3000 }
-        set { self.dictionary["heartbeat.interval.ms"] = String(newValue) }
+    /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), retries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantation will fail if user-supplied configuration is incompatible.
+    public var enableIdempotence: Bool {
+        get { self.dictionary.getBool("enable.idempotence") ?? false }
+        set { self.dictionary["enable.idempotence"] = String(newValue) }
     }
 
-    /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance in order to reassign the partitions to another consumer group member. Warning: Offset commits may be not possible at this point. Note: It is recommended to set enable.auto.offset.store=false for long-time processing applications and then explicitly store offsets (using offsets_store()) after message processing, to make sure offsets are not auto-committed prior to processing has finished. The interval is checked two times per second. See KIP-62 for more information.
-    public var maxPollInvervalMs: UInt {
-        get { self.dictionary.getUInt("max.poll.interval.ms") ?? 300_000 }
-        set { self.dictionary["max.poll.interval.ms"] = String(newValue) }
+    /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions. A value of 0 disables this limit.
+    public var queueBufferingMaxMessages: UInt {
+        get { self.dictionary.getUInt("queue.buffering.max.messages") ?? 100_000 }
+        set { self.dictionary["queue.buffering.max.messages"] = String(newValue) }
     }
 
-    /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
-    public var enableAutoCommit: Bool {
-        get { self.dictionary.getBool("enable.auto.commit") ?? true }
-        set { self.dictionary["enable.auto.commit"] = String(newValue) }
+    /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions. This property has higher priority than queue.buffering.max.messages.
+    public var queueBufferingMaxKBytes: UInt {
+        get { self.dictionary.getUInt("queue.buffering.max.kbytes") ?? 1_048_576 }
+        set { self.dictionary["queue.buffering.max.kbytes"] = String(newValue) }
     }
 
-    /// The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. (0 = disable).
-    public var autoCommitIntervalMs: UInt {
-        get { self.dictionary.getUInt("auto.commit.interval.ms") ?? 5000 }
-        set { self.dictionary["auto.commit.interval.ms"] = String(newValue) }
+    /// Delay in milliseconds to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers. A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
+    public var queueBufferingMaxMs: UInt {
+        get { self.dictionary.getUInt("queue.buffering.max.ms") ?? 5 }
+        set { self.dictionary["queue.buffering.max.ms"] = String(newValue) }
     }
 
-    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``ConfigEnums/AutoOffsetReset`` for more information.
-    public var autoOffsetReset: ConfigEnums.AutoOffsetReset {
-        get { self.getAutoOffsetReset() ?? .largest }
-        set { self.dictionary["auto.offset.reset"] = newValue.description }
-    }
-
-    /// Automatically store offset of last message provided to application. The offset store is an in-memory store of the next offset to (auto-)commit for each partition.
-    public var enableAutoOffsetStore: Bool {
-        get { self.dictionary.getBool("enable.auto.offset.store") ?? true }
-        set { self.dictionary["enable.auto.offset.store"] = String(newValue) }
-    }
-
-    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics. The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect. Note: the default value (true) for the producer is different from the default value (false) for the consumer. Further, the consumer default value is different from the Java consumer (true), and this property is not supported by the Java producer. Requires broker version >= 0.11.0.0, for older broker versions only the broker configuration applies.
-    public var allowAutoCreateTopics: Bool {
-        get { self.dictionary.getBool("allow.auto.create.topics") ?? false }
-        set { self.dictionary["allow.auto.create.topics"] = String(newValue) }
+    /// How many times to retry sending a failing Message. Note: retrying may cause reordering unless enable.idempotence is set to true.
+    public var messageSendMaxRetries: UInt {
+        get { self.dictionary.getUInt("message.send.max.retries") ?? 2_147_483_647 }
+        set { self.dictionary["message.send.max.retries"] = String(newValue) }
     }
 
     // MARK: - Common Client Config Properties
@@ -146,7 +134,7 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
     }
 
     /// A comma-separated list of debug contexts to enable. Detailed Producer debugging: broker,topic,msg. Consumer: consumer,cgrp,topic,fetch.
-    public var debug: [ConfigEnums.DebugOption] {
+    public var debug: [KafkaConfigEnums.DebugOption] {
         get { self.getDebugOptions() }
         set {
             if !newValue.isEmpty {
@@ -205,7 +193,7 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
     }
 
     /// Allowed broker ``ConfigEnums/IPAddressFamily``.
-    public var brokerAddressFamily: ConfigEnums.IPAddressFamily {
+    public var brokerAddressFamily: KafkaConfigEnums.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.dictionary["broker.address.family"] = newValue.description }
     }
@@ -223,7 +211,7 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
     }
 
     /// ``ConfigEnums/SecurityProtocol`` used to communicate with brokers.
-    public var securityProtocol: ConfigEnums.SecurityProtocol {
+    public var securityProtocol: KafkaConfigEnums.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.dictionary["security.protocol"] = newValue.description }
     }
@@ -271,7 +259,7 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
     }
 
     /// SASL mechanism to use for authentication.
-    public var saslMechanism: ConfigEnums.SASLMechanism? {
+    public var saslMechanism: KafkaConfigEnums.SASLMechanism? {
         get { self.getSASLMechanism() }
         set {
             if let newValue {
@@ -301,15 +289,13 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
     }
 
     public init(
-        groupID: String = "",
-        sessionTimeoutMs: UInt = 45000,
-        heartbeatIntervalMs: UInt = 3000,
-        maxPollInvervalMs: UInt = 300_000,
-        enableAutoCommit: Bool = true,
-        autoCommitIntervalMs: UInt = 5000,
-        enableAutoOffsetStore: Bool = true,
-        autoOffsetReset: ConfigEnums.AutoOffsetReset = .largest,
-        allowAutoCreateTopics: Bool = false,
+        transactionalID: String = "",
+        transactionalTimeoutMs: UInt = 60000,
+        enableIdempotence: Bool = false,
+        queueBufferingMaxMessages: UInt = 100_000,
+        queueBufferingMaxKBytes: UInt = 1_048_576,
+        queueBufferingMaxMs: UInt = 5,
+        messageSendMaxRetries: UInt = 2_147_483_647,
         clientID: String = "rdkafka",
         bootstrapServers: [String] = [],
         messageMaxBytes: UInt = 1_000_000,
@@ -322,7 +308,7 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
         topicMetadataRefreshSparse: Bool = true,
         topicMetadataPropagationMaxMs: UInt = 30000,
         topicDenylist: [String] = [],
-        debug: [ConfigEnums.DebugOption] = [],
+        debug: [KafkaConfigEnums.DebugOption] = [],
         socketTimeoutMs: UInt = 60000,
         socketSendBufferBytes: UInt = 0,
         socketReceiveBufferBytes: UInt = 0,
@@ -331,10 +317,10 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
         socketMaxFails: UInt = 1,
         /* socketConnectionSetupTimeoutMs: UInt = 30000, */
         brokerAddressTTL: UInt = 1000,
-        brokerAddressFamily: ConfigEnums.IPAddressFamily = .any,
+        brokerAddressFamily: KafkaConfigEnums.IPAddressFamily = .any,
         reconnectBackoffMs: UInt = 100,
         reconnectBackoffMaxMs: UInt = 10000,
-        securityProtocol: ConfigEnums.SecurityProtocol = .plaintext,
+        securityProtocol: KafkaConfigEnums.SecurityProtocol = .plaintext,
         sslKeyLocation: String = "",
         sslKeyPassword: String = "",
         sslCertificateLocation: String = "",
@@ -342,20 +328,17 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
         sslCRLLocation: String = "",
         sslKeystoreLocation: String = "",
         sslKeystorePassword: String = "",
-        saslMechanism: ConfigEnums.SASLMechanism? = nil,
+        saslMechanism: KafkaConfigEnums.SASLMechanism? = nil,
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
-        self.groupID = groupID
-        self.sessionTimeoutMs = sessionTimeoutMs
-        self.heartbeatIntervalMs = heartbeatIntervalMs
-        self.maxPollInvervalMs = maxPollInvervalMs
-        self.enableAutoCommit = enableAutoCommit
-        self.autoCommitIntervalMs = autoCommitIntervalMs
-        self.enableAutoOffsetStore = enableAutoOffsetStore
-        self.autoOffsetReset = autoOffsetReset
-        self.allowAutoCreateTopics = allowAutoCreateTopics
-
+        self.transactionalID = transactionalID
+        self.transactionTimeoutMs = transactionalTimeoutMs
+        self.enableIdempotence = enableIdempotence
+        self.queueBufferingMaxMessages = queueBufferingMaxMessages
+        self.queueBufferingMaxKBytes = queueBufferingMaxKBytes
+        self.queueBufferingMaxMs = queueBufferingMaxMs
+        self.messageSendMaxRetries = messageSendMaxRetries
         self.clientID = clientID
         self.bootstrapServers = bootstrapServers
         self.messageMaxBytes = messageMaxBytes
@@ -395,63 +378,32 @@ public struct ConsumerConfig: Hashable, Equatable, StringDictionaryRepresentable
 
     // MARK: - Helpers
 
-    func getDebugOptions() -> [ConfigEnums.DebugOption] {
+    func getDebugOptions() -> [KafkaConfigEnums.DebugOption] {
         guard let options = dictionary["debug"] else {
             return []
         }
         return options.components(separatedBy: ",")
-            .map { ConfigEnums.DebugOption(description: $0) }
+            .map { KafkaConfigEnums.DebugOption(description: $0) }
     }
 
-    func getIPAddressFamily() -> ConfigEnums.IPAddressFamily? {
+    func getIPAddressFamily() -> KafkaConfigEnums.IPAddressFamily? {
         guard let value = dictionary["broker.address.family"] else {
             return nil
         }
-        return ConfigEnums.IPAddressFamily(description: value)
+        return KafkaConfigEnums.IPAddressFamily(description: value)
     }
 
-    func getSecurityProtocol() -> ConfigEnums.SecurityProtocol? {
+    func getSecurityProtocol() -> KafkaConfigEnums.SecurityProtocol? {
         guard let value = dictionary["security.protocol"] else {
             return nil
         }
-        return ConfigEnums.SecurityProtocol(description: value)
+        return KafkaConfigEnums.SecurityProtocol(description: value)
     }
 
-    func getSASLMechanism() -> ConfigEnums.SASLMechanism? {
+    func getSASLMechanism() -> KafkaConfigEnums.SASLMechanism? {
         guard let value = dictionary["sasl.mechanism"] else {
             return nil
         }
-        return ConfigEnums.SASLMechanism(description: value)
-    }
-
-    func getAutoOffsetReset() -> ConfigEnums.AutoOffsetReset? {
-        guard let value = dictionary["auto.offset.reset"] else {
-            return nil
-        }
-        return ConfigEnums.AutoOffsetReset(description: value)
-    }
-}
-
-// MARK: - ConfigEnums + AutoOffsetReset
-
-extension ConfigEnums {
-    /// Available actions to take when there is no initial offset in offset store / offset is out of range.
-    public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
-        public let description: String
-
-        /// Automatically reset the offset to the smallest offset.
-        public static let smallest = AutoOffsetReset(description: "smallest")
-        /// Automatically reset the offset to the earliest offset.
-        public static let earliest = AutoOffsetReset(description: "earliest")
-        /// Automatically reset the offset to the beginning of a topic.
-        public static let beginning = AutoOffsetReset(description: "beginning")
-        /// Automatically reset the offset to the largest offset.
-        public static let largest = AutoOffsetReset(description: "largest")
-        /// Automatically reset the offset to the latest offset.
-        public static let latest = AutoOffsetReset(description: "latest")
-        /// Automatically reset the offset to the end offset.
-        public static let end = AutoOffsetReset(description: "end")
-        /// Trigger an error when there is no initial offset / offset is out of range.
-        public static let error = AutoOffsetReset(description: "error")
+        return KafkaConfigEnums.SASLMechanism(description: value)
     }
 }
