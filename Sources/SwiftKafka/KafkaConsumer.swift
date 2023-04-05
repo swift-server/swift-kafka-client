@@ -134,7 +134,6 @@ public final class KafkaConsumer {
     /// Initialize a new ``KafkaConsumer`` and subscribe to the given list of `topics` as part of
     /// the consumer group specified in `groupID`.
     /// - Parameter topics: An array of topic names to subscribe to.
-    /// - Parameter groupID: Name of the consumer group that this ``KafkaConsumer`` will create / join.
     /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
