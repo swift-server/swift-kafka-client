@@ -15,6 +15,34 @@
 
 import PackageDescription
 
+// TODO: create install script in Libraries
+
+let arch: String
+#if arch(arm64)
+arch = "arm64"
+#elseif arch(x86_64)
+arch = "amd64"
+#else
+fatalError("This package only supports arm64 and x86_64 architectures at the moment")
+#endif
+
+let osSpecifier: String
+#if os(macOS)
+osSpecifier = "darwin"
+#elseif os(Linux)
+osSpecifier = "glibc_linux"
+#else
+fatalError("This package only supports macOS and Linux at the moment")
+#endif
+
+var rdkafkaLinkerSettings: [PackageDescription.LinkerSetting] = [
+    .unsafeFlags(["-LLibraries"]),
+    .linkedLibrary("rdkafka_\(osSpecifier)_\(arch)"),
+    // SASL2 comes with macOS
+    // See: https://github.com/confluentinc/librdkafka/blob/master/packaging/nuget/staticpackage.py
+    .linkedLibrary("sasl2", .when(platforms: [.macOS]))
+]
+
 let package = Package(
     name: "swift-kafka-gsoc",
     platforms: [
@@ -37,18 +65,14 @@ let package = Package(
         .target(
             name: "SwiftKafka",
             dependencies: [
-                "Crdkafka",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
+                .target(name: "Crdkafka")
             ]
         ),
-        .systemLibrary(
+        .target(
             name: "Crdkafka",
-            pkgConfig: "rdkafka",
-            providers: [
-                .brew(["librdkafka"]),
-                .apt(["librdkafka-dev"]),
-            ]
+            linkerSettings: rdkafkaLinkerSettings
         ),
         .testTarget(
             name: "SwiftKafkaTests",
