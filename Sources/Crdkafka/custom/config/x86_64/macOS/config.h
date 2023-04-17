@@ -3,6 +3,8 @@
 #define _CONFIG_H_
 // distro
 #define SOLIB_EXT ".dylib"
+#define ARCH "x86_64"
+#define CPU "generic"
 #define WITHOUT_OPTIMIZATION 0
 #define WITH_STRIP 0
 #define ENABLE_ZLIB 1
@@ -24,12 +26,37 @@
 #define ENABLE_GSSAPI 1
 #define ENABLE_CURL 1
 #define ENABLE_LZ4_EXT 1
+#define WITH_STATIC_LINKING 1
+#define MKL_APP_NAME "librdkafka"
+#define MKL_APP_DESC_ONELINE "The Apache Kafka C/C++ library"
 // gcc
 #define WITH_GCC 1
 // gxx
 #define WITH_GXX 1
 // pkgconfig
 #define WITH_PKGCONFIG 1
+// PIC
+#define HAVE_PIC 1
+// osxlib
+#define WITH_OSXLD 1
+// __atomic_32
+#define HAVE_ATOMICS_32 1
+// __atomic_32
+#define HAVE_ATOMICS_32_ATOMIC 1
+// atomic_32
+#define ATOMIC_OP32(OP1,OP2,PTR,VAL) __atomic_ ## OP1 ## _ ## OP2(PTR, VAL, __ATOMIC_SEQ_CST)
+// __atomic_64
+#define HAVE_ATOMICS_64 1
+// __atomic_64
+#define HAVE_ATOMICS_64_ATOMIC 1
+// atomic_64
+#define ATOMIC_OP64(OP1,OP2,PTR,VAL) __atomic_ ## OP1 ## _ ## OP2(PTR, VAL, __ATOMIC_SEQ_CST)
+// atomic_64
+#define ATOMIC_OP(OP1,OP2,PTR,VAL) __atomic_ ## OP1 ## _ ## OP2(PTR, VAL, __ATOMIC_SEQ_CST)
+// parseversion
+#define RDKAFKA_VERSION_STR "2.1.0"
+// parseversion
+#define MKL_APP_VERSION "2.1.0"
 // libdl
 #define WITH_LIBDL 1
 // WITH_PLUGINS
@@ -48,8 +75,6 @@
 #define WITH_CURL 1
 // WITH_HDRHISTOGRAM
 #define WITH_HDRHISTOGRAM 1
-// liblz4
-#define WITH_LZ4_EXT 1
 // syslog
 #define WITH_SYSLOG 1
 // WITH_SNAPPY
@@ -62,6 +87,24 @@
 #define WITH_SASL_OAUTHBEARER 1
 // WITH_OAUTHBEARER_OIDC
 #define WITH_OAUTHBEARER_OIDC 1
+// crc32chw
+#define WITH_CRC32C_HW 1
+// regex
+#define HAVE_REGEX 1
+// rand_r
+#define HAVE_RAND_R 1
+// strndup
+#define HAVE_STRNDUP 1
+// strlcpy
+#define HAVE_STRLCPY 1
+// strerror_r
+#define HAVE_STRERROR_R 1
+// strcasestr
+#define HAVE_STRCASESTR 1
+// pthread_setname_darwin
+#define HAVE_PTHREAD_SETNAME_DARWIN 1
+// getrusage
+#define HAVE_GETRUSAGE 1
 // BUILT_WITH
-#define BUILT_WITH "GCC GXX PKGCONFIG LIBDL PLUGINS ZLIB SSL SASL_CYRUS ZSTD CURL HDRHISTOGRAM LZ4_EXT SYSLOG SNAPPY SOCKEM SASL_SCRAM SASL_OAUTHBEARER OAUTHBEARER_OIDC"
+#define BUILT_WITH "STATIC_LINKING GCC GXX PKGCONFIG OSXLD LIBDL PLUGINS ZLIB SSL SASL_CYRUS ZSTD CURL HDRHISTOGRAM SYSLOG SNAPPY SOCKEM SASL_SCRAM SASL_OAUTHBEARER OAUTHBEARER_OIDC CRC32C_HW"
 #endif /* _CONFIG_H_ */
