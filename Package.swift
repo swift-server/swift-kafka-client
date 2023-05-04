@@ -52,7 +52,6 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.43.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-nio-ssl.git", .upToNextMajor(from: "2.21.0")),
         // The zstd Swift package produces warnings that we cannot resolve:
         // https://github.com/facebook/zstd/issues/3328
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.0"),
@@ -61,14 +60,13 @@ let package = Package(
         .target(
             name: "Crdkafka",
             dependencies: [
-                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                "COpenSSL",
                 .product(name: "libzstd", package: "zstd"),
             ],
             exclude: rdkafkaExclude,
             sources: ["./librdkafka/src/"],
             publicHeadersPath: "./include",
             cSettings: [
-                .headerSearchPath("./custom/include"),
                 // dummy folder, because config.h is included as "../config.h" in librdkafka
                 .headerSearchPath("./custom/config/\(arch)/macOS/dummy", .when(platforms: [.macOS])),
                 .headerSearchPath("./custom/config/\(arch)/linux/dummy", .when(platforms: [.linux])),
@@ -86,6 +84,14 @@ let package = Package(
                 "Crdkafka",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
+        .systemLibrary(
+            name: "COpenSSL",
+            pkgConfig: "openssl",
+            providers: [
+                .brew(["libressl"]),
+                .apt(["libssl-dev"])
             ]
         ),
         .testTarget(

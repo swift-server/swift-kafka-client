@@ -5,6 +5,7 @@ FROM $base_image
 
 RUN apt-get update
 RUN apt-get install libsasl2-dev -y
+RUN apt-get install libssl-dev -y
 
 # tools
 RUN mkdir -p $HOME/.tools

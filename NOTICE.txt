@@ -41,5 +41,3 @@ This product uses zstd.
     * https://opensource.org/license/BSD-3-Clause
   * HOMEPAGE:
     * https://github.com/facebook/zstd
-
-// TODO: BoringSSL
