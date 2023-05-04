@@ -4,20 +4,13 @@ services:
 
   zookeeper:
     image: ubuntu/zookeeper
-    container_name: zookeeper
-    ports:
-      - "2181:2181"
 
   kafka:
     image: ubuntu/kafka
-    container_name: kafka_broker
     depends_on:
       - zookeeper
-    ports:
-      - "9092:9092"
     environment:
       ZOOKEEPER_HOST: zookeeper
-      ZOOKEEPER_PORT: 2181
 
   swift-kafka-gsoc:
     depends_on:
@@ -27,10 +20,9 @@ services:
       dockerfile: docker/Dockerfile
     environment:
       KAFKA_HOST: kafka
-      KAFKA_PORT: 9092
 
   # Swift on Server CI
-  # e.g. docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.2204.57.yaml run test  
+  # e.g. docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.2204.57.yaml run test
 
   runtime-setup:
     image: swift-kafka-gsoc:default
@@ -55,7 +47,6 @@ services:
     depends_on: [kafka, runtime-setup]
     environment:
       KAFKA_HOST: kafka
-      KAFKA_PORT: 9092    
     command: /bin/bash -xcl "swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-}"
 
   # util
