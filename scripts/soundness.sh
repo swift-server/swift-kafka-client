@@ -30,9 +30,22 @@ unacceptable_terms=(
     -e slav[e]
     -e sanit[y]
 )
-if git grep --color=never -i "${unacceptable_terms[@]}" > /dev/null; then
+
+# We have to exclude the code of conduct because it gives examples of unacceptable language.
+# We have to exclude *Config.swift files as they need to map to Kafka terminology
+# which is considered unacceptable by us.
+exclude_files=(
+    CODE_OF_CONDUCT.md
+    *Config.swift
+)
+for word in "${exclude_files[@]}"; do
+    exclude_files+=(":(exclude)$word")
+done
+exclude_files_str=$(printf " %s" "${exclude_files[@]}")
+
+if git grep --color=never -i "${unacceptable_terms[@]}" -- . $exclude_files_str > /dev/null; then
     printf "\033[0;31mUnacceptable language found.\033[0m\n"
-    git grep -i "${unacceptable_terms[@]}"
+    git grep -i "${unacceptable_terms[@]}" -- . $exclude_files_str
     exit 1
 fi
 printf "\033[0;32mokay.\033[0m\n"
@@ -59,7 +72,8 @@ for language in swift-or-c bash dtrace python; do
   matching_files=( -name '*' )
   case "$language" in
       swift-or-c)
-        exceptions=( -name Package.swift )
+        # we don't add our own headers to the librdkafka submodule
+        exceptions=( -path '*Sources/Crdkafka/librdkafka/*' -o -name Package.swift )
         matching_files=( -name '*.swift' -o -name '*.c' -o -name '*.h' )
         cat > "$tmp" <<"EOF"
 //===----------------------------------------------------------------------===//

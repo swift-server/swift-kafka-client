@@ -221,7 +221,7 @@ public actor KafkaProducer {
                 valueBuffer.count,
                 keyBytes,
                 keyBytes?.count ?? 0,
-                UnsafeMutableRawPointer(bitPattern: messageIDCounter)
+                UnsafeMutableRawPointer(bitPattern: self.messageIDCounter)
             )
         }
 

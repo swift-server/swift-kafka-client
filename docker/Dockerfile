@@ -11,6 +11,16 @@ RUN wget -qO - http://packages.confluent.io/deb/7.2/archive.key | apt-key add -
 RUN add-apt-repository "deb http://packages.confluent.io/deb/ $(lsb_release -cs) main" -y
 RUN apt-get install librdkafka-dev -y
 
+# tools
+RUN mkdir -p $HOME/.tools
+RUN echo 'export PATH="$HOME/.tools:$PATH"' >> $HOME/.profile
+
+# swiftformat (until part of the toolchain)
+ARG swiftformat_version=0.51.8
+RUN git clone --branch $swiftformat_version --depth 1 https://github.com/nicklockwood/SwiftFormat $HOME/.tools/swift-format
+RUN cd $HOME/.tools/swift-format && swift build -c release
+RUN ln -s $HOME/.tools/swift-format/.build/release/swiftformat $HOME/.tools/swiftformat
+
 WORKDIR /swift-kafka-gsoc
 
 COPY . /swift-kafka-gsoc
