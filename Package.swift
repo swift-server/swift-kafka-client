@@ -81,7 +81,7 @@ let package = Package(
             pkgConfig: "openssl",
             providers: [
                 .brew(["libressl"]),
-                .apt(["libssl-dev"])
+                .apt(["libssl-dev"]),
             ]
         ),
         .testTarget(
