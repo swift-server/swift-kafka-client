@@ -15,15 +15,6 @@
 
 import PackageDescription
 
-let arch: String
-#if arch(arm64)
-arch = "arm64"
-#elseif arch(x86_64)
-arch = "x86_64"
-#else
-fatalError("This package only supports arm64 and x86_64 architectures at the moment")
-#endif
-
 let rdkafkaExclude = [
     "./librdkafka/src/CMakeLists.txt",
     "./librdkafka/src/Makefile",
@@ -68,8 +59,7 @@ let package = Package(
             publicHeadersPath: "./include",
             cSettings: [
                 // dummy folder, because config.h is included as "../config.h" in librdkafka
-                .headerSearchPath("./custom/config/\(arch)/macOS/dummy", .when(platforms: [.macOS])),
-                .headerSearchPath("./custom/config/\(arch)/linux/dummy", .when(platforms: [.linux])),
+                .headerSearchPath("./custom/config/dummy"),
                 .headerSearchPath("./librdkafka/src"),
             ],
             linkerSettings: [
