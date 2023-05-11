@@ -42,12 +42,21 @@ services:
     <<: *common
     command: /bin/bash -xcl "swift -version && uname -a && ./scripts/soundness.sh"
 
+  build:
+    <<: *common
+    environment: []
+    command: /bin/bash -cl "swift build"
+
   test:
     <<: *common
     depends_on: [kafka, runtime-setup]
     environment:
       KAFKA_HOST: kafka
-    command: /bin/bash -xcl "swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-}"
+    command: >
+      /bin/bash -xcl "
+        swift build --build-tests $${SANITIZER_ARG-} && \
+        swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-}
+      "
 
   # util
 

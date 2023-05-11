@@ -9,6 +9,9 @@ services:
         ubuntu_version: "jammy"
         swift_version: "5.8"
 
+  build:
+    image: swift-kafka-gsoc:22.04-5.8
+
   test:
     image: swift-kafka-gsoc:22.04-5.8
     environment:
