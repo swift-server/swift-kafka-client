@@ -4,13 +4,13 @@
 // distro
 #ifdef __APPLE__
 #define SOLIB_EXT ".dylib"
-#elif __linux__
+#elif defined(__linux__)
 #define SOLIB_EXT ".so"
 #endif
 
 #ifdef __x86_64__
 #define ARCH "x86_64"
-#elif __arm64__ || __arm__ || __aarch64__
+#elif defined(__arm64__) || defined(__arm__) || defined(__aarch64__)
 #define ARCH "arm64"
 #endif
 
@@ -49,7 +49,7 @@
 #define WITH_GCC 1
 // gxx
 #define WITH_GXX 1
-#elif __linux__
+#elif defined(__linux__)
 // ccenv
 #define WITH_CC 1
 // cxxenv
@@ -158,13 +158,13 @@
 #ifdef __APPLE__
 #ifdef __x86_64__
 #define BUILT_WITH "STATIC_LINKING GCC GXX PKGCONFIG OSXLD LIBDL PLUGINS ZLIB SSL SASL_CYRUS ZSTD CURL HDRHISTOGRAM SYSLOG SNAPPY SOCKEM SASL_SCRAM SASL_OAUTHBEARER OAUTHBEARER_OIDC CRC32C_HW"
-#elif __arm64__ || __arm__ || __aarch64__
+#elif defined(__arm64__) || defined(__arm__) || (__aarch64__)
 #define BUILT_WITH "STATIC_LINKING GCC GXX PKGCONFIG OSXLD LIBDL PLUGINS ZLIB SSL SASL_CYRUS ZSTD CURL HDRHISTOGRAM SYSLOG SNAPPY SOCKEM SASL_SCRAM SASL_OAUTHBEARER OAUTHBEARER_OIDC"
 #endif
-#elif __linux__
+#elif defined(__linux__)
 #ifdef __x86_64__
 #define BUILT_WITH "STATIC_LINKING CC CXX PKGCONFIG INSTALL GNULD LIBDL PLUGINS ZLIB SSL SASL_CYRUS ZSTD CURL HDRHISTOGRAM SNAPPY SOCKEM SASL_SCRAM SASL_OAUTHBEARER OAUTHBEARER_OIDC CRC32C_HW"
-#elif __arm64__ || __arm__ || __aarch64__
+#elif defined(__arm64__) || defined(__arm__) || defined(__aarch64__)
 #define BUILT_WITH "STATIC_LINKING CC CXX INSTALL GNULD LIBDL PLUGINS ZLIB SSL SASL_CYRUS ZSTD CURL HDRHISTOGRAM SNAPPY SOCKEM SASL_SCRAM SASL_OAUTHBEARER OAUTHBEARER_OIDC"
 #endif
 #endif
