@@ -15,6 +15,17 @@
 
 import PackageDescription
 
+let rdkafkaExclude = [
+    "./librdkafka/src/CMakeLists.txt",
+    "./librdkafka/src/Makefile",
+    "./librdkafka/src/generate_proto.sh",
+    "./librdkafka/src/librdkafka_cgrp_synch.png",
+    "./librdkafka/src/statistics_schema.json",
+    "./librdkafka/src/rdkafka_sasl_win32.c",
+    "./librdkafka/src/rdwin32.h",
+    "./librdkafka/src/win32_config.h",
+]
+
 let package = Package(
     name: "swift-kafka-gsoc",
     platforms: [
@@ -32,8 +43,31 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.43.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
+        // The zstd Swift package produces warnings that we cannot resolve:
+        // https://github.com/facebook/zstd/issues/3328
+        .package(url: "https://github.com/facebook/zstd.git", from: "1.5.0"),
     ],
     targets: [
+        .target(
+            name: "Crdkafka",
+            dependencies: [
+                "COpenSSL",
+                .product(name: "libzstd", package: "zstd"),
+            ],
+            exclude: rdkafkaExclude,
+            sources: ["./librdkafka/src/"],
+            publicHeadersPath: "./include",
+            cSettings: [
+                // dummy folder, because config.h is included as "../config.h" in librdkafka
+                .headerSearchPath("./custom/config/dummy"),
+                .headerSearchPath("./librdkafka/src"),
+            ],
+            linkerSettings: [
+                .linkedLibrary("curl"),
+                .linkedLibrary("sasl2"),
+                .linkedLibrary("z"), // zlib
+            ]
+        ),
         .target(
             name: "SwiftKafka",
             dependencies: [
@@ -43,11 +77,11 @@ let package = Package(
             ]
         ),
         .systemLibrary(
-            name: "Crdkafka",
-            pkgConfig: "rdkafka",
+            name: "COpenSSL",
+            pkgConfig: "openssl",
             providers: [
-                .brew(["librdkafka"]),
-                .apt(["librdkafka-dev"]),
+                .brew(["libressl"]),
+                .apt(["libssl-dev"]),
             ]
         ),
         .testTarget(

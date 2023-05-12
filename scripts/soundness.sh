@@ -73,7 +73,7 @@ for language in swift-or-c bash dtrace python; do
   case "$language" in
       swift-or-c)
         # we don't add our own headers to the librdkafka submodule
-        exceptions=( -path '*Sources/Crdkafka/librdkafka/*' -o -name Package.swift )
+        exceptions=( -path '*Sources/Crdkafka/*' -o -name Package.swift )
         matching_files=( -name '*.swift' -o -name '*.c' -o -name '*.h' )
         cat > "$tmp" <<"EOF"
 //===----------------------------------------------------------------------===//

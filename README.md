@@ -1,66 +1,8 @@
 # 🚧WIP🚧: SwiftKafka
 
-SwiftKafka is a Swift Package in development that provides a convenient way to communicate with [Apache Kafka](https://kafka.apache.org) servers. The main goal was to create an API that leverages [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). Under the hood, this package uses the [`librdkafka`](github.com/edenhill/librdkafka) C library.
+SwiftKafka is a Swift Package in development that provides a convenient way to communicate with [Apache Kafka](https://kafka.apache.org) servers. The main goal was to create an API that leverages [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). Under the hood, this package uses the [`librdkafka`](https://github.com/confluentinc/librdkafka) C library.
 
-## Getting Started
-
-### Installing Dependencies
-
-Please make sure to have the [`librdkafka`](https://github.com/edenhill/librdkafka) library installed before building.
-
-#### macOS
-
-```bash
-brew install librdkafka
-```
-
-#### Linux
-
-The default `apt-get` package for the library is outdated. Therefore, we recommend installing [`librdkafka`](https://github.com/edenhill/librdkafka) from the [official Confluent package repository](https://docs.confluent.io/platform/current/installation/installing_cp/deb-ubuntu.html#get-the-software).
-
-```bash
-wget -qO - http://packages.confluent.io/deb/7.2/archive.key | sudo apt-key add -
-sudo add-apt-repository "deb http://packages.confluent.io/deb/ $(lsb_release -cs) main"
-apt-get install librdkafka-dev
-```
-
-### Building the Project
-
-#### macOS
-
-We rely on the `openssl` package, which is *keg-only*. This means that Swift Package Manager will not find it by default. To build, we have to explicitly make the `PKG_CONFIG_PATH` environment variable point to the location of our `openssl` installation.
-
-##### Building from Command Line
-
-```bash
-env PKG_CONFIG_PATH=$(brew --prefix)/opt/openssl@1.1/lib/pkgconfig swift build
-```
-
-##### Opening & Building the Package in Xcode
-
-> **Note**
->
-> Please make sure that Xcode is **not** running already. Otherwise, Xcode will not open the project in the specified environment.
-
-```bash
-env PKG_CONFIG_PATH=$(brew --prefix)/opt/openssl@1.1/lib/pkgconfig xed .
-```
-
-#### Linux
-
-```bash
-swift build
-```
-
-### Docker
-
-We also provide a Docker environment for this package. This will automatically start a local Kafka server and run the package tests.
-
-```bash
-docker-compose -f docker/docker-compose.yaml run swift-kafka-gsoc
-```
-
-## Overview
+## Usage
 
 ### Producer API
 
@@ -165,4 +107,17 @@ for await messageResult in consumer.messages {
         // Handle error
     }
 }
+```
+
+## librdkafka
+
+The Package depends on [the librdkafka library](https://github.com/confluentinc/librdkafka), which is included as a git submodule.
+It has source files that are excluded in `Package.swift`.
+
+## Development Setup
+
+We provide a Docker environment for this package. This will automatically start a local Kafka server and run the package tests.
+
+```bash
+docker-compose -f docker/docker-compose.yaml run swift-kafka-gsoc
 ```
