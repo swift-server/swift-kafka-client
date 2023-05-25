@@ -16,27 +16,15 @@ import Crdkafka
 import Logging
 import NIOCore
 
-/// `NIOAsyncSequenceProducerBackPressureStrategy` that always returns true.
-struct NoBackPressure: NIOAsyncSequenceProducerBackPressureStrategy {
-    func didYield(bufferDepth: Int) -> Bool { true }
-    func didConsume(bufferDepth: Int) -> Bool { true }
-}
-
-/// `NIOAsyncSequenceProducerDelegate` that does nothing.
-struct NoDelegate: NIOAsyncSequenceProducerDelegate {
-    func produceMore() {}
-    func didTerminate() {}
-}
-
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
     public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<Element, NoBackPressure, NoDelegate>.AsyncIterator
+        let wrappedIterator: NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>.AsyncIterator
 
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
@@ -80,8 +68,10 @@ public actor KafkaProducer {
     // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
     /// Used for handling the connection to the Kafka cluster.
     private var client: KafkaClient!
-    /// Task that polls the Kafka cluster for updates periodically.
-    private var pollTask: Task<Void, Never>!
+    /// Mechanism that polls the Kafka cluster for updates periodically.
+    private let pollingSystem: KafkaBackPressurePollingSystem
+    // TODO: docc
+    private var runTask: Task<Void, Never>?
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
@@ -104,6 +94,13 @@ public actor KafkaProducer {
         self.topicHandles = [:]
         self.state = .started
 
+        let backpressureStrategy = ConsumerMessagesAsyncSequence.HighLowWatermark(
+            lowWatermark: 5,
+            highWatermark: 10
+        )
+
+        self.pollingSystem = KafkaBackPressurePollingSystem(logger: self.logger)
+
         // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
         // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
         // The source MUST be held by the caller and used to signal new elements or finish.
@@ -112,8 +109,8 @@ public actor KafkaProducer {
         // terminate the underlying source.
         let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Acknowledgement.self,
-            backPressureStrategy: NoBackPressure(),
-            delegate: NoDelegate()
+            backPressureStrategy: backpressureStrategy,
+            delegate: pollingSystem
         )
         self.acknowlegdementsSource = acknowledgementsSourceAndSequence.source
         self.acknowledgements = AcknowledgedMessagesAsyncSequence(
@@ -123,19 +120,17 @@ public actor KafkaProducer {
         self.client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            callback: self.deliveryReportCallback,
+            callback: self.pollingSystem.deliveryReportCallback,
             logger: self.logger
         )
 
-        // Poll Kafka every millisecond
-        self.pollTask = Task { [client] in
-            while !Task.isCancelled {
-                client?.withKafkaHandlePointer { handle in
-                    rd_kafka_poll(handle, 0)
-                }
-                try? await Task.sleep(nanoseconds: 1_000_000)
-            }
+        // TODO: expose run to user
+        self.runTask = Task { [pollingSystem] in
+            await pollingSystem.run(pollIntervalNanos: 100 * 1_000_000)
         }
+
+        self.pollingSystem.client = self.client
+        self.pollingSystem.sequenceSource = self.acknowlegdementsSource
     }
 
     /// Method to shutdown the ``KafkaProducer``.
@@ -165,7 +160,9 @@ public actor KafkaProducer {
         for (_, topicHandle) in self.topicHandles {
             rd_kafka_topic_destroy(topicHandle)
         }
-        self.pollTask.cancel()
+
+        // TODO: kill PollingSystem
+        self.runTask?.cancel()
 
         self.state = .shutDown
     }
@@ -218,29 +215,6 @@ public actor KafkaProducer {
         }
 
         return self.messageIDCounter
-    }
-
-    // Closure that is executed when a message has been acknowledged by Kafka
-    private lazy var deliveryReportCallback: (UnsafePointer<rd_kafka_message_t>?) -> Void = { [logger, acknowlegdementsSource] messagePointer in
-        guard let messagePointer = messagePointer else {
-            logger.error("Could not resolve acknowledged message")
-            return
-        }
-
-        let messageID = UInt(bitPattern: messagePointer.pointee._private)
-
-        do {
-            let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
-            _ = acknowlegdementsSource.yield(.success(message))
-        } catch {
-            guard let error = error as? KafkaAcknowledgedMessageError else {
-                fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
-            }
-            _ = acknowlegdementsSource.yield(.failure(error))
-        }
-
-        // The messagePointer is automatically destroyed by librdkafka
-        // For safety reasons, we only use it inside of this closure
     }
 
     /// Check `topicHandles` for a handle matching the topic name and create a new handle if needed.

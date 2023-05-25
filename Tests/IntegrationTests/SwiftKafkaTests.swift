@@ -78,7 +78,7 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let testMessages = Self.creataTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
 
         var consumedMessages = [KafkaConsumerMessage]()
@@ -114,7 +114,7 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let testMessages = Self.creataTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
 
         var consumedMessages = [KafkaConsumerMessage]()
@@ -151,7 +151,7 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let testMessages = Self.creataTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
 
         var consumedMessages = [KafkaConsumerMessage]()
@@ -186,7 +186,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static func creataTestMessages(topic: String, count: UInt) -> [KafkaProducerMessage] {
+    private static func createTestMessages(topic: String, count: UInt) -> [KafkaProducerMessage] {
         return Array(0..<count).map {
             KafkaProducerMessage(
                 topic: topic,
