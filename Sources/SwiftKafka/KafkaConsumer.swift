@@ -121,6 +121,13 @@ public final class KafkaConsumer {
             highWatermark: highWatermark
         )
 
+        // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
+        // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
+        // The source MUST be held by the caller and used to signal new elements or finish.
+        // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
+        // This is due to the fact that deiniting the sequence is used as part of a trigger to
+        // terminate the underlying source.
+        // TODO: make self delegate to avoid weak reference here
         let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate { [weak self] in
             self?.produceMore()
         } didTerminateClosure: { [weak self] in

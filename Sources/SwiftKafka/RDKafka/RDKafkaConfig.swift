@@ -16,9 +16,10 @@ import Crdkafka
 
 /// A collection of helper functions wrapping common `rd_kafka_conf_*` functions in Swift.
 struct RDKafkaConfig {
+    typealias KafkaAcknowledgementResult = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     /// Wraps a Swift closure inside of a class to be able to pass it to `librdkafka` as an `OpaquePointer`.
     final class CapturedClosure {
-        typealias Closure = (UnsafePointer<rd_kafka_message_t>?) -> Void
+        typealias Closure = (KafkaAcknowledgementResult?) -> Void
         let closure: Closure
 
         init(_ closure: @escaping Closure) {
@@ -69,7 +70,7 @@ struct RDKafkaConfig {
     /// - Returns: A ``CapturedClosure`` object that must me retained by the caller as long as acknowledgements are received.
     static func setDeliveryReportCallback(
         configPointer: OpaquePointer,
-        _ callback: @escaping ((UnsafePointer<rd_kafka_message_t>?) -> Void)
+        _ callback: @escaping ((KafkaAcknowledgementResult?) -> Void)
     ) -> CapturedClosure {
         let capturedClosure = CapturedClosure(callback)
         // Pass the captured closure to the C closure as an opaque object
@@ -83,14 +84,17 @@ struct RDKafkaConfig {
         let callbackWrapper: (
             @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
         ) = { _, messagePointer, opaquePointer in
-
             guard let opaquePointer = opaquePointer else {
                 fatalError("Could not resolve reference to KafkaProducer instance")
             }
             let opaque = Unmanaged<CapturedClosure>.fromOpaque(opaquePointer).takeUnretainedValue()
 
             let actualCallback = opaque.closure
-            actualCallback(messagePointer)
+            let messageResult = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer)
+            actualCallback(messageResult)
+
+            // The messagePointer is automatically destroyed by librdkafka
+            // For safety reasons, we only use it inside of this callback
         }
 
         rd_kafka_conf_set_dr_msg_cb(
@@ -99,5 +103,31 @@ struct RDKafkaConfig {
         )
 
         return capturedClosure
+    }
+
+    /// Convert an unsafe`rd_kafka_message_t` object to a safe ``KafkaAcknowledgementResult``.
+    /// - Parameter messagePointer: An `UnsafePointer` pointing to the `rd_kafka_message_t` object in memory.
+    /// - Returns: A ``KafkaAcknowledgementResult``.
+    private static func convertMessageToAcknowledgementResult(
+        messagePointer: UnsafePointer<rd_kafka_message_t>?
+    ) -> KafkaAcknowledgementResult? {
+        guard let messagePointer else {
+            return nil
+        }
+
+        let messageID = UInt(bitPattern: messagePointer.pointee._private)
+
+        let messageResult: KafkaAcknowledgementResult
+        do {
+            let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
+            messageResult = .success(message)
+        } catch {
+            guard let error = error as? KafkaAcknowledgedMessageError else {
+                fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
+            }
+            messageResult = .failure(error)
+        }
+
+        return messageResult
     }
 }
