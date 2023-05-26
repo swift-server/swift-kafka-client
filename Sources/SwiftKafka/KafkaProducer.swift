@@ -110,7 +110,7 @@ public actor KafkaProducer {
         let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Acknowledgement.self,
             backPressureStrategy: backpressureStrategy,
-            delegate: pollingSystem
+            delegate: self.pollingSystem
         )
         self.acknowlegdementsSource = acknowledgementsSourceAndSequence.source
         self.acknowledgements = AcknowledgedMessagesAsyncSequence(

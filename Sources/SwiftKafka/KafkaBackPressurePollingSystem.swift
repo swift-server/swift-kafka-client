@@ -14,8 +14,8 @@
 
 import Crdkafka
 import Logging
-import NIOCore
 import NIOConcurrencyHelpers
+import NIOCore
 
 // TODO: write test for evaluating right state transitions
 // TODO: test abrupt run task shutdown -> cancellation handler
@@ -144,7 +144,6 @@ final class KafkaBackPressurePollingSystem {
 }
 
 extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
-
     func produceMore() {
         self.stateMachine.eventTriggered(.produceMore)
     }
@@ -230,7 +229,6 @@ extension KafkaBackPressurePollingSystem {
         func eventTriggered(_ event: Event) {
             self.state.withLockedValue { state in
                 switch (event, state) {
-
                 case (_, .shutDown):
                     return
 
