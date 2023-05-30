@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresentable {
+public struct KafkaProducerConfig: Hashable, Equatable {
     var dictionary: [String: String] = [:]
 
     // MARK: - Producer-specific Config Properties
@@ -134,7 +134,7 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
     }
 
     /// A comma-separated list of debug contexts to enable. Detailed Producer debugging: broker,topic,msg. Consumer: consumer,cgrp,topic,fetch.
-    public var debug: [KafkaConfigEnums.DebugOption] {
+    public var debug: [KafkaSharedConfiguration.DebugOption] {
         get { self.getDebugOptions() }
         set {
             if !newValue.isEmpty {
@@ -192,7 +192,7 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
     }
 
     /// Allowed broker ``ConfigEnums/IPAddressFamily``.
-    public var brokerAddressFamily: KafkaConfigEnums.IPAddressFamily {
+    public var brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.dictionary["broker.address.family"] = newValue.description }
     }
@@ -210,7 +210,7 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
     }
 
     /// ``ConfigEnums/SecurityProtocol`` used to communicate with brokers.
-    public var securityProtocol: KafkaConfigEnums.SecurityProtocol {
+    public var securityProtocol: KafkaSharedConfiguration.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.dictionary["security.protocol"] = newValue.description }
     }
@@ -258,7 +258,7 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
     }
 
     /// SASL mechanism to use for authentication.
-    public var saslMechanism: KafkaConfigEnums.SASLMechanism? {
+    public var saslMechanism: KafkaSharedConfiguration.SASLMechanism? {
         get { self.getSASLMechanism() }
         set {
             if let newValue {
@@ -307,7 +307,7 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
         topicMetadataRefreshSparse: Bool = true,
         topicMetadataPropagationMaxMs: UInt = 30000,
         topicDenylist: [String] = [],
-        debug: [KafkaConfigEnums.DebugOption] = [],
+        debug: [KafkaSharedConfiguration.DebugOption] = [],
         socketTimeoutMs: UInt = 60000,
         socketSendBufferBytes: UInt = 0,
         socketReceiveBufferBytes: UInt = 0,
@@ -316,10 +316,10 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
         socketMaxFails: UInt = 1,
         socketConnectionSetupTimeoutMs: UInt = 30000,
         brokerAddressTTL: UInt = 1000,
-        brokerAddressFamily: KafkaConfigEnums.IPAddressFamily = .any,
+        brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily = .any,
         reconnectBackoffMs: UInt = 100,
         reconnectBackoffMaxMs: UInt = 10000,
-        securityProtocol: KafkaConfigEnums.SecurityProtocol = .plaintext,
+        securityProtocol: KafkaSharedConfiguration.SecurityProtocol = .plaintext,
         sslKeyLocation: String = "",
         sslKeyPassword: String = "",
         sslCertificateLocation: String = "",
@@ -327,7 +327,7 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
         sslCRLLocation: String = "",
         sslKeystoreLocation: String = "",
         sslKeystorePassword: String = "",
-        saslMechanism: KafkaConfigEnums.SASLMechanism? = nil,
+        saslMechanism: KafkaSharedConfiguration.SASLMechanism? = nil,
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
@@ -377,32 +377,32 @@ public struct KafkaProducerConfig: Hashable, Equatable, StringDictionaryRepresen
 
     // MARK: - Helpers
 
-    func getDebugOptions() -> [KafkaConfigEnums.DebugOption] {
+    func getDebugOptions() -> [KafkaSharedConfiguration.DebugOption] {
         guard let options = dictionary["debug"] else {
             return []
         }
         return options.components(separatedBy: ",")
-            .map { KafkaConfigEnums.DebugOption(description: $0) }
+            .map { KafkaSharedConfiguration.DebugOption(description: $0) }
     }
 
-    func getIPAddressFamily() -> KafkaConfigEnums.IPAddressFamily? {
+    func getIPAddressFamily() -> KafkaSharedConfiguration.IPAddressFamily? {
         guard let value = dictionary["broker.address.family"] else {
             return nil
         }
-        return KafkaConfigEnums.IPAddressFamily(description: value)
+        return KafkaSharedConfiguration.IPAddressFamily(description: value)
     }
 
-    func getSecurityProtocol() -> KafkaConfigEnums.SecurityProtocol? {
+    func getSecurityProtocol() -> KafkaSharedConfiguration.SecurityProtocol? {
         guard let value = dictionary["security.protocol"] else {
             return nil
         }
-        return KafkaConfigEnums.SecurityProtocol(description: value)
+        return KafkaSharedConfiguration.SecurityProtocol(description: value)
     }
 
-    func getSASLMechanism() -> KafkaConfigEnums.SASLMechanism? {
+    func getSASLMechanism() -> KafkaSharedConfiguration.SASLMechanism? {
         guard let value = dictionary["sasl.mechanism"] else {
             return nil
         }
-        return KafkaConfigEnums.SASLMechanism(description: value)
+        return KafkaSharedConfiguration.SASLMechanism(description: value)
     }
 }

@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 /// Used to configure new topics created by the ``KafkaProducer``.
-public struct KafkaTopicConfig: Hashable, Equatable, StringDictionaryRepresentable {
+public struct KafkaTopicConfig: Hashable, Equatable {
     var dictionary: [String: String] = [:]
 
     /// This field indicates the number of acknowledgements the leader broker must receive from ISR brokers before responding to the request: 0=Broker does not send any response/ack to client, -1 or all=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
@@ -35,13 +35,13 @@ public struct KafkaTopicConfig: Hashable, Equatable, StringDictionaryRepresentab
     }
 
     /// Paritioner. See ``ConfigEnums/Partitioner`` for more information.
-    public var partitioner: KafkaConfigEnums.Partitioner {
+    public var partitioner: KafkaSharedConfiguration.Partitioner {
         get { self.getPartitioner() ?? .consistentRandom }
         set { self.dictionary["partitioner"] = newValue.description }
     }
 
     /// Compression codec to use for compressing message sets.
-    public var compressionCodec: KafkaConfigEnums.CompressionCodec {
+    public var compressionCodec: KafkaSharedConfiguration.CompressionCodec {
         get { self.getCompressionCodec() ?? .inherit }
         set { self.dictionary["compression.codec"] = newValue.description }
     }
@@ -56,8 +56,8 @@ public struct KafkaTopicConfig: Hashable, Equatable, StringDictionaryRepresentab
         acks: Int = -1,
         requestTimeoutMs: UInt = 30000,
         messageTimeoutMs: UInt = 300_000,
-        partitioner: KafkaConfigEnums.Partitioner = .consistentRandom,
-        compressionCodec: KafkaConfigEnums.CompressionCodec = .inherit,
+        partitioner: KafkaSharedConfiguration.Partitioner = .consistentRandom,
+        compressionCodec: KafkaSharedConfiguration.CompressionCodec = .inherit,
         compressionLevel: Int = -1
     ) {
         self.acks = acks
@@ -70,24 +70,24 @@ public struct KafkaTopicConfig: Hashable, Equatable, StringDictionaryRepresentab
 
     // MARK: - Helpers
 
-    func getPartitioner() -> KafkaConfigEnums.Partitioner? {
+    func getPartitioner() -> KafkaSharedConfiguration.Partitioner? {
         guard let value = dictionary["partitioner"] else {
             return nil
         }
-        return KafkaConfigEnums.Partitioner(description: value)
+        return KafkaSharedConfiguration.Partitioner(description: value)
     }
 
-    func getCompressionCodec() -> KafkaConfigEnums.CompressionCodec? {
+    func getCompressionCodec() -> KafkaSharedConfiguration.CompressionCodec? {
         guard let value = dictionary["compression.codec"] else {
             return nil
         }
-        return KafkaConfigEnums.CompressionCodec(description: value)
+        return KafkaSharedConfiguration.CompressionCodec(description: value)
     }
 }
 
-// MARK: - KafkaConfigEnums + Additions
+// MARK: - KafkaSharedConfiguration + Additions
 
-extension KafkaConfigEnums {
+extension KafkaSharedConfiguration {
     /// Partitioner. Computes the partition that a message is stored in.
     public struct Partitioner: Hashable, Equatable, CustomStringConvertible {
         public let description: String
