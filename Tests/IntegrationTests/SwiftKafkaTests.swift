@@ -53,13 +53,13 @@ final class SwiftKafkaTests: XCTestCase {
         )
 
         // TODO: ok to block here? How to make setup async?
-        let client = try KafkaClient(type: .consumer, configDictionary: consumerConfig.dictionary, logger: .kafkaTest)
+        let client = try RDKafka.createClient(type: .consumer, configDictionary: self.consumerConfig.dictionary, logger: .kafkaTest)
         self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
     }
 
     override func tearDownWithError() throws {
         // TODO: ok to block here? Problem: Tests may finish before topic is deleted
-        let client = try KafkaClient(type: .consumer, configDictionary: consumerConfig.dictionary, logger: .kafkaTest)
+        let client = try RDKafka.createClient(type: .consumer, configDictionary: self.consumerConfig.dictionary, logger: .kafkaTest)
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
 
         self.bootstrapServer = nil

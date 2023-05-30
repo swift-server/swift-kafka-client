@@ -95,7 +95,7 @@ public final class KafkaConsumer {
     ) throws {
         self.config = config
         self.logger = logger
-        self.client = try KafkaClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)
+        self.client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)
 
         self.subscribedTopicsPointer = rd_kafka_topic_partition_list_new(1)
 

@@ -120,7 +120,7 @@ public actor KafkaProducer {
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
-        self.client = try KafkaClient(
+        self.client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
             callback: self.deliveryReportCallback,
