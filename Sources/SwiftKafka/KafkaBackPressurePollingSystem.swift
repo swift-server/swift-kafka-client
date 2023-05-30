@@ -28,22 +28,18 @@ final class KafkaBackPressurePollingSystem {
     typealias Producer = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>
 
     /// The state machine that manages the system's state transitions.
-    let stateMachine: StateMachine
-
-    // TODO: wrapped values are non-sendable
-    private let _client: NIOLockedValueBox<KafkaClient?>
-    private let _sequenceSource: NIOLockedValueBox<Producer.Source?>
+    let stateMachineLock: NIOLockedValueBox<StateMachine>
 
     /// The ``KafkaClient`` used for doing the actual polling.
     var client: KafkaClient? {
         get {
-            self._client.withLockedValue {
-                return $0
+            self.stateMachineLock.withLockedValue { stateMachine in
+                return stateMachine.client
             }
         }
         set {
-            self._client.withLockedValue {
-                $0 = newValue
+            self.stateMachineLock.withLockedValue { stateMachine in
+                stateMachine.client = newValue
             }
         }
     }
@@ -51,60 +47,62 @@ final class KafkaBackPressurePollingSystem {
     /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
     var sequenceSource: Producer.Source? {
         get {
-            self._sequenceSource.withLockedValue {
-                return $0
+            self.stateMachineLock.withLockedValue { stateMachine in
+                return stateMachine.sequenceSource
             }
         }
         set {
-            self._sequenceSource.withLockedValue {
-                $0 = newValue
+            self.stateMachineLock.withLockedValue { stateMachine in
+                stateMachine.sequenceSource = newValue
             }
         }
     }
 
+    /// A logger.
     private let logger: Logger
 
     /// Initializes the ``KafkaBackPressurePollingSystem``.
     ///
     /// - Parameter logger: The logger to be used for logging.
     init(logger: Logger) {
-        self.stateMachine = StateMachine()
+        self.stateMachineLock = NIOLockedValueBox(StateMachine())
         self.logger = logger
-
-        self._client = NIOLockedValueBox(nil)
-        self._sequenceSource = NIOLockedValueBox(nil)
     }
 
     /// Runs the poll loop with the specified poll interval.
     ///
-    /// - Parameter pollIntervalNanos: The poll interval in nanoseconds.
+    /// - Parameter pollInterval: The desired time interval between two consecutive polls.
     /// - Returns: An awaitable task representing the execution of the poll loop.
-    func run(pollIntervalNanos: UInt64) async {
+    func run(pollInterval: Duration) async {
         actionLoop: while true {
-            let action = self.stateMachine.nextPollLoopAction()
+            let action = self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
 
             switch action {
-            case .poll:
-                self.client?.withKafkaHandlePointer { handle in
+            case .pollAndSleep(let client):
+                client?.withKafkaHandlePointer { handle in
                     rd_kafka_poll(handle, 0)
                 }
-                try? await Task.sleep(nanoseconds: pollIntervalNanos)
+                do {
+                    try await Task.sleep(for: pollInterval)
+                } catch {
+                    self.stateMachineLock.withLockedValue { $0.shutDown() }
+                    break actionLoop
+                }
             case .suspendPollLoop:
                 await withTaskCancellationHandler {
                     await withCheckedContinuation { continuation in
-                        self.stateMachine.eventTriggered(.suspendLoop(continuation))
+                        self.stateMachineLock.withLockedValue { $0.suspendLoop(continuation: continuation) }
                     }
                 } onCancel: {
-                    self.stateMachine.eventTriggered(.loopSuspensionCancelled)
+                    self.stateMachineLock.withLockedValue { $0.shutDown() }
                 }
             case .shutdownPollLoop:
-                self.stateMachine.eventTriggered(.shutdown)
+                self.stateMachineLock.withLockedValue { $0.shutDown() }
                 break actionLoop
             }
         }
     }
 
-    // TODO: Race between poll loop and delivery report callback?
     /// The delivery report callback function that handles acknowledged messages.
     private(set) lazy var deliveryReportCallback: (UnsafePointer<rd_kafka_message_t>?) -> Void = { messagePointer in
         guard let messagePointer = messagePointer else {
@@ -125,19 +123,18 @@ final class KafkaBackPressurePollingSystem {
             messageResult = .failure(error)
         }
 
-        guard let yieldResult = self.sequenceSource?.yield(messageResult) else {
-            fatalError("\(#function) requires the sequenceSource variable to be non-nil")
-        }
 
-        switch yieldResult {
-        case .produceMore:
-            self.stateMachine.eventTriggered(.produceMore)
-        case .stopProducing:
-            self.stateMachine.eventTriggered(.stopProducing)
-        case .dropped:
-            self.stateMachine.eventTriggered(.shutdown)
+        self.stateMachineLock.withLockedValue { stateMachine in
+            let yieldResult = stateMachine.yield(messageResult)
+            switch yieldResult {
+            case .produceMore:
+                stateMachine.produceMore()
+            case .stopProducing:
+                stateMachine.stopProducing()
+            case .dropped:
+                stateMachine.shutDown()
+            }
         }
-
         // The messagePointer is automatically destroyed by librdkafka
         // For safety reasons, we only use it inside of this closure
     }
@@ -145,11 +142,11 @@ final class KafkaBackPressurePollingSystem {
 
 extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        self.stateMachine.eventTriggered(.produceMore)
+        self.stateMachineLock.withLockedValue { $0.produceMore() }
     }
 
     func didTerminate() {
-        self.stateMachine.eventTriggered(.shutdown)
+        self.stateMachineLock.withLockedValue { $0.shutDown() }
     }
 }
 
@@ -157,16 +154,12 @@ extension KafkaBackPressurePollingSystem {
     // TODO: test state machine
 
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
-    struct StateMachine {
-        /// The possible actions for the poll loop.
-        enum PollLoopAction {
-            /// Ask `librdkakfa` to receive new message acknowledgements through.
-            case poll
-            /// Suspend the poll loop.
-            case suspendPollLoop
-            /// Shutdown the poll loop.
-            case shutdownPollLoop
-        }
+    struct StateMachine: Sendable {
+
+        /// The ``KafkaClient`` used for doing the actual polling.
+        var client: KafkaClient?
+        /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
+        var sequenceSource: Producer.Source?
 
         /// The events that can be triggered by the ``KafkaBackPressurePollingSystem``.
         enum Event {
@@ -196,79 +189,103 @@ extension KafkaBackPressurePollingSystem {
             /// of `produceMore()` to continue producing messages.
             case loopSuspended(CheckedContinuation<Void, Never>)
             /// The system is shut down.
-            case shutDown
+            case finished
         }
 
         /// The current state of the state machine.
-        let state = NIOLockedValueBox(State.initial)
+        var state = State.initial
+
+        /// The possible actions for the poll loop.
+        enum PollLoopAction {
+            /// Ask `librdkakfa` to receive new message acknowledgements at a given poll interval.
+            case pollAndSleep(KafkaClient?)
+            /// Suspend the poll loop.
+            case suspendPollLoop
+            /// Shutdown the poll loop.
+            case shutdownPollLoop
+        }
 
         /// Determines the next action to be taken in the poll loop based on the current state.
         ///
         /// - Returns: The next action for the poll loop.
         func nextPollLoopAction() -> PollLoopAction {
-            self.state.withLockedValue {
-                switch $0 {
-                case .initial, .producing:
-                    return .poll
-                case .suspended:
-                    // We were asked to stop producing,
-                    // but the poll loop is still running.
-                    // Trigger the poll loop to suspend.
-                    return .suspendPollLoop
-                case .loopSuspended:
-                    fatalError("Illegal state: cannot invoke \(#function) when poll loop is suspended")
-                case .shutDown:
-                    return .shutdownPollLoop
-                }
+            switch self.state {
+            case .initial, .producing:
+                return .pollAndSleep(self.client)
+            case .suspended:
+                // We were asked to stop producing,
+                // but the poll loop is still running.
+                // Trigger the poll loop to suspend.
+                return .suspendPollLoop
+            case .loopSuspended:
+                fatalError("Illegal state: cannot invoke \(#function) when poll loop is suspended")
+            case .finished:
+                return .shutdownPollLoop
             }
         }
 
-        /// Triggers an event in the state machine, causing a state transition.
-        ///
-        /// - Parameter event: The event to be triggered.
-        func eventTriggered(_ event: Event) {
-            self.state.withLockedValue { state in
-                switch (event, state) {
-                case (_, .shutDown):
-                    return
-
-                case (.produceMore, .initial):
-                    state = .producing
-                case (.produceMore, .producing):
-                    break // Do nothing.
-                case (.produceMore, .loopSuspended(let continuation)):
-                    continuation.resume()
-                    state = .producing
-
-                case (.stopProducing, .producing):
-                    state = .suspended
-
-                case (.suspendLoop(let continuation), .initial):
-                    state = .loopSuspended(continuation)
-                case (.suspendLoop(let continuation), .producing):
-                    state = .loopSuspended(continuation)
-                case (.suspendLoop(let continuation), .suspended):
-                    // .stopProducing has triggered the .suspended state sometime before.
-                    // This has in turn triggered the loop to suspend itself.
-                    state = .loopSuspended(continuation)
-
-                case (.loopSuspensionCancelled, .loopSuspended(let continuation)):
-                    continuation.resume() // Clean up continuation
-                    state = .suspended
-
-                case (_, .suspended):
-                    break // Do nothing. We are waiting for .loopSuspened to be triggered.
-
-                case (.shutdown, .loopSuspended(let continuation)):
-                    continuation.resume() // Clean up continuation
-                    state = .shutDown
-                case (.shutdown, _):
-                    state = .shutDown
-
-                default:
-                    fatalError("\(event) is not supported in state \(state)")
-                }
+        /// Our downstream consumer allowed us to produce more elements.
+        mutating func produceMore() {
+            switch self.state {
+            case .finished, .producing, .suspended:
+                return
+            case .loopSuspended(let continuation):
+                continuation.resume()
+                fallthrough
+            case .initial:
+                self.state = .producing
             }
+        }
+
+        /// Our downstream consumer asked us to stop producing new elements.
+        mutating func stopProducing() {
+            switch self.state {
+            case .finished, .suspended:
+                return
+            case .producing:
+                self.state = .suspended
+            default:
+                fatalError("\(#function) is not supported in state \(self.state)")
+            }
+        }
+
+        /// Suspend the poll loop.
+        ///
+        /// - Parameter continuation: The continuation that will be resumed once we are allowed to produce again.
+        /// After resuming the continuation, our poll loop will start running again.
+        mutating func suspendLoop(continuation: CheckedContinuation<Void, Never>) {
+            switch self.state {
+            case .finished:
+                return
+            case .initial, .producing, .suspended:
+                self.state = .loopSuspended(continuation)
+            default:
+                fatalError("\(#function) is not supported in state \(self.state)")
+            }
+        }
+
+        /// Shut down the state machine and finish producing elements.
+        mutating func shutDown() {
+            self.sequenceSource?.finish()
+
+            switch self.state {
+            case .finished:
+                return
+            case .loopSuspended(let continuation):
+                continuation.resume()
+                fallthrough
+            default:
+                self.sequenceSource?.finish()
+                self.state = .finished
+            }
+        }
+
+        /// Yields a new elements to the ``NIOAsyncSequenceProducer``.
+        fileprivate func yield(_ element: Element) -> Producer.Source.YieldResult {
+            guard let source = self.sequenceSource else {
+                fatalError("\(#function) requires the sequenceSource variable to be non-nil")
+            }
+            return source.yield(element)
         }
     }
 }

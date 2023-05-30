@@ -124,9 +124,9 @@ public actor KafkaProducer {
             logger: self.logger
         )
 
-        // TODO: expose run to user
+        // TODO: expose run to user?
         self.runTask = Task { [pollingSystem] in
-            await pollingSystem.run(pollIntervalNanos: 100 * 1_000_000)
+            await pollingSystem.run(pollInterval: .milliseconds(100))
         }
 
         self.pollingSystem.client = self.client
