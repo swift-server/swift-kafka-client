@@ -123,7 +123,6 @@ final class KafkaBackPressurePollingSystem {
             messageResult = .failure(error)
         }
 
-
         self.stateMachineLock.withLockedValue { stateMachine in
             let yieldResult = stateMachine.yield(messageResult)
             switch yieldResult {
@@ -155,7 +154,6 @@ extension KafkaBackPressurePollingSystem {
 
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine: Sendable {
-
         /// The ``KafkaClient`` used for doing the actual polling.
         var client: KafkaClient?
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
