@@ -182,12 +182,9 @@ extension KafkaBackPressurePollingSystem {
             case initial
             /// The system up and producing acknowledgement messages.
             case producing
-            /// We were asked to stop producing messages. However we still wait for the
-            /// poll loop to be suspended.
-            case suspended
             /// The pool loop is currently suspended and we are waiting for an invocation
             /// of `produceMore()` to continue producing messages.
-            case loopSuspended(CheckedContinuation<Void, Never>)
+            case stopProducing(CheckedContinuation<Void, Never>?)
             /// The system is shut down.
             case finished
         }
@@ -212,13 +209,11 @@ extension KafkaBackPressurePollingSystem {
             switch self.state {
             case .initial, .producing:
                 return .pollAndSleep(self.client)
-            case .suspended:
+            case .stopProducing:
                 // We were asked to stop producing,
                 // but the poll loop is still running.
                 // Trigger the poll loop to suspend.
                 return .suspendPollLoop
-            case .loopSuspended:
-                fatalError("Illegal state: cannot invoke \(#function) when poll loop is suspended")
             case .finished:
                 return .shutdownPollLoop
             }
@@ -227,10 +222,10 @@ extension KafkaBackPressurePollingSystem {
         /// Our downstream consumer allowed us to produce more elements.
         mutating func produceMore() {
             switch self.state {
-            case .finished, .producing, .suspended:
+            case .finished, .producing:
                 return
-            case .loopSuspended(let continuation):
-                continuation.resume()
+            case .stopProducing(let continuation):
+                continuation?.resume()
                 fallthrough
             case .initial:
                 self.state = .producing
@@ -240,10 +235,10 @@ extension KafkaBackPressurePollingSystem {
         /// Our downstream consumer asked us to stop producing new elements.
         mutating func stopProducing() {
             switch self.state {
-            case .finished, .suspended:
+            case .finished, .stopProducing:
                 return
             case .producing:
-                self.state = .suspended
+                self.state = .stopProducing(nil)
             default:
                 fatalError("\(#function) is not supported in state \(self.state)")
             }
@@ -257,10 +252,10 @@ extension KafkaBackPressurePollingSystem {
             switch self.state {
             case .finished:
                 return
-            case .initial, .producing, .suspended:
-                self.state = .loopSuspended(continuation)
-            default:
-                fatalError("\(#function) is not supported in state \(self.state)")
+            case .stopProducing(let existingContinuation) where existingContinuation == nil:
+                fatalError("Created leaking continuation")
+            case .initial, .producing, .stopProducing:
+                self.state = .stopProducing(continuation)
             }
         }
 
@@ -271,8 +266,8 @@ extension KafkaBackPressurePollingSystem {
             switch self.state {
             case .finished:
                 return
-            case .loopSuspended(let continuation):
-                continuation.resume()
+            case .stopProducing(let continuation):
+                continuation?.resume()
                 fallthrough
             default:
                 self.sequenceSource?.finish()
