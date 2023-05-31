@@ -17,9 +17,6 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
-// TODO: write test for evaluating right state transitions (check old version of state machine for that)
-// TODO: test abrupt run task shutdown -> cancellation handler
-
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
 final class KafkaBackPressurePollingSystem {
     /// The element type for the system, representing either a successful ``KafkaAcknowledgedMessage`` or a ``KafkaAcknowledgedMessageError``.
@@ -136,12 +133,10 @@ extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
 }
 
 extension KafkaBackPressurePollingSystem {
-    // TODO: test state machine
-
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine: Sendable {
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
-        var sequenceSource: Producer.Source?
+        var sequenceSource: Producer.Source? // TODO: make sendable?
 
         /// The events that can be triggered by the ``KafkaBackPressurePollingSystem``.
         enum Event {
