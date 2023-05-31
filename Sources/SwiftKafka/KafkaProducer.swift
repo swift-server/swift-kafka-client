@@ -69,8 +69,8 @@ public actor KafkaProducer {
     private var client: KafkaClient
     /// Mechanism that polls the Kafka cluster for updates periodically.
     private let pollingSystem: KafkaBackPressurePollingSystem
-    // TODO: docc
-    private var runTask: Task<Void, Never>?
+    /// Task that polls `librdkafka` for new acknowledgements at regular intervals.
+    private var pollTask: Task<Void, Never>?
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
@@ -123,8 +123,7 @@ public actor KafkaProducer {
             logger: self.logger
         )
 
-        // TODO: expose run to user?
-        self.runTask = Task { [pollingSystem] in
+        self.pollTask = Task { [pollingSystem] in
             await pollingSystem.run(pollInterval: .milliseconds(100))
         }
 
@@ -167,8 +166,7 @@ public actor KafkaProducer {
             rd_kafka_topic_destroy(topicHandle)
         }
 
-        // TODO: kill PollingSystem
-        self.runTask?.cancel()
+        self.pollTask?.cancel()
 
         self.state = .shutDown
     }

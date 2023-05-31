@@ -27,7 +27,7 @@ final class KafkaBackPressurePollingSystem {
     /// The state machine that manages the system's state transitions.
     let stateMachineLock: NIOLockedValueBox<StateMachine>
 
-    // TODO: docc
+    /// Closure that takes care of polling `librdkafka` for new messages.
     var pollClosure: (() -> Void)?
     /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
     var sequenceSource: Producer.Source? {
