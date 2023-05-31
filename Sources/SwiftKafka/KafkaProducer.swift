@@ -65,9 +65,8 @@ public actor KafkaProducer {
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
     private var topicHandles: [String: OpaquePointer]
 
-    // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
     /// Used for handling the connection to the Kafka cluster.
-    private var client: KafkaClient!
+    private var client: KafkaClient
     /// Mechanism that polls the Kafka cluster for updates periodically.
     private let pollingSystem: KafkaBackPressurePollingSystem
     // TODO: docc
@@ -129,8 +128,15 @@ public actor KafkaProducer {
             await pollingSystem.run(pollInterval: .milliseconds(100))
         }
 
-        self.pollingSystem.client = self.client
-        self.pollingSystem.sequenceSource = self.acknowlegdementsSource
+        self.pollingSystem.sequenceSource = acknowlegdementsSource
+        self.pollingSystem.pollClosure = pollClosure
+    }
+
+    private(set) lazy var pollClosure: () -> Void = { [client] in
+        client.withKafkaHandlePointer { handle in
+            rd_kafka_poll(handle, 0)
+        }
+        return
     }
 
     /// Method to shutdown the ``KafkaProducer``.

@@ -17,7 +17,7 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
-// TODO: write test for evaluating right state transitions
+// TODO: write test for evaluating right state transitions (check old version of state machine for that)
 // TODO: test abrupt run task shutdown -> cancellation handler
 
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
@@ -30,20 +30,8 @@ final class KafkaBackPressurePollingSystem {
     /// The state machine that manages the system's state transitions.
     let stateMachineLock: NIOLockedValueBox<StateMachine>
 
-    /// The ``KafkaClient`` used for doing the actual polling.
-    var client: KafkaClient? {
-        get {
-            self.stateMachineLock.withLockedValue { stateMachine in
-                return stateMachine.client
-            }
-        }
-        set {
-            self.stateMachineLock.withLockedValue { stateMachine in
-                stateMachine.client = newValue
-            }
-        }
-    }
-
+    // TODO: docc
+    var pollClosure: (() -> Void)?
     /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
     var sequenceSource: Producer.Source? {
         get {
@@ -78,10 +66,8 @@ final class KafkaBackPressurePollingSystem {
             let action = self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
 
             switch action {
-            case .pollAndSleep(let client):
-                client?.withKafkaHandlePointer { handle in
-                    rd_kafka_poll(handle, 0)
-                }
+            case .pollAndSleep:
+                self.pollClosure?()
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
@@ -154,8 +140,6 @@ extension KafkaBackPressurePollingSystem {
 
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine: Sendable {
-        /// The ``KafkaClient`` used for doing the actual polling.
-        var client: KafkaClient?
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
         var sequenceSource: Producer.Source?
 
@@ -193,7 +177,7 @@ extension KafkaBackPressurePollingSystem {
         /// The possible actions for the poll loop.
         enum PollLoopAction {
             /// Ask `librdkakfa` to receive new message acknowledgements at a given poll interval.
-            case pollAndSleep(KafkaClient?)
+            case pollAndSleep
             /// Suspend the poll loop.
             case suspendPollLoop
             /// Shutdown the poll loop.
@@ -206,7 +190,7 @@ extension KafkaBackPressurePollingSystem {
         func nextPollLoopAction() -> PollLoopAction {
             switch self.state {
             case .initial, .producing:
-                return .pollAndSleep(self.client)
+                return .pollAndSleep
             case .stopProducing:
                 // We were asked to stop producing,
                 // but the poll loop is still running.
