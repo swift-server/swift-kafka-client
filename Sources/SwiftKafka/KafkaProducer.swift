@@ -128,8 +128,8 @@ public actor KafkaProducer {
             await pollingSystem.run(pollInterval: .milliseconds(100))
         }
 
-        self.pollingSystem.sequenceSource = acknowlegdementsSource
-        self.pollingSystem.pollClosure = pollClosure
+        self.pollingSystem.sequenceSource = self.acknowlegdementsSource
+        self.pollingSystem.pollClosure = self.pollClosure
     }
 
     private(set) lazy var pollClosure: () -> Void = { [client] in

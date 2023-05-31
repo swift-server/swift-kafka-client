@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import SwiftKafka
 import NIOCore
+@testable import SwiftKafka
 import XCTest
 
 final class KafkaBackPressurePollingSystemTests: XCTestCase {
@@ -87,7 +87,6 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
     }
 }
 
-
 // MARK: - KafkaBackPressurePollingSystem + Extensions
 
 /// These testing-only methods provide more readable access to the underlying state machine's methods.
@@ -95,6 +94,7 @@ extension KafkaBackPressurePollingSystem {
     func nextPollLoopAction() -> KafkaBackPressurePollingSystem.StateMachine.PollLoopAction {
         return self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
     }
+
     func produceMore() {
         stateMachineLock.withLockedValue { $0.produceMore() }
     }
