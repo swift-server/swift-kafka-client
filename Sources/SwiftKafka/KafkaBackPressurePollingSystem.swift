@@ -230,11 +230,11 @@ extension KafkaBackPressurePollingSystem {
         ///
         /// - Parameter continuation: The continuation that will be resumed once we are allowed to produce again.
         /// After resuming the continuation, our poll loop will start running again.
-        mutating func suspendLoop(continuation: CheckedContinuation<Void, Never>) {
+        fileprivate mutating func suspendLoop(continuation: CheckedContinuation<Void, Never>) {
             switch self.state {
             case .finished:
                 return
-            case .stopProducing(let existingContinuation) where existingContinuation == nil:
+            case .stopProducing(let existingContinuation) where existingContinuation != nil:
                 fatalError("Created leaking continuation")
             case .initial, .producing, .stopProducing:
                 self.state = .stopProducing(continuation)
