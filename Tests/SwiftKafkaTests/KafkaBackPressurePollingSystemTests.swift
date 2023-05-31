@@ -19,13 +19,12 @@ import XCTest
 final class KafkaBackPressurePollingSystemTests: XCTestCase {
     typealias TestStateMachine = KafkaBackPressurePollingSystem.StateMachine
 
-    func testBackPressure() {
+    func testBackPressure() async throws {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
         let sut = KafkaBackPressurePollingSystem(logger: .kafkaTest)
         sut.pollClosure = {
-            XCTAssertNotNil(expectation, "Unexpected invocation of poll closure")
             expectation?.fulfill()
         }
 
@@ -38,7 +37,6 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
         XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
 
-        expectation = nil
         sut.stopProducing()
         XCTAssertEqual(TestStateMachine.PollLoopAction.suspendPollLoop, sut.nextPollLoopAction())
 
@@ -47,20 +45,18 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
         XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
 
-        expectation = nil
         sut.shutDown()
         XCTAssertEqual(TestStateMachine.PollLoopAction.shutdownPollLoop, sut.nextPollLoopAction())
 
         runTask.cancel()
     }
 
-    func testRunTaskCancellationShutsDownStateMachine() async throws {
+    func testNoPollsAfterPollLoopSuspension() async throws {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
         let sut = KafkaBackPressurePollingSystem(logger: .kafkaTest)
         sut.pollClosure = {
-            XCTAssertNotNil(expectation, "Unexpected invocation of poll closure")
             expectation?.fulfill()
         }
 
@@ -74,7 +70,37 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
 
         // We're definitely running now. Now suspend the poll loop.
-        expectation = nil
+        sut.stopProducing()
+        XCTAssertEqual(TestStateMachine.PollLoopAction.suspendPollLoop, sut.nextPollLoopAction())
+        // We change the poll closure so that our test fails when the poll closure is invoked.
+        sut.pollClosure = {
+            XCTFail("Poll loop still running after stopProducing() has been invoked")
+        }
+
+        try await Task.sleep(for: .seconds(5))
+
+        runTask.cancel()
+    }
+
+    func testRunTaskCancellationShutsDownStateMachine() async throws {
+        let pollInterval = Duration.milliseconds(100)
+
+        var expectation: XCTestExpectation?
+        let sut = KafkaBackPressurePollingSystem(logger: .kafkaTest)
+        sut.pollClosure = {
+            expectation?.fulfill()
+        }
+
+        let runTask = Task {
+            await sut.run(pollInterval: pollInterval)
+        }
+
+        expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
+        sut.produceMore()
+        XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
+        XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
+
+        // We're definitely running now. Now suspend the poll loop.
         sut.stopProducing()
         XCTAssertEqual(TestStateMachine.PollLoopAction.suspendPollLoop, sut.nextPollLoopAction())
 
