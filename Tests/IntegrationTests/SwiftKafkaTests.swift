@@ -34,31 +34,32 @@ final class SwiftKafkaTests: XCTestCase {
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
     var bootstrapServer: String!
-    var producerConfig: KafkaConfig!
-    var consumerConfig: KafkaConfig!
+    var producerConfig: KafkaProducerConfig!
+    var consumerConfig: KafkaConsumerConfig!
     var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
         self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
 
-        self.producerConfig = KafkaConfig()
-        try self.producerConfig.set(self.bootstrapServer, forKey: "bootstrap.servers")
-        try self.producerConfig.set("v4", forKey: "broker.address.family")
+        self.producerConfig = KafkaProducerConfig(
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
 
-        self.consumerConfig = KafkaConfig()
-        try self.consumerConfig.set(self.bootstrapServer, forKey: "bootstrap.servers")
-        try self.consumerConfig.set("v4", forKey: "broker.address.family")
-        // Always read topics from beginning
-        try self.consumerConfig.set("beginning", forKey: "auto.offset.reset")
+        self.consumerConfig = KafkaConsumerConfig(
+            autoOffsetReset: .beginning, // Always read topics from beginning
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
 
         // TODO: ok to block here? How to make setup async?
-        let client = try KafkaClient(type: .consumer, config: consumerConfig, logger: .kafkaTest)
+        let client = try RDKafka.createClient(type: .consumer, configDictionary: self.consumerConfig.dictionary, logger: .kafkaTest)
         self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
     }
 
     override func tearDownWithError() throws {
         // TODO: ok to block here? Problem: Tests may finish before topic is deleted
-        let client = try KafkaClient(type: .consumer, config: consumerConfig, logger: .kafkaTest)
+        let client = try RDKafka.createClient(type: .consumer, configDictionary: self.consumerConfig.dictionary, logger: .kafkaTest)
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
 
         self.bootstrapServer = nil
@@ -69,9 +70,10 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
+
+        self.consumerConfig.groupID = "subscription-test-group-id"
         let consumer = try KafkaConsumer(
             topics: [uniqueTestTopic],
-            groupID: "subscription-test-group-id",
             config: consumerConfig,
             logger: .kafkaTest
         )
@@ -139,12 +141,12 @@ final class SwiftKafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithCommitSync() async throws {
-        try self.consumerConfig.set("false", forKey: "enable.auto.commit")
-
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
+
+        self.consumerConfig.groupID = "commit-sync-test-group-id"
+        self.consumerConfig.enableAutoCommit = false
         let consumer = try KafkaConsumer(
             topics: [uniqueTestTopic],
-            groupID: "commit-sync-test-group-id",
             config: consumerConfig,
             logger: .kafkaTest
         )

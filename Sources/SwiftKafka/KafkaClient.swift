@@ -21,47 +21,21 @@ final class KafkaClient {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
+    /// Handle for the C library's Kafka instance.
+    private let kafkaHandle: OpaquePointer
+    /// References the opaque object passed to the config to ensure ARC retains it as long as the client exists.
+    private let opaque: RDKafkaConfig.CapturedClosure?
     /// A logger.
     private let logger: Logger
 
-    /// A client is either a `.producer` or a `.consumer`.
-    private let clientType: rd_kafka_type_t
-    /// The configuration object of the client.
-    private let config: KafkaConfig
-    /// Handle for the C library's Kafka instance.
-    private let kafkaHandle: OpaquePointer
-
-    /// Determines if client is a producer or a consumer.
-    enum `Type` {
-        case producer
-        case consumer
-    }
-
-    init(type: Type, config: KafkaConfig, logger: Logger) throws {
+    init(
+        kafkaHandle: OpaquePointer,
+        opaque: RDKafkaConfig.CapturedClosure?,
+        logger: Logger
+    ) {
+        self.kafkaHandle = kafkaHandle
+        self.opaque = opaque
         self.logger = logger
-        self.clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
-        self.config = config
-
-        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
-        defer { errorChars.deallocate() }
-
-        self.kafkaHandle = try self.config.withDuplicatePointer { [clientType] duplicateConfig in
-            // Duplicate because rd_kafka_new takes ownership of the pointer and frees it upon success.
-            guard let handle = rd_kafka_new(
-                clientType,
-                duplicateConfig,
-                errorChars,
-                KafkaClient.stringSize
-            ) else {
-                // rd_kafka_new only frees the duplicate pointer upon success.
-                rd_kafka_conf_destroy(duplicateConfig)
-
-                let errorString = String(cString: errorChars)
-                throw KafkaError.client(reason: errorString)
-            }
-
-            return handle
-        }
     }
 
     deinit {
