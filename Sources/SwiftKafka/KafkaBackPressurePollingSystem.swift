@@ -122,7 +122,12 @@ final class KafkaBackPressurePollingSystem {
     /// - Parameter pollInterval: The desired time interval between two consecutive polls.
     /// - Returns: An awaitable task representing the execution of the poll loop.
     func run(pollInterval: Duration) async {
-        actionLoop: while true {
+        let state = self.stateMachineLock.withLockedValue { $0.state }
+        guard case .initial = state else {
+            fatalError("Poll loop must not be started more than once")
+        }
+
+        while true {
             let action = self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
 
             switch action {
@@ -132,7 +137,7 @@ final class KafkaBackPressurePollingSystem {
                     try await Task.sleep(for: pollInterval)
                 } catch {
                     self.stateMachineLock.withLockedValue { $0.shutDown() }
-                    break actionLoop
+                    return
                 }
             case .suspendPollLoop:
                 await withTaskCancellationHandler {
@@ -144,13 +149,14 @@ final class KafkaBackPressurePollingSystem {
                 }
             case .shutdownPollLoop:
                 self.stateMachineLock.withLockedValue { $0.shutDown() }
-                break actionLoop
+                return
             }
         }
     }
 
     /// The delivery report callback function that handles acknowledged messages.
     private(set) lazy var deliveryReportCallback: (UnsafePointer<rd_kafka_message_t>?) -> Void = { messagePointer in
+        // TODO: message pointer to Acknowledged message conversion at a lower level (e.g. RDKafkaConfig)
         guard let messagePointer = messagePointer else {
             self.logger.error("Could not resolve acknowledged message")
             return
@@ -203,21 +209,6 @@ extension KafkaBackPressurePollingSystem {
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
         var sequenceSource: Producer.Source? // TODO: make sendable
 
-        /// The events that can be triggered by the ``KafkaBackPressurePollingSystem``.
-        enum Event {
-            /// Produce more elements.
-            case produceMore
-            /// Suspend the poll loop until the continuation is resumed.
-            case suspendLoop(CheckedContinuation<Void, Never>)
-            /// Our `Task` was cancelled why we were waiting for the loop to be unsuspended.
-            case loopSuspensionCancelled
-            /// Request to stop producing elements. When this reaches the poll loop it will escalate
-            /// to a full suspension.
-            case stopProducing
-            /// Close the entire ``KafkaBackPressurePollingSystem`` with its poll loop.
-            case shutdown
-        }
-
         /// The possible states of the state machine.
         enum State {
             /// Initial state.
@@ -268,7 +259,7 @@ extension KafkaBackPressurePollingSystem {
                 return
             case .stopProducing(let continuation):
                 continuation?.resume()
-                fallthrough
+                self.state = .producing
             case .initial:
                 self.state = .producing
             }
@@ -279,10 +270,10 @@ extension KafkaBackPressurePollingSystem {
             switch self.state {
             case .finished, .stopProducing:
                 return
+            case .initial:
+                fatalError("\(#function) is not supported in state \(self.state)")
             case .producing:
                 self.state = .stopProducing(nil)
-            default:
-                fatalError("\(#function) is not supported in state \(self.state)")
             }
         }
 
@@ -294,8 +285,8 @@ extension KafkaBackPressurePollingSystem {
             switch self.state {
             case .finished:
                 return
-            case .stopProducing(let existingContinuation) where existingContinuation != nil:
-                fatalError("Created leaking continuation")
+            case .stopProducing(.some):
+                fatalError("Internal state inconsistency. Run loop is running more than once")
             case .initial, .producing, .stopProducing:
                 self.state = .stopProducing(continuation)
             }
@@ -308,10 +299,11 @@ extension KafkaBackPressurePollingSystem {
             switch self.state {
             case .finished:
                 return
+            case .initial, .producing:
+                self.sequenceSource?.finish()
+                self.state = .finished
             case .stopProducing(let continuation):
                 continuation?.resume()
-                fallthrough
-            default:
                 self.sequenceSource?.finish()
                 self.state = .finished
             }
