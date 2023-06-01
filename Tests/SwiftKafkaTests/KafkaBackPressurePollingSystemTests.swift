@@ -23,7 +23,9 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let sut = KafkaBackPressurePollingSystem(logger: .kafkaTest)
+        // TODO: is our delegate produceMore() getting in our way here?
+        // TODO: does this leak anything sequence related? -> sequence needs to be retained, immediate shutdown otherwise
+        let (sut, _) = KafkaBackPressurePollingSystem.createSystemAndSequence(logger: .kafkaTest)
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -55,7 +57,7 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let sut = KafkaBackPressurePollingSystem(logger: .kafkaTest)
+        let (sut, _) = KafkaBackPressurePollingSystem.createSystemAndSequence(logger: .kafkaTest)
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -86,7 +88,7 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let sut = KafkaBackPressurePollingSystem(logger: .kafkaTest)
+        let (sut, _) = KafkaBackPressurePollingSystem.createSystemAndSequence(logger: .kafkaTest)
         sut.pollClosure = {
             expectation?.fulfill()
         }

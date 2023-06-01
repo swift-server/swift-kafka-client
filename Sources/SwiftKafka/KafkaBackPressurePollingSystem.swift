@@ -17,6 +17,28 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
+// TODO: make generic? or move Ack stuff to KafkaProducer?
+/// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
+public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
+    public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>
+    let wrappedSequence: WrappedSequence
+
+    /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
+    public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
+        let wrappedIterator: NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>.AsyncIterator
+
+        public mutating func next() async -> Element? {
+            await self.wrappedIterator.next()
+        }
+    }
+
+    public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
+        return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    }
+}
+
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
 final class KafkaBackPressurePollingSystem {
     /// The element type for the system, representing either a successful ``KafkaAcknowledgedMessage`` or a ``KafkaAcknowledgedMessageError``.
@@ -28,17 +50,15 @@ final class KafkaBackPressurePollingSystem {
     let stateMachineLock: NIOLockedValueBox<StateMachine>
 
     /// Closure that takes care of polling `librdkafka` for new messages.
-    var pollClosure: (() -> Void)?
-    /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
-    var sequenceSource: Producer.Source? {
+    var pollClosure: () -> () {
         get {
             self.stateMachineLock.withLockedValue { stateMachine in
-                return stateMachine.sequenceSource
+                return stateMachine.pollClosure! // TODO: fix
             }
         }
         set {
             self.stateMachineLock.withLockedValue { stateMachine in
-                stateMachine.sequenceSource = newValue
+                stateMachine.pollClosure = newValue
             }
         }
     }
@@ -47,11 +67,54 @@ final class KafkaBackPressurePollingSystem {
     private let logger: Logger
 
     /// Initializes the ``KafkaBackPressurePollingSystem``.
+    /// Private initializer. The ``KafkaBackPressurePollingSystem`` is not supposed to be initialized directly.
+    /// It must rather be initialized using the ``KafkaBackPressurePollingSystem.createSystemAndSequence`` function.
     ///
     /// - Parameter logger: The logger to be used for logging.
-    init(logger: Logger) {
-        self.stateMachineLock = NIOLockedValueBox(StateMachine())
+    private init(
+        logger: Logger
+    ) {
         self.logger = logger
+        self.stateMachineLock = NIOLockedValueBox(StateMachine())
+    }
+
+    /// Factory method creating a ``KafkaBackPressurePollingSystem`` and the ``AsyncSequence`` that receives its messages .
+    /// The caller of this function must retain the sequence in order to receive messages.
+    ///
+    /// - Parameter logger: The logger to be used for logging.
+    /// - Returns: A tuple containing the ``KafkaBackPressurePollingSystem`` and a reference to the ``AcknowledgedMessagesAsyncSequence``.
+    static func createSystemAndSequence(logger: Logger) -> (KafkaBackPressurePollingSystem, AcknowledgedMessagesAsyncSequence) {
+        // TODO: make injectable
+        let backpressureStrategy = AcknowledgedMessagesAsyncSequence.HighLowWatermark(
+            lowWatermark: 5,
+            highWatermark: 10
+        )
+
+        let pollingSystem = KafkaBackPressurePollingSystem(
+            logger: logger
+        )
+
+        // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
+        // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
+        // The source MUST be held by the caller and used to signal new elements or finish.
+        // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
+        // This is due to the fact that deiniting the sequence is used as part of a trigger to
+        // terminate the underlying source.
+        let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+            elementType: Element.self,
+            backPressureStrategy: backpressureStrategy,
+            delegate: pollingSystem
+        )
+
+        pollingSystem.stateMachineLock.withLockedValue { stateMachine in
+            stateMachine.sequenceSource = acknowledgementsSourceAndSequence.source
+        }
+
+        let sequence = AcknowledgedMessagesAsyncSequence(
+            wrappedSequence: acknowledgementsSourceAndSequence.sequence
+        )
+
+        return (pollingSystem, sequence)
     }
 
     /// Runs the poll loop with the specified poll interval.
@@ -64,7 +127,7 @@ final class KafkaBackPressurePollingSystem {
 
             switch action {
             case .pollAndSleep:
-                self.pollClosure?()
+                self.pollClosure()
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
@@ -135,8 +198,10 @@ extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
 extension KafkaBackPressurePollingSystem {
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine: Sendable {
+        /// Closure that takes care of polling `librdkafka` for new messages.
+        var pollClosure: (() -> ())?
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
-        var sequenceSource: Producer.Source? // TODO: make sendable?
+        var sequenceSource: Producer.Source? // TODO: make sendable
 
         /// The events that can be triggered by the ``KafkaBackPressurePollingSystem``.
         enum Event {
