@@ -35,13 +35,13 @@ public struct KafkaTopicConfig: Hashable, Equatable {
     }
 
     /// Paritioner. See ``ConfigEnums/Partitioner`` for more information.
-    public var partitioner: KafkaSharedConfiguration.Partitioner {
+    public var partitioner: ConfigEnums.Partitioner {
         get { self.getPartitioner() ?? .consistentRandom }
         set { self.dictionary["partitioner"] = newValue.description }
     }
 
     /// Compression codec to use for compressing message sets.
-    public var compressionCodec: KafkaSharedConfiguration.CompressionCodec {
+    public var compressionCodec: ConfigEnums.CompressionCodec {
         get { self.getCompressionCodec() ?? .inherit }
         set { self.dictionary["compression.codec"] = newValue.description }
     }
@@ -56,8 +56,8 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         acks: Int = -1,
         requestTimeoutMs: UInt = 30000,
         messageTimeoutMs: UInt = 300_000,
-        partitioner: KafkaSharedConfiguration.Partitioner = .consistentRandom,
-        compressionCodec: KafkaSharedConfiguration.CompressionCodec = .inherit,
+        partitioner: ConfigEnums.Partitioner = .consistentRandom,
+        compressionCodec: ConfigEnums.CompressionCodec = .inherit,
         compressionLevel: Int = -1
     ) {
         self.acks = acks
@@ -70,24 +70,24 @@ public struct KafkaTopicConfig: Hashable, Equatable {
 
     // MARK: - Helpers
 
-    func getPartitioner() -> KafkaSharedConfiguration.Partitioner? {
+    func getPartitioner() -> ConfigEnums.Partitioner? {
         guard let value = dictionary["partitioner"] else {
             return nil
         }
-        return KafkaSharedConfiguration.Partitioner(description: value)
+        return ConfigEnums.Partitioner(description: value)
     }
 
-    func getCompressionCodec() -> KafkaSharedConfiguration.CompressionCodec? {
+    func getCompressionCodec() -> ConfigEnums.CompressionCodec? {
         guard let value = dictionary["compression.codec"] else {
             return nil
         }
-        return KafkaSharedConfiguration.CompressionCodec(description: value)
+        return ConfigEnums.CompressionCodec(description: value)
     }
 }
 
-// MARK: - KafkaSharedConfiguration + Additions
+// MARK: - ConfigEnums + Additions
 
-extension KafkaSharedConfiguration {
+extension ConfigEnums {
     /// Partitioner. Computes the partition that a message is stored in.
     public struct Partitioner: Hashable, Equatable, CustomStringConvertible {
         public let description: String

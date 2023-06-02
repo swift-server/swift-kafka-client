@@ -134,7 +134,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
     }
 
     /// A comma-separated list of debug contexts to enable. Detailed Producer debugging: broker,topic,msg. Consumer: consumer,cgrp,topic,fetch.
-    public var debug: [KafkaSharedConfiguration.DebugOption] {
+    public var debug: [ConfigEnums.DebugOption] {
         get { self.getDebugOptions() }
         set {
             if !newValue.isEmpty {
@@ -192,7 +192,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
     }
 
     /// Allowed broker ``ConfigEnums/IPAddressFamily``.
-    public var brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily {
+    public var brokerAddressFamily: ConfigEnums.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.dictionary["broker.address.family"] = newValue.description }
     }
@@ -210,7 +210,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
     }
 
     /// ``ConfigEnums/SecurityProtocol`` used to communicate with brokers.
-    public var securityProtocol: KafkaSharedConfiguration.SecurityProtocol {
+    public var securityProtocol: ConfigEnums.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.dictionary["security.protocol"] = newValue.description }
     }
@@ -258,7 +258,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
     }
 
     /// SASL mechanism to use for authentication.
-    public var saslMechanism: KafkaSharedConfiguration.SASLMechanism? {
+    public var saslMechanism: ConfigEnums.SASLMechanism? {
         get { self.getSASLMechanism() }
         set {
             if let newValue {
@@ -307,7 +307,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         topicMetadataRefreshSparse: Bool = true,
         topicMetadataPropagationMaxMs: UInt = 30000,
         topicDenylist: [String] = [],
-        debug: [KafkaSharedConfiguration.DebugOption] = [],
+        debug: [ConfigEnums.DebugOption] = [],
         socketTimeoutMs: UInt = 60000,
         socketSendBufferBytes: UInt = 0,
         socketReceiveBufferBytes: UInt = 0,
@@ -316,10 +316,10 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         socketMaxFails: UInt = 1,
         socketConnectionSetupTimeoutMs: UInt = 30000,
         brokerAddressTTL: UInt = 1000,
-        brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily = .any,
+        brokerAddressFamily: ConfigEnums.IPAddressFamily = .any,
         reconnectBackoffMs: UInt = 100,
         reconnectBackoffMaxMs: UInt = 10000,
-        securityProtocol: KafkaSharedConfiguration.SecurityProtocol = .plaintext,
+        securityProtocol: ConfigEnums.SecurityProtocol = .plaintext,
         sslKeyLocation: String = "",
         sslKeyPassword: String = "",
         sslCertificateLocation: String = "",
@@ -327,7 +327,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         sslCRLLocation: String = "",
         sslKeystoreLocation: String = "",
         sslKeystorePassword: String = "",
-        saslMechanism: KafkaSharedConfiguration.SASLMechanism? = nil,
+        saslMechanism: ConfigEnums.SASLMechanism? = nil,
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
@@ -377,32 +377,32 @@ public struct KafkaProducerConfig: Hashable, Equatable {
 
     // MARK: - Helpers
 
-    func getDebugOptions() -> [KafkaSharedConfiguration.DebugOption] {
+    func getDebugOptions() -> [ConfigEnums.DebugOption] {
         guard let options = dictionary["debug"] else {
             return []
         }
         return options.components(separatedBy: ",")
-            .map { KafkaSharedConfiguration.DebugOption(description: $0) }
+            .map { ConfigEnums.DebugOption(description: $0) }
     }
 
-    func getIPAddressFamily() -> KafkaSharedConfiguration.IPAddressFamily? {
+    func getIPAddressFamily() -> ConfigEnums.IPAddressFamily? {
         guard let value = dictionary["broker.address.family"] else {
             return nil
         }
-        return KafkaSharedConfiguration.IPAddressFamily(description: value)
+        return ConfigEnums.IPAddressFamily(description: value)
     }
 
-    func getSecurityProtocol() -> KafkaSharedConfiguration.SecurityProtocol? {
+    func getSecurityProtocol() -> ConfigEnums.SecurityProtocol? {
         guard let value = dictionary["security.protocol"] else {
             return nil
         }
-        return KafkaSharedConfiguration.SecurityProtocol(description: value)
+        return ConfigEnums.SecurityProtocol(description: value)
     }
 
-    func getSASLMechanism() -> KafkaSharedConfiguration.SASLMechanism? {
+    func getSASLMechanism() -> ConfigEnums.SASLMechanism? {
         guard let value = dictionary["sasl.mechanism"] else {
             return nil
         }
-        return KafkaSharedConfiguration.SASLMechanism(description: value)
+        return ConfigEnums.SASLMechanism(description: value)
     }
 }

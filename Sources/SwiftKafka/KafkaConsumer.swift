@@ -89,10 +89,23 @@ public final class KafkaConsumer {
     /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
-    private init(
+    public init(
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
+        var config = config
+
+        switch config.consumptionStrategy._internal {
+        case .partitionBased:
+            // Although an assignment is not related to a consumer group,
+            // librdkafka requires us to set a `group.id`.
+            // This is a known issue:
+            // https://github.com/edenhill/librdkafka/issues/3261
+            config.dictionary["group.id"] = UUID().uuidString
+        case .groupBased(groupID: let groupID, topics: _):
+            config.dictionary["group.id"] = groupID
+        }
+
         self.config = config
         self.logger = logger
         self.client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)
@@ -110,9 +123,16 @@ public final class KafkaConsumer {
 
         self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
 
+        var lowWatermark = 10
+        var highWatermark = 50
+        switch config.backPressureStrategy._internal {
+        case .highLowWatermark(lowWatermark: let low, highWatermark: let high):
+            lowWatermark = low
+            highWatermark = high
+        }
         let backpressureStrategy = ConsumerMessagesAsyncSequence.HighLowWatermark(
-            lowWatermark: 5,
-            highWatermark: 10
+            lowWatermark: lowWatermark,
+            highWatermark: highWatermark
         )
 
         let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate { [weak self] in
@@ -129,57 +149,13 @@ public final class KafkaConsumer {
         self.messages = ConsumerMessagesAsyncSequence(
             wrappedSequence: messagesSourceAndSequence.sequence
         )
-    }
 
-    /// Initialize a new ``KafkaConsumer`` and subscribe to the given list of `topics` as part of
-    /// the consumer group specified in `groupID`.
-    /// - Parameter topics: An array of topic names to subscribe to.
-    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
-    /// - Parameter logger: A logger.
-    /// - Throws: A ``KafkaError`` if the initialization failed.
-    public convenience init(
-        topics: [String],
-        config: KafkaConsumerConfig,
-        logger: Logger
-    ) throws {
-        try self.init(
-            config: config,
-            logger: logger
-        )
-        try self.subscribe(topics: topics)
-    }
-
-    /// Initialize a new ``KafkaConsumer`` and assign it to a specific `partition` of a `topic`.
-    /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
-    /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
-    /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
-    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
-    /// - Parameter logger: A logger.
-    /// - Throws: A ``KafkaError`` if the initialization failed.
-    /// - Note: This consumer ignores the `group.id` property of its `config`.
-    public convenience init(
-        topic: String,
-        partition: KafkaPartition,
-        offset: Int64 = Int64(RD_KAFKA_OFFSET_END),
-        config: KafkaConsumerConfig,
-        logger: Logger
-    ) throws {
-        // Although an assignment is not related to a consumer group,
-        // librdkafka requires us to set a `group.id`.
-        // This is a known issue:
-        // https://github.com/edenhill/librdkafka/issues/3261
-        var config = config
-        config.groupID = UUID().uuidString
-
-        try self.init(
-            config: config,
-            logger: logger
-        )
-        try self.assign(
-            topic: topic,
-            partition: partition,
-            offset: offset
-        )
+        switch config.consumptionStrategy._internal {
+        case .partitionBased(topic: let topic, partition: let partition, offset: let offset):
+            try self.assign(topic: topic, partition: partition, offset: offset)
+        case .groupBased(groupID: _, topics: let topics):
+            try self.subscribe(topics: topics)
+        }
     }
 
     /// Subscribe to the given list of `topics`.

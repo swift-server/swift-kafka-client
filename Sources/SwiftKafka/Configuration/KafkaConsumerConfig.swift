@@ -12,16 +12,26 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
+
 public struct KafkaConsumerConfig: Hashable, Equatable {
+    // MARK: - SwiftKafka-specific Config properties
+
+    /// The backpressure strategy to be used for receiveing message acknowledgements.
+    public var backPressureStrategy: ConfigEnums.BackPressureStrategy = .highLowWatermark(
+        lowWatermark: 10,
+        highWatermark: 50
+    )
+
+    /// The strategy used for consuming messages.
+    /// See ``ConfigEnums/ConsumptionStrategy`` for more information.
+    public var consumptionStrategy: ConfigEnums.ConsumptionStrategy
+
+    // MARK: - librdkafka Config properties
+
     var dictionary: [String: String] = [:]
 
     // MARK: - Consumer-specific Config Properties
-
-    /// Client group id string. All clients sharing the same group.id belong to the same group.
-    public var groupID: String {
-        get { self.dictionary["group.id"] ?? "" }
-        set { self.dictionary["group.id"] = String(newValue) }
-    }
 
     /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
     public var sessionTimeoutMs: UInt {
@@ -54,7 +64,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``ConfigEnums/AutoOffsetReset`` for more information.
-    public var autoOffsetReset: KafkaSharedConfiguration.AutoOffsetReset {
+    public var autoOffsetReset: ConfigEnums.AutoOffsetReset {
         get { self.getAutoOffsetReset() ?? .largest }
         set { self.dictionary["auto.offset.reset"] = newValue.description }
     }
@@ -146,7 +156,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     /// A comma-separated list of debug contexts to enable. Detailed Producer debugging: broker,topic,msg. Consumer: consumer,cgrp,topic,fetch.
-    public var debug: [KafkaSharedConfiguration.DebugOption] {
+    public var debug: [ConfigEnums.DebugOption] {
         get { self.getDebugOptions() }
         set {
             if !newValue.isEmpty {
@@ -204,7 +214,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     /// Allowed broker ``ConfigEnums/IPAddressFamily``.
-    public var brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily {
+    public var brokerAddressFamily: ConfigEnums.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.dictionary["broker.address.family"] = newValue.description }
     }
@@ -222,7 +232,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     /// ``ConfigEnums/SecurityProtocol`` used to communicate with brokers.
-    public var securityProtocol: KafkaSharedConfiguration.SecurityProtocol {
+    public var securityProtocol: ConfigEnums.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.dictionary["security.protocol"] = newValue.description }
     }
@@ -270,7 +280,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     /// SASL mechanism to use for authentication.
-    public var saslMechanism: KafkaSharedConfiguration.SASLMechanism? {
+    public var saslMechanism: ConfigEnums.SASLMechanism? {
         get { self.getSASLMechanism() }
         set {
             if let newValue {
@@ -300,14 +310,15 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     public init(
-        groupID: String = "",
+        consumptionStrategy: ConfigEnums.ConsumptionStrategy,
+        backPressureStrategy: ConfigEnums.BackPressureStrategy = .highLowWatermark(lowWatermark: 10, highWatermark: 50),
         sessionTimeoutMs: UInt = 45000,
         heartbeatIntervalMs: UInt = 3000,
         maxPollInvervalMs: UInt = 300_000,
         enableAutoCommit: Bool = true,
         autoCommitIntervalMs: UInt = 5000,
         enableAutoOffsetStore: Bool = true,
-        autoOffsetReset: KafkaSharedConfiguration.AutoOffsetReset = .largest,
+        autoOffsetReset: ConfigEnums.AutoOffsetReset = .largest,
         allowAutoCreateTopics: Bool = false,
         clientID: String = "rdkafka",
         bootstrapServers: [String] = [],
@@ -321,7 +332,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         topicMetadataRefreshSparse: Bool = true,
         topicMetadataPropagationMaxMs: UInt = 30000,
         topicDenylist: [String] = [],
-        debug: [KafkaSharedConfiguration.DebugOption] = [],
+        debug: [ConfigEnums.DebugOption] = [],
         socketTimeoutMs: UInt = 60000,
         socketSendBufferBytes: UInt = 0,
         socketReceiveBufferBytes: UInt = 0,
@@ -330,10 +341,10 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         socketMaxFails: UInt = 1,
         socketConnectionSetupTimeoutMs: UInt = 30000,
         brokerAddressTTL: UInt = 1000,
-        brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily = .any,
+        brokerAddressFamily: ConfigEnums.IPAddressFamily = .any,
         reconnectBackoffMs: UInt = 100,
         reconnectBackoffMaxMs: UInt = 10000,
-        securityProtocol: KafkaSharedConfiguration.SecurityProtocol = .plaintext,
+        securityProtocol: ConfigEnums.SecurityProtocol = .plaintext,
         sslKeyLocation: String = "",
         sslKeyPassword: String = "",
         sslCertificateLocation: String = "",
@@ -341,11 +352,13 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         sslCRLLocation: String = "",
         sslKeystoreLocation: String = "",
         sslKeystorePassword: String = "",
-        saslMechanism: KafkaSharedConfiguration.SASLMechanism? = nil,
+        saslMechanism: ConfigEnums.SASLMechanism? = nil,
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
-        self.groupID = groupID
+        self.consumptionStrategy = consumptionStrategy
+        self.backPressureStrategy = backPressureStrategy
+
         self.sessionTimeoutMs = sessionTimeoutMs
         self.heartbeatIntervalMs = heartbeatIntervalMs
         self.maxPollInvervalMs = maxPollInvervalMs
@@ -394,46 +407,107 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
 
     // MARK: - Helpers
 
-    func getDebugOptions() -> [KafkaSharedConfiguration.DebugOption] {
+    func getDebugOptions() -> [ConfigEnums.DebugOption] {
         guard let options = dictionary["debug"] else {
             return []
         }
         return options.components(separatedBy: ",")
-            .map { KafkaSharedConfiguration.DebugOption(description: $0) }
+            .map { ConfigEnums.DebugOption(description: $0) }
     }
 
-    func getIPAddressFamily() -> KafkaSharedConfiguration.IPAddressFamily? {
+    func getIPAddressFamily() -> ConfigEnums.IPAddressFamily? {
         guard let value = dictionary["broker.address.family"] else {
             return nil
         }
-        return KafkaSharedConfiguration.IPAddressFamily(description: value)
+        return ConfigEnums.IPAddressFamily(description: value)
     }
 
-    func getSecurityProtocol() -> KafkaSharedConfiguration.SecurityProtocol? {
+    func getSecurityProtocol() -> ConfigEnums.SecurityProtocol? {
         guard let value = dictionary["security.protocol"] else {
             return nil
         }
-        return KafkaSharedConfiguration.SecurityProtocol(description: value)
+        return ConfigEnums.SecurityProtocol(description: value)
     }
 
-    func getSASLMechanism() -> KafkaSharedConfiguration.SASLMechanism? {
+    func getSASLMechanism() -> ConfigEnums.SASLMechanism? {
         guard let value = dictionary["sasl.mechanism"] else {
             return nil
         }
-        return KafkaSharedConfiguration.SASLMechanism(description: value)
+        return ConfigEnums.SASLMechanism(description: value)
     }
 
-    func getAutoOffsetReset() -> KafkaSharedConfiguration.AutoOffsetReset? {
+    func getAutoOffsetReset() -> ConfigEnums.AutoOffsetReset? {
         guard let value = dictionary["auto.offset.reset"] else {
             return nil
         }
-        return KafkaSharedConfiguration.AutoOffsetReset(description: value)
+        return ConfigEnums.AutoOffsetReset(description: value)
     }
 }
 
 // MARK: - ConfigEnums + AutoOffsetReset
 
-extension KafkaSharedConfiguration {
+extension ConfigEnums {
+    /// A struct representing different back pressure strategies for receiving message acknowledgements in ``KafkaConsumer``.
+    public struct BackPressureStrategy: Hashable, Equatable {
+        enum _BackPressureStrategy: Hashable, Equatable {
+            case highLowWatermark(lowWatermark: Int, highWatermark: Int)
+        }
+
+        let _internal: _BackPressureStrategy
+
+        private init(backPressureStrategy: _BackPressureStrategy) {
+            self._internal = backPressureStrategy
+        }
+
+        /// A back pressure strategy based on high and low watermarks.
+        ///
+        /// The consumer maintains a buffer size between a low watermark and a high watermark
+        /// to control the flow of incoming messages.
+        ///
+        /// - Parameter lowWatermark: The lower threshold for the buffer size.
+        /// - Parameter highWatermark: The upper threshold for the buffer size.
+        public static func highLowWatermark(lowWatermark: Int, highWatermark: Int) -> BackPressureStrategy {
+            return .init(backPressureStrategy: .highLowWatermark(lowWatermark: lowWatermark, highWatermark: highWatermark))
+        }
+    }
+
+    /// A struct representing the different Kafka message consumption strategies.
+    public struct ConsumptionStrategy: Hashable, Equatable {
+        enum _ConsumptionStrategy: Hashable, Equatable {
+            case partitionBased(topic: String, partition: KafkaPartition, offset: Int64)
+            case groupBased(groupID: String, topics: [String])
+        }
+
+        let _internal: _ConsumptionStrategy
+
+        private init(consumptionStrategy: _ConsumptionStrategy) {
+            self._internal = consumptionStrategy
+        }
+
+        /// A consumption strategy based on partition assignment.
+        /// The consumer reads from a specific partition of a topic at a given offset.
+        ///
+        /// - Parameter topic: The name of the Kafka topic.
+        /// - Parameter partition: The partition of the topic to consume from.
+        /// - Parameter offset: The offset to start consuming from.
+        public static func partitionBased(
+            topic: String,
+            partition: KafkaPartition,
+            offset: Int64 = Int64(RD_KAFKA_OFFSET_END)
+        ) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .partitionBased(topic: topic, partition: partition, offset: offset))
+        }
+
+        /// A consumption strategy based on consumer group membership.
+        /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
+        ///
+        /// - Parameter groupID: The ID of the consumer group to join.
+        /// - Parameter topics: An array of topic names to consume from.
+        public static func groupBased(groupID: String, topics: [String]) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .groupBased(groupID: groupID, topics: topics))
+        }
+    }
+
     /// Available actions to take when there is no initial offset in offset store / offset is out of range.
     public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
         public let description: String

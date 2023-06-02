@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 /// Collection of `enum` types used in the configuration structs this library provides.
-public enum KafkaSharedConfiguration {
+public enum ConfigEnums {
     /// Available debug contexts to enable.
     public struct DebugOption: Hashable, Equatable, CustomStringConvertible {
         public let description: String

@@ -36,11 +36,15 @@ await producer.shutdownGracefully()
 After initializing the `KafkaConsumer` with a topic-partition pair to read from, messages can be consumed using the `messages` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence).
 
 ```swift
-let config = KafkaConsumerConfig(bootstrapServers: ["localhost:9092"])
+let config = KafkaConsumerConfig(
+    consumptionStrategy: .partitionBased(
+        topic: "topic-name",
+        partition: KafkaPartition(rawValue: 0)
+    ),
+    bootstrapServers: ["localhost:9092"]
+)
 
 let consumer = try KafkaConsumer(
-    topic: "topic-name",
-    partition: KafkaPartition(rawValue: 0),
     config: config,
     logger: .kafkaTest // Your logger here
 )
@@ -61,12 +65,11 @@ SwiftKafka also allows users to subscribe to an array of topics as part of a con
 
 ```swift
 let config = KafkaConsumerConfig(
-    groupID: "example-group",
+    consumptionStrategy: .groupBased(groupID: "example-group", topics: ["topic-name"]),
     bootstrapServers: ["localhost:9092"]
 )
 
 let consumer = try KafkaConsumer(
-    topics: ["topic-name"],
     config: config,
     logger: .kafkaTest // Your logger here
 )
@@ -87,13 +90,12 @@ By default, the `KafkaConsumer` automatically commits message offsets after rece
 
 ```swift
 let config = KafkaConsumerConfig(
-    groupID: "example-group",
+    consumptionStrategy: .groupBased(groupID: "example-group", topics: ["topic-name"]),
     enableAutoCommit: false,
     bootstrapServers: ["localhost:9092"]
 )
 
 let consumer = try KafkaConsumer(
-    topics: ["topic-name"],
     config: config,
     logger: .kafkaTest // Your logger here
 )
