@@ -45,7 +45,7 @@ final class KafkaAcknowledgementPollingSystemTests: XCTestCase {
         XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
         XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
 
-        sut.shutDown()
+        sut.didTerminate()
         XCTAssertEqual(TestStateMachine.PollLoopAction.shutdownPollLoop, sut.nextPollLoopAction())
 
         runTask.cancel()
@@ -121,15 +121,7 @@ extension KafkaAcknowledgementPollingSystem {
         return self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
     }
 
-    func produceMore() {
-        stateMachineLock.withLockedValue { $0.produceMore() }
-    }
-
     func stopProducing() {
         stateMachineLock.withLockedValue { $0.stopProducing() }
-    }
-
-    func shutDown() {
-        stateMachineLock.withLockedValue { $0.shutDown() }
     }
 }

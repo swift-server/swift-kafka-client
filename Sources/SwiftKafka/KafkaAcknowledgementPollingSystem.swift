@@ -17,7 +17,6 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
-// TODO: make generic? or move Ack stuff to KafkaProducer?
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
@@ -71,7 +70,7 @@ final class KafkaAcknowledgementPollingSystem {
     /// It must rather be initialized using the ``KafkaBackPressurePollingSystem.createSystemAndSequence`` function.
     ///
     /// - Parameter logger: The logger to be used for logging.
-    private init(
+    /* USE createSystemAndSequence, TESTING only */ init(
         logger: Logger
     ) {
         self.logger = logger
@@ -121,9 +120,11 @@ final class KafkaAcknowledgementPollingSystem {
     /// - Parameter pollInterval: The desired time interval between two consecutive polls.
     /// - Returns: An awaitable task representing the execution of the poll loop.
     func run(pollInterval: Duration) async {
-        let state = self.stateMachineLock.withLockedValue { $0.state }
-        guard case .initial = state else {
-            fatalError("Poll loop must not be started more than once")
+        self.stateMachineLock.withLockedValue { stateMachine in
+            guard stateMachine.running == false else {
+                fatalError("Poll loop must not be started more than once")
+            }
+            stateMachine.running = true
         }
 
         while true {
@@ -183,7 +184,7 @@ final class KafkaAcknowledgementPollingSystem {
     /// Handles an optional command that the ``KafkaBackPressurePollingSystem/StateMachine`` has wants us to run.
     ///
     /// - Parameter command: The command the ``KafkaBackPressurePollingSystem/StateMachine`` wants us to run.
-    private func handleStateMachineCommand(_ command: StateMachine.Command?) {
+    func handleStateMachineCommand(_ command: StateMachine.Command?) {
         switch command {
         case .resume(let continuation):
             continuation?.resume()
@@ -213,11 +214,13 @@ extension KafkaAcknowledgementPollingSystem: NIOAsyncSequenceProducerDelegate {
 extension KafkaAcknowledgementPollingSystem {
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine: Sendable {
-        // TODO: these are not handled optimally
+        /// A flag that determines if the ``run()`` method has already been invoked.
+        var running = false
         /// Closure that takes care of polling `librdkafka` for new messages.
         var pollClosure: (() -> ())?
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
         var sequenceSource: Producer.Source? // TODO: make sendable
+
 
         /// The possible states of the state machine.
         enum State {
