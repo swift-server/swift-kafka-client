@@ -132,6 +132,8 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
 
             switch action {
             case .pollAndSleep:
+                // Poll Kafka for new acknowledgements and sleep for the given
+                // pollInterval to avoid hot looping.
                 self.pollClosure?()
                 do {
                     try await Task.sleep(for: pollInterval)
@@ -140,6 +142,8 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
                     self.handleStateMachineCommand(command)
                 }
             case .suspendPollLoop:
+                // The downstream consumer asked us to stop sending new messages.
+                // We therefore await until we are unsuspended again.
                 await withTaskCancellationHandler {
                     await withCheckedContinuation { continuation in
                         self.stateMachineLock.withLockedValue { $0.suspendLoop(continuation: continuation) }
@@ -149,6 +153,7 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
                     self.handleStateMachineCommand(command)
                 }
             case .shutdownPollLoop:
+                // We have been asked to close down the poll loop.
                 let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
                 self.handleStateMachineCommand(command)
                 return
