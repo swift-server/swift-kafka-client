@@ -50,10 +50,10 @@ final class KafkaAcknowledgementPollingSystem {
     let stateMachineLock: NIOLockedValueBox<StateMachine>
 
     /// Closure that takes care of polling `librdkafka` for new messages.
-    var pollClosure: () -> () {
+    var pollClosure: (() -> ())? {
         get {
             self.stateMachineLock.withLockedValue { stateMachine in
-                return stateMachine.pollClosure! // TODO: fix
+                return stateMachine.pollClosure
             }
         }
         set {
@@ -84,7 +84,6 @@ final class KafkaAcknowledgementPollingSystem {
     /// - Parameter logger: The logger to be used for logging.
     /// - Returns: A tuple containing the ``KafkaBackPressurePollingSystem`` and a reference to the ``AcknowledgedMessagesAsyncSequence``.
     static func createSystemAndSequence(logger: Logger) -> (KafkaAcknowledgementPollingSystem, AcknowledgedMessagesAsyncSequence) {
-        // TODO: make injectable
         let backpressureStrategy = AcknowledgedMessagesAsyncSequence.HighLowWatermark(
             lowWatermark: 5,
             highWatermark: 10
@@ -132,7 +131,7 @@ final class KafkaAcknowledgementPollingSystem {
 
             switch action {
             case .pollAndSleep:
-                self.pollClosure()
+                self.pollClosure?()
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
