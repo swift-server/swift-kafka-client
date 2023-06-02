@@ -39,7 +39,7 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 }
 
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
-final class KafkaAcknowledgementPollingSystem {
+final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
     /// The element type for the system, representing either a successful ``KafkaAcknowledgedMessage`` or a ``KafkaAcknowledgedMessageError``.
     typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     /// The producer type used in the system.
@@ -213,13 +213,13 @@ extension KafkaAcknowledgementPollingSystem: NIOAsyncSequenceProducerDelegate {
 
 extension KafkaAcknowledgementPollingSystem {
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
-    struct StateMachine: Sendable {
+    struct StateMachine {
         /// A flag that determines if the ``run()`` method has already been invoked.
         var running = false
         /// Closure that takes care of polling `librdkafka` for new messages.
         var pollClosure: (() -> ())?
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
-        var sequenceSource: Producer.Source? // TODO: make sendable
+        var sequenceSource: Producer.Source?
 
 
         /// The possible states of the state machine.
