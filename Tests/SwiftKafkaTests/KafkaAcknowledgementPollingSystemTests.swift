@@ -16,16 +16,14 @@ import NIOCore
 @testable import SwiftKafka
 import XCTest
 
-final class KafkaBackPressurePollingSystemTests: XCTestCase {
-    typealias TestStateMachine = KafkaBackPressurePollingSystem.StateMachine
+final class KafkaAcknowledgementPollingSystemTests: XCTestCase {
+    typealias TestStateMachine = KafkaAcknowledgementPollingSystem.StateMachine
 
     func testBackPressure() async throws {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        // TODO: is our delegate produceMore() getting in our way here?
-        // TODO: does this leak anything sequence related? -> sequence needs to be retained, immediate shutdown otherwise
-        let (sut, _) = KafkaBackPressurePollingSystem.createSystemAndSequence(logger: .kafkaTest)
+        let sut = KafkaAcknowledgementPollingSystem(logger: .kafkaTest)
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -57,7 +55,7 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let (sut, _) = KafkaBackPressurePollingSystem.createSystemAndSequence(logger: .kafkaTest)
+        let sut = KafkaAcknowledgementPollingSystem(logger: .kafkaTest)
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -88,7 +86,7 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let (sut, _) = KafkaBackPressurePollingSystem.createSystemAndSequence(logger: .kafkaTest)
+        let sut = KafkaAcknowledgementPollingSystem(logger: .kafkaTest)
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -117,9 +115,9 @@ final class KafkaBackPressurePollingSystemTests: XCTestCase {
 
 // MARK: - KafkaBackPressurePollingSystem + Extensions
 
-/// These testing-only methods provide more readable access to the underlying state machine's methods.
-extension KafkaBackPressurePollingSystem {
-    func nextPollLoopAction() -> KafkaBackPressurePollingSystem.StateMachine.PollLoopAction {
+/// These testing-only methods provide more convenient access to the polling system's locked `stateMachine` methods.
+extension KafkaAcknowledgementPollingSystem {
+    func nextPollLoopAction() -> KafkaAcknowledgementPollingSystem.StateMachine.PollLoopAction {
         return self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
     }
 

@@ -47,7 +47,7 @@ public actor KafkaProducer {
     /// Used for handling the connection to the Kafka cluster.
     private var client: KafkaClient
     /// Mechanism that polls the Kafka cluster for updates periodically.
-    private let pollingSystem: KafkaBackPressurePollingSystem
+    private let pollingSystem: KafkaAcknowledgementPollingSystem
     /// Task that polls `librdkafka` for new acknowledgements at regular intervals.
     private var pollTask: Task<Void, Never>?
 
@@ -70,7 +70,7 @@ public actor KafkaProducer {
         self.topicHandles = [:]
         self.state = .started
 
-        let (pollingSystem, sequence) = KafkaBackPressurePollingSystem.createSystemAndSequence(logger: logger)
+        let (pollingSystem, sequence) = KafkaAcknowledgementPollingSystem.createSystemAndSequence(logger: logger)
         self.pollingSystem = pollingSystem
         self.acknowledgements = sequence
 

@@ -22,12 +22,12 @@ import NIOCore
 public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaAcknowledgementPollingSystem>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
     public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>.AsyncIterator
+        let wrappedIterator: NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaAcknowledgementPollingSystem>.AsyncIterator
 
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
@@ -40,11 +40,11 @@ public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
 }
 
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
-final class KafkaBackPressurePollingSystem {
+final class KafkaAcknowledgementPollingSystem {
     /// The element type for the system, representing either a successful ``KafkaAcknowledgedMessage`` or a ``KafkaAcknowledgedMessageError``.
     typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     /// The producer type used in the system.
-    typealias Producer = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaBackPressurePollingSystem>
+    typealias Producer = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaAcknowledgementPollingSystem>
 
     /// The state machine that manages the system's state transitions.
     let stateMachineLock: NIOLockedValueBox<StateMachine>
@@ -83,14 +83,14 @@ final class KafkaBackPressurePollingSystem {
     ///
     /// - Parameter logger: The logger to be used for logging.
     /// - Returns: A tuple containing the ``KafkaBackPressurePollingSystem`` and a reference to the ``AcknowledgedMessagesAsyncSequence``.
-    static func createSystemAndSequence(logger: Logger) -> (KafkaBackPressurePollingSystem, AcknowledgedMessagesAsyncSequence) {
+    static func createSystemAndSequence(logger: Logger) -> (KafkaAcknowledgementPollingSystem, AcknowledgedMessagesAsyncSequence) {
         // TODO: make injectable
         let backpressureStrategy = AcknowledgedMessagesAsyncSequence.HighLowWatermark(
             lowWatermark: 5,
             highWatermark: 10
         )
 
-        let pollingSystem = KafkaBackPressurePollingSystem(
+        let pollingSystem = KafkaAcknowledgementPollingSystem(
             logger: logger
         )
 
@@ -199,7 +199,7 @@ final class KafkaBackPressurePollingSystem {
     }
 }
 
-extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
+extension KafkaAcknowledgementPollingSystem: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
         let command = self.stateMachineLock.withLockedValue { $0.produceMore() }
         self.handleStateMachineCommand(command)
@@ -211,7 +211,7 @@ extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
     }
 }
 
-extension KafkaBackPressurePollingSystem {
+extension KafkaAcknowledgementPollingSystem {
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine: Sendable {
         // TODO: these are not handled optimally
