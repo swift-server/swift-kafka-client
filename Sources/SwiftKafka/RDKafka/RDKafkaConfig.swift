@@ -100,4 +100,28 @@ struct RDKafkaConfig {
 
         return capturedClosure
     }
+
+    // TODO: docc
+    static func convertMessageToAcknowledgementResult(
+        messagePointer: UnsafePointer<rd_kafka_message_t>?
+    ) -> KafkaAcknowledgementResult? {
+        guard let messagePointer else {
+            return nil
+        }
+
+        let messageID = UInt(bitPattern: messagePointer.pointee._private)
+
+        let messageResult: KafkaAcknowledgementResult
+        do {
+            let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
+            messageResult = .success(message)
+        } catch {
+            guard let error = error as? KafkaAcknowledgedMessageError else {
+                fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
+            }
+            messageResult = .failure(error)
+        }
+
+        return messageResult
+    }
 }

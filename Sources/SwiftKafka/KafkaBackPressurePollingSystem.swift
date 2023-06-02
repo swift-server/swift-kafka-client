@@ -136,8 +136,8 @@ final class KafkaBackPressurePollingSystem {
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
-                    self.stateMachineLock.withLockedValue { $0.shutDown() }
-                    return
+                    let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
+                    self.handleStateMachineCommand(command)
                 }
             case .suspendPollLoop:
                 await withTaskCancellationHandler {
@@ -145,10 +145,12 @@ final class KafkaBackPressurePollingSystem {
                         self.stateMachineLock.withLockedValue { $0.suspendLoop(continuation: continuation) }
                     }
                 } onCancel: {
-                    self.stateMachineLock.withLockedValue { $0.shutDown() }
+                    let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
+                    self.handleStateMachineCommand(command)
                 }
             case .shutdownPollLoop:
-                self.stateMachineLock.withLockedValue { $0.shutDown() }
+                let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
+                self.handleStateMachineCommand(command)
                 return
             }
         }
@@ -162,42 +164,51 @@ final class KafkaBackPressurePollingSystem {
             return
         }
 
-        let messageID = UInt(bitPattern: messagePointer.pointee._private)
-
-        let messageResult: Element
-        do {
-            let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
-            messageResult = .success(message)
-        } catch {
-            guard let error = error as? KafkaAcknowledgedMessageError else {
-                fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
-            }
-            messageResult = .failure(error)
-        }
-
-        self.stateMachineLock.withLockedValue { stateMachine in
-            let yieldResult = stateMachine.yield(messageResult)
+        let command = self.stateMachineLock.withLockedValue { stateMachine in
+            let yieldResult = stateMachine.sequenceSource?.yield(messageResult)
             switch yieldResult {
             case .produceMore:
-                stateMachine.produceMore()
+                return stateMachine.produceMore()
             case .stopProducing:
                 stateMachine.stopProducing()
-            case .dropped:
-                stateMachine.shutDown()
+                return nil
+            case .dropped, .none:
+                return stateMachine.shutDown()
             }
         }
+        self.handleStateMachineCommand(command)
+
         // The messagePointer is automatically destroyed by librdkafka
         // For safety reasons, we only use it inside of this closure
+    }
+
+    /// Handles an optional command that the ``KafkaBackPressurePollingSystem/StateMachine`` has wants us to run.
+    ///
+    /// - Parameter command: The command the ``KafkaBackPressurePollingSystem/StateMachine`` wants us to run.
+    private func handleStateMachineCommand(_ command: StateMachine.Command?) {
+        switch command {
+        case .resume(let continuation):
+            continuation?.resume()
+        case .finishSequenceSource:
+            self.stateMachineLock.withLockedValue { $0.sequenceSource?.finish() }
+        case .finishSequenceSourceAndResume(let continuation):
+            self.stateMachineLock.withLockedValue { $0.sequenceSource?.finish() }
+            continuation?.resume()
+        case .none:
+            break
+        }
     }
 }
 
 extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        self.stateMachineLock.withLockedValue { $0.produceMore() }
+        let command = self.stateMachineLock.withLockedValue { $0.produceMore() }
+        self.handleStateMachineCommand(command)
     }
 
     func didTerminate() {
-        self.stateMachineLock.withLockedValue { $0.shutDown() }
+        let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
+        self.handleStateMachineCommand(command)
     }
 }
 
@@ -252,24 +263,36 @@ extension KafkaBackPressurePollingSystem {
             }
         }
 
+        /// Represents the commands that can be returned by a state machine
+        /// and shall be executed by the ``KafkaBackPressurePollingSystem``.
+        enum Command {
+            /// Resume the given continuation.
+            case resume(CheckedContinuation<Void, Never>?)
+            /// Invoke `.finish()` on the ``NIOAsyncSequence.Source``.
+            case finishSequenceSource
+            /// Resume the given continuation and invoke `.finish()` on the ``NIOAsyncSequence.Source``.
+            case finishSequenceSourceAndResume(CheckedContinuation<Void, Never>?)
+        }
+
         /// Our downstream consumer allowed us to produce more elements.
-        mutating func produceMore() {
+        mutating func produceMore() -> Command? {
             switch self.state {
             case .finished, .producing:
-                return
+                break
             case .stopProducing(let continuation):
-                continuation?.resume()
                 self.state = .producing
+                return .resume(continuation)
             case .initial:
                 self.state = .producing
             }
+            return nil
         }
 
         /// Our downstream consumer asked us to stop producing new elements.
         mutating func stopProducing() {
             switch self.state {
             case .finished, .stopProducing:
-                return
+                break
             case .initial:
                 fatalError("\(#function) is not supported in state \(self.state)")
             case .producing:
@@ -293,28 +316,17 @@ extension KafkaBackPressurePollingSystem {
         }
 
         /// Shut down the state machine and finish producing elements.
-        mutating func shutDown() {
-            self.sequenceSource?.finish()
-
+        mutating func shutDown() -> Command? {
             switch self.state {
             case .finished:
-                return
+                return nil
             case .initial, .producing:
-                self.sequenceSource?.finish()
                 self.state = .finished
+                return .finishSequenceSource
             case .stopProducing(let continuation):
-                continuation?.resume()
-                self.sequenceSource?.finish()
                 self.state = .finished
+                return .finishSequenceSourceAndResume(continuation)
             }
-        }
-
-        /// Yields a new elements to the ``NIOAsyncSequenceProducer``.
-        fileprivate func yield(_ element: Element) -> Producer.Source.YieldResult {
-            guard let source = self.sequenceSource else {
-                fatalError("\(#function) requires the sequenceSource variable to be non-nil")
-            }
-            return source.yield(element)
         }
     }
 }
