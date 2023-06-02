@@ -81,7 +81,7 @@ public actor KafkaProducer {
             logger: self.logger
         )
 
-        self.pollingSystem.pollClosure =  { [client] in
+        self.pollingSystem.pollClosure = { [client] in
             client.withKafkaHandlePointer { handle in
                 rd_kafka_poll(handle, 0)
             }

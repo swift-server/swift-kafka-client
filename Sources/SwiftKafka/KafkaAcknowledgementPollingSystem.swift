@@ -49,7 +49,7 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
     let stateMachineLock: NIOLockedValueBox<StateMachine>
 
     /// Closure that takes care of polling `librdkafka` for new messages.
-    var pollClosure: (() -> ())? {
+    var pollClosure: (() -> Void)? {
         get {
             self.stateMachineLock.withLockedValue { stateMachine in
                 return stateMachine.pollClosure
@@ -217,10 +217,9 @@ extension KafkaAcknowledgementPollingSystem {
         /// A flag that determines if the ``run()`` method has already been invoked.
         var running = false
         /// Closure that takes care of polling `librdkafka` for new messages.
-        var pollClosure: (() -> ())?
+        var pollClosure: (() -> Void)?
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
         var sequenceSource: Producer.Source?
-
 
         /// The possible states of the state machine.
         enum State {
