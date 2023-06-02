@@ -157,9 +157,8 @@ final class KafkaBackPressurePollingSystem {
     }
 
     /// The delivery report callback function that handles acknowledged messages.
-    private(set) lazy var deliveryReportCallback: (UnsafePointer<rd_kafka_message_t>?) -> Void = { messagePointer in
-        // TODO: message pointer to Acknowledged message conversion at a lower level (e.g. RDKafkaConfig)
-        guard let messagePointer = messagePointer else {
+    private(set) lazy var deliveryReportCallback: (RDKafkaConfig.KafkaAcknowledgementResult?) -> Void = { messageResult in
+        guard let messageResult else {
             self.logger.error("Could not resolve acknowledged message")
             return
         }
@@ -215,6 +214,7 @@ extension KafkaBackPressurePollingSystem: NIOAsyncSequenceProducerDelegate {
 extension KafkaBackPressurePollingSystem {
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine: Sendable {
+        // TODO: these are not handled optimally
         /// Closure that takes care of polling `librdkafka` for new messages.
         var pollClosure: (() -> ())?
         /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
