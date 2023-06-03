@@ -14,7 +14,6 @@
 
 import Crdkafka
 import Dispatch
-import struct Foundation.UUID
 import Logging
 import NIOCore
 
@@ -93,19 +92,6 @@ public final class KafkaConsumer {
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
-        var config = config
-
-        switch config.consumptionStrategy._internal {
-        case .partitionBased:
-            // Although an assignment is not related to a consumer group,
-            // librdkafka requires us to set a `group.id`.
-            // This is a known issue:
-            // https://github.com/edenhill/librdkafka/issues/3261
-            config.dictionary["group.id"] = UUID().uuidString
-        case .groupBased(groupID: let groupID, topics: _):
-            config.dictionary["group.id"] = groupID
-        }
-
         self.config = config
         self.logger = logger
         self.client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)

@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
+import struct Foundation.UUID
 
 public struct KafkaConsumerConfig: Hashable, Equatable {
     // MARK: - SwiftKafka-specific Config properties
@@ -23,9 +24,32 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         highWatermark: 50
     )
 
+    // Implicitly unwrapped, because this just backs
+    // the non-optional consumptionStrategy variable
+    private var _consumptionStrategy: ConfigEnums.ConsumptionStrategy!
+
     /// The strategy used for consuming messages.
     /// See ``ConfigEnums/ConsumptionStrategy`` for more information.
-    public var consumptionStrategy: ConfigEnums.ConsumptionStrategy
+    public var consumptionStrategy: ConfigEnums.ConsumptionStrategy {
+        get { self._consumptionStrategy }
+        set {
+            self._consumptionStrategy = newValue
+
+            // We do not expose the group.id option to the user
+            // but rather set it ourselves as part of our much safer
+            // consumptionStrategy option.
+            switch newValue._internal {
+            case .partitionBased:
+                // Although an assignment is not related to a consumer group,
+                // librdkafka requires us to set a `group.id`.
+                // This is a known issue:
+                // https://github.com/edenhill/librdkafka/issues/3261
+                self.dictionary["group.id"] = UUID().uuidString
+            case .groupBased(groupID: let groupID, topics: _):
+                self.dictionary["group.id"] = groupID
+            }
+        }
+    }
 
     // MARK: - librdkafka Config properties
 
