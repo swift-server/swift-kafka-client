@@ -23,11 +23,11 @@ private struct ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDe
     let didTerminateClosure: @Sendable () -> Void
 
     func produceMore() {
-        produceMoreClosure()
+        self.produceMoreClosure()
     }
 
     func didTerminate() {
-        didTerminateClosure()
+        self.didTerminateClosure()
     }
 }
 
@@ -149,7 +149,7 @@ public final class KafkaConsumer {
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     private func subscribe(topics: [String]) throws {
-        assert(!closed)
+        assert(!self.closed)
 
         for topic in topics {
             rd_kafka_topic_partition_list_add(
@@ -160,7 +160,7 @@ public final class KafkaConsumer {
         }
 
         let result = self.client.withKafkaHandlePointer { handle in
-            rd_kafka_subscribe(handle, subscribedTopicsPointer)
+            rd_kafka_subscribe(handle, self.subscribedTopicsPointer)
         }
 
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
@@ -178,7 +178,7 @@ public final class KafkaConsumer {
         partition: KafkaPartition,
         offset: Int64
     ) throws {
-        assert(!closed)
+        assert(!self.closed)
 
         guard let partitionPointer = rd_kafka_topic_partition_list_add(
             self.subscribedTopicsPointer,
@@ -237,7 +237,7 @@ public final class KafkaConsumer {
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     private func poll(timeout: Int32 = 100) throws -> KafkaConsumerMessage? {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
-        assert(!closed)
+        assert(!self.closed)
 
         guard let messagePointer = self.client.withKafkaHandlePointer({ handle in
             rd_kafka_consumer_poll(handle, timeout)
