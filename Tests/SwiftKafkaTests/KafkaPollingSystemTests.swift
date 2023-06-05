@@ -16,14 +16,21 @@ import NIOCore
 @testable import SwiftKafka
 import XCTest
 
-final class KafkaAcknowledgementPollingSystemTests: XCTestCase {
-    typealias TestStateMachine = KafkaAcknowledgementPollingSystem.StateMachine
+/// `NIOAsyncSequenceProducerBackPressureStrategy` that always returns true.
+struct NoBackPressure: NIOAsyncSequenceProducerBackPressureStrategy {
+    func didYield(bufferDepth: Int) -> Bool { true }
+    func didConsume(bufferDepth: Int) -> Bool { true }
+}
+
+final class KafkaPollingSystemTests: XCTestCase {
+    typealias Message = String // Could be any type, this is just for testing
+    typealias TestStateMachine = KafkaPollingSystem<Message, NoBackPressure>.StateMachine
 
     func testBackPressure() async throws {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let sut = KafkaAcknowledgementPollingSystem(logger: .kafkaTest)
+        let sut = KafkaPollingSystem<Message, NoBackPressure>()
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -55,7 +62,7 @@ final class KafkaAcknowledgementPollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let sut = KafkaAcknowledgementPollingSystem(logger: .kafkaTest)
+        let sut = KafkaPollingSystem<Message, NoBackPressure>()
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -86,7 +93,7 @@ final class KafkaAcknowledgementPollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         var expectation: XCTestExpectation?
-        let sut = KafkaAcknowledgementPollingSystem(logger: .kafkaTest)
+        let sut = KafkaPollingSystem<Message, NoBackPressure>()
         sut.pollClosure = {
             expectation?.fulfill()
         }
@@ -116,8 +123,8 @@ final class KafkaAcknowledgementPollingSystemTests: XCTestCase {
 // MARK: - KafkaBackPressurePollingSystem + Extensions
 
 /// These testing-only methods provide more convenient access to the polling system's locked `stateMachine` methods.
-extension KafkaAcknowledgementPollingSystem {
-    func nextPollLoopAction() -> KafkaAcknowledgementPollingSystem.StateMachine.PollLoopAction {
+extension KafkaPollingSystem {
+    func nextPollLoopAction() -> KafkaPollingSystem.StateMachine.PollLoopAction {
         return self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
     }
 

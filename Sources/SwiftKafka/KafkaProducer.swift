@@ -14,12 +14,16 @@
 
 import Crdkafka
 import Logging
+import NIOCore
 
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
+    public typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    public typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
+
     /// States that the ``KafkaProducer`` can have.
     private enum State {
         /// The ``KafkaProducer`` has started and is ready to use.
@@ -47,11 +51,11 @@ public actor KafkaProducer {
     /// Used for handling the connection to the Kafka cluster.
     private var client: KafkaClient
     /// Mechanism that polls the Kafka cluster for updates periodically.
-    private let pollingSystem: KafkaAcknowledgementPollingSystem
+    private let pollingSystem: KafkaPollingSystem<Acknowledgement, HighLowWatermark>
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
-    public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
+    public nonisolated let acknowledgements: KafkaAsyncSequence<Acknowledgement, HighLowWatermark>
 
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -68,14 +72,43 @@ public actor KafkaProducer {
         self.topicHandles = [:]
         self.state = .started
 
-        let (pollingSystem, sequence) = KafkaAcknowledgementPollingSystem.createSystemAndSequence(logger: logger)
+        // TODO(felix): this should be injected through config
+        let backPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(
+            lowWatermark: 10,
+            highWatermark: 50
+        )
+
+        let (pollingSystem, sequence) = KafkaPollingSystem<Acknowledgement, HighLowWatermark>
+            .createSystemAndSequence(backPressureStrategy: backPressureStrategy)
         self.pollingSystem = pollingSystem
         self.acknowledgements = sequence
 
         self.client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            callback: self.pollingSystem.deliveryReportCallback,
+            callback: { [logger, pollingSystem] messageResult in
+                guard let messageResult else {
+                    logger.error("Could not resolve acknowledged message")
+                    return
+                }
+
+                let command = pollingSystem.stateMachineLock.withLockedValue { stateMachine in
+                    let yieldResult = stateMachine.sequenceSource?.yield(messageResult)
+                    switch yieldResult {
+                    case .produceMore:
+                        return stateMachine.produceMore()
+                    case .stopProducing:
+                        stateMachine.stopProducing()
+                        return nil
+                    case .dropped, .none:
+                        return stateMachine.shutDown()
+                    }
+                }
+                pollingSystem.handleStateMachineCommand(command)
+
+                // The messagePointer is automatically destroyed by librdkafka
+                // For safety reasons, we only use it inside of this closure
+            },
             logger: self.logger
         )
 

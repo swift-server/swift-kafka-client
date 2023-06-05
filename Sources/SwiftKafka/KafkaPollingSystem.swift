@@ -17,33 +17,33 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
-/// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
-public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
-    public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaAcknowledgementPollingSystem>
+/// Our `AsyncSequence` implementation wrapping an `NIOAsyncSequenceProducer`.
+public struct KafkaAsyncSequence<Element, BackPressure: NIOAsyncSequenceProducerBackPressureStrategy>: AsyncSequence {
+    typealias PollingSystem = KafkaPollingSystem<Element, BackPressure>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressure, PollingSystem>
     let wrappedSequence: WrappedSequence
 
-    /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
-    public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaAcknowledgementPollingSystem>.AsyncIterator
+    /// Our `AsynceIteratorProtocol` implementation wrapping `NIOAsyncSequenceProducer.AsyncIterator`.
+    public struct KafkaAsyncIterator: AsyncIteratorProtocol {
+        let wrappedIterator: NIOAsyncSequenceProducer<Element, BackPressure, PollingSystem>.AsyncIterator
 
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
         }
     }
 
-    public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
-        return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    public func makeAsyncIterator() -> KafkaAsyncIterator {
+        return KafkaAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
 }
 
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
-final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
-    /// The element type for the system, representing either a successful ``KafkaAcknowledgedMessage`` or a ``KafkaAcknowledgedMessageError``.
-    typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+final class KafkaPollingSystem<
+    Element,
+    BackPressure: NIOAsyncSequenceProducerBackPressureStrategy
+>: Sendable {
     /// The producer type used in the system.
-    typealias Producer = NIOAsyncSequenceProducer<Element, NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark, KafkaAcknowledgementPollingSystem>
+    typealias Producer = NIOAsyncSequenceProducer<Element, BackPressure, KafkaPollingSystem>
 
     /// The state machine that manages the system's state transitions.
     let stateMachineLock: NIOLockedValueBox<StateMachine>
@@ -62,35 +62,21 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
         }
     }
 
-    /// A logger.
-    private let logger: Logger
-
     /// Initializes the ``KafkaBackPressurePollingSystem``.
     /// Private initializer. The ``KafkaBackPressurePollingSystem`` is not supposed to be initialized directly.
     /// It must rather be initialized using the ``KafkaBackPressurePollingSystem.createSystemAndSequence`` function.
-    ///
-    /// - Parameter logger: The logger to be used for logging.
-    /* USE createSystemAndSequence, TESTING only */ init(
-        logger: Logger
-    ) {
-        self.logger = logger
+    /* USE createSystemAndSequence, TESTING only */ init() {
         self.stateMachineLock = NIOLockedValueBox(StateMachine())
     }
 
     /// Factory method creating a ``KafkaBackPressurePollingSystem`` and the ``AsyncSequence`` that receives its messages .
     /// The caller of this function must retain the sequence in order to receive messages.
     ///
-    /// - Parameter logger: The logger to be used for logging.
-    /// - Returns: A tuple containing the ``KafkaBackPressurePollingSystem`` and a reference to the ``AcknowledgedMessagesAsyncSequence``.
-    static func createSystemAndSequence(logger: Logger) -> (KafkaAcknowledgementPollingSystem, AcknowledgedMessagesAsyncSequence) {
-        let backpressureStrategy = AcknowledgedMessagesAsyncSequence.HighLowWatermark(
-            lowWatermark: 5,
-            highWatermark: 10
-        )
-
-        let pollingSystem = KafkaAcknowledgementPollingSystem(
-            logger: logger
-        )
+    /// - Returns: A tuple containing the ``KafkaBackPressurePollingSystem`` and a reference to the ``KafkaAsyncSequence``.
+    static func createSystemAndSequence(
+        backPressureStrategy: BackPressure
+    ) -> (KafkaPollingSystem, KafkaAsyncSequence<Element, BackPressure>) {
+        let pollingSystem = KafkaPollingSystem()
 
         // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
         // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
@@ -100,7 +86,7 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
         // terminate the underlying source.
         let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Element.self,
-            backPressureStrategy: backpressureStrategy,
+            backPressureStrategy: backPressureStrategy,
             delegate: pollingSystem
         )
 
@@ -108,7 +94,7 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
             stateMachine.sequenceSource = acknowledgementsSourceAndSequence.source
         }
 
-        let sequence = AcknowledgedMessagesAsyncSequence(
+        let sequence = KafkaAsyncSequence(
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
@@ -161,31 +147,6 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
         }
     }
 
-    /// The delivery report callback function that handles acknowledged messages.
-    private(set) lazy var deliveryReportCallback: (RDKafkaConfig.KafkaAcknowledgementResult?) -> Void = { messageResult in
-        guard let messageResult else {
-            self.logger.error("Could not resolve acknowledged message")
-            return
-        }
-
-        let command = self.stateMachineLock.withLockedValue { stateMachine in
-            let yieldResult = stateMachine.sequenceSource?.yield(messageResult)
-            switch yieldResult {
-            case .produceMore:
-                return stateMachine.produceMore()
-            case .stopProducing:
-                stateMachine.stopProducing()
-                return nil
-            case .dropped, .none:
-                return stateMachine.shutDown()
-            }
-        }
-        self.handleStateMachineCommand(command)
-
-        // The messagePointer is automatically destroyed by librdkafka
-        // For safety reasons, we only use it inside of this closure
-    }
-
     /// Handles an optional command that the ``KafkaBackPressurePollingSystem/StateMachine`` has wants us to run.
     ///
     /// - Parameter command: The command the ``KafkaBackPressurePollingSystem/StateMachine`` wants us to run.
@@ -204,7 +165,7 @@ final class KafkaAcknowledgementPollingSystem: @unchecked Sendable {
     }
 }
 
-extension KafkaAcknowledgementPollingSystem: NIOAsyncSequenceProducerDelegate {
+extension KafkaPollingSystem: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
         let command = self.stateMachineLock.withLockedValue { $0.produceMore() }
         self.handleStateMachineCommand(command)
@@ -216,7 +177,7 @@ extension KafkaAcknowledgementPollingSystem: NIOAsyncSequenceProducerDelegate {
     }
 }
 
-extension KafkaAcknowledgementPollingSystem {
+extension KafkaPollingSystem {
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine {
         /// A flag that determines if the ``run()`` method has already been invoked.

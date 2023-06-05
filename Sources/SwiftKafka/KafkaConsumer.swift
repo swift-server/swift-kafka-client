@@ -121,6 +121,7 @@ public final class KafkaConsumer {
         // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
         // This is due to the fact that deiniting the sequence is used as part of a trigger to
         // terminate the underlying source.
+        // TODO: make self delegate to avoid weak reference here
         let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate { [weak self] in
             self?.produceMore()
         } didTerminateClosure: { [weak self] in
