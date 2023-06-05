@@ -70,6 +70,9 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
+        let runTask = Task {
+            await producer.run()
+        }
 
         self.consumerConfig.groupID = "subscription-test-group-id"
         let consumer = try KafkaConsumer(
@@ -102,10 +105,15 @@ final class SwiftKafkaTests: XCTestCase {
         }
 
         await producer.shutdownGracefully()
+        runTask.cancel()
     }
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
+        let runTask = Task {
+            await producer.run()
+        }
+
         let consumer = try KafkaConsumer(
             topic: uniqueTestTopic,
             partition: KafkaPartition(rawValue: 0),
@@ -138,10 +146,14 @@ final class SwiftKafkaTests: XCTestCase {
         }
 
         await producer.shutdownGracefully()
+        runTask.cancel()
     }
 
     func testProduceAndConsumeWithCommitSync() async throws {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
+        let runTask = Task {
+            await producer.run()
+        }
 
         self.consumerConfig.groupID = "commit-sync-test-group-id"
         self.consumerConfig.enableAutoCommit = false
@@ -170,6 +182,7 @@ final class SwiftKafkaTests: XCTestCase {
         XCTAssertEqual(testMessages.count, consumedMessages.count)
 
         await producer.shutdownGracefully()
+        runTask.cancel()
 
         // Additionally test that commit does not work on closed consumer
         do {

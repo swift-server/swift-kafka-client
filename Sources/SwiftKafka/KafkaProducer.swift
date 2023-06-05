@@ -48,8 +48,6 @@ public actor KafkaProducer {
     private var client: KafkaClient
     /// Mechanism that polls the Kafka cluster for updates periodically.
     private let pollingSystem: KafkaAcknowledgementPollingSystem
-    /// Task that polls `librdkafka` for new acknowledgements at regular intervals.
-    private var pollTask: Task<Void, Never>?
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
@@ -87,10 +85,6 @@ public actor KafkaProducer {
             }
             return
         }
-
-        self.pollTask = Task { [pollingSystem] in
-            await pollingSystem.run(pollInterval: .milliseconds(100))
-        }
     }
 
     /// Method to shutdown the ``KafkaProducer``.
@@ -121,9 +115,16 @@ public actor KafkaProducer {
             rd_kafka_topic_destroy(topicHandle)
         }
 
-        self.pollTask?.cancel()
-
         self.state = .shutDown
+    }
+
+    /// Start polling Kafka for acknowledged messages.
+    ///
+    /// - Parameter pollInterval: The desired time interval between two consecutive polls.
+    /// - Returns: An awaitable task representing the execution of the poll loop.
+    public func run(pollInterval: Duration = .milliseconds(100)) async {
+        // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
+        await self.pollingSystem.run(pollInterval: pollInterval)
     }
 
     /// Send messages to the Kafka cluster asynchronously, aka "fire and forget".

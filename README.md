@@ -16,6 +16,10 @@ let producer = try await KafkaProducer(
     logger: .kafkaTest // Your logger here
 )
 
+let runTask = Task {
+    await producer.run()
+}
+
 let messageID = try await producer.sendAsync(
     KafkaProducerMessage(
         topic: "topic-name",
@@ -26,6 +30,8 @@ let messageID = try await producer.sendAsync(
 for await acknowledgement in producer.acknowledgements {
     // Check if acknowledgement belongs to the sent message
 }
+
+runTask.cancel()
 
 // Required
 await producer.shutdownGracefully()

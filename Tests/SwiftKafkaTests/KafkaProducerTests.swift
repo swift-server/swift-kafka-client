@@ -53,6 +53,9 @@ final class KafkaProducerTests: XCTestCase {
 
     func testSendAsync() async throws {
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        let runTask = Task {
+            await producer.run()
+        }
 
         let expectedTopic = "test-topic"
         let message = KafkaProducerMessage(
@@ -77,10 +80,14 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         await producer.shutdownGracefully()
+        runTask.cancel()
     }
 
     func testSendAsyncEmptyMessage() async throws {
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        let runTask = Task {
+            await producer.run()
+        }
 
         let expectedTopic = "test-topic"
         let message = KafkaProducerMessage(
@@ -104,10 +111,14 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         await producer.shutdownGracefully()
+        runTask.cancel()
     }
 
     func testSendAsyncTwoTopics() async throws {
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
+        let runTask = Task {
+            await producer.run()
+        }
 
         let message1 = KafkaProducerMessage(
             topic: "test-topic1",
@@ -150,11 +161,15 @@ final class KafkaProducerTests: XCTestCase {
         XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
 
         await producer.shutdownGracefully()
+        runTask.cancel()
     }
 
     func testProducerNotUsableAfterShutdown() async throws {
         let producer = try await KafkaProducer(config: config, logger: .kafkaTest)
         await producer.shutdownGracefully()
+        let runTask = Task {
+            await producer.run()
+        }
 
         let message = KafkaProducerMessage(
             topic: "test-topic",
@@ -165,6 +180,8 @@ final class KafkaProducerTests: XCTestCase {
             try await producer.sendAsync(message)
             XCTFail("Method should have thrown error")
         } catch {}
+
+        runTask.cancel()
     }
 
     func testNoMemoryLeakAfterShutdown() async throws {
