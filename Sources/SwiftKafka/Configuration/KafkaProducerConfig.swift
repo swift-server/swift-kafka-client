@@ -59,6 +59,17 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         set { self.dictionary["message.send.max.retries"] = String(newValue) }
     }
 
+    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
+    /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
+    /// Note: the default value (true) for the producer is different from the default value (false) for the consumer.
+    /// Further, the consumer default value is different from the Java consumer (true), and this property
+    /// is not supported by the Java producer.
+    /// Requires broker version >= 0.11.0.0, for older broker versions only the broker configuration applies.
+    public var allowAutoCreateTopics: Bool {
+        get { self.dictionary.getBool("allow.auto.create.topics") ?? true }
+        set { self.dictionary["allow.auto.create.topics"] = String(newValue) }
+    }
+
     // MARK: - Common Client Config Properties
 
     /// Client identifier.
@@ -295,6 +306,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         queueBufferingMaxKBytes: UInt = 1_048_576,
         queueBufferingMaxMs: UInt = 5,
         messageSendMaxRetries: UInt = 2_147_483_647,
+        allowAutoCreateTopics: Bool = true,
         clientID: String = "rdkafka",
         bootstrapServers: [String] = [],
         messageMaxBytes: UInt = 1_000_000,
@@ -338,6 +350,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         self.queueBufferingMaxKBytes = queueBufferingMaxKBytes
         self.queueBufferingMaxMs = queueBufferingMaxMs
         self.messageSendMaxRetries = messageSendMaxRetries
+        self.allowAutoCreateTopics = allowAutoCreateTopics
         self.clientID = clientID
         self.bootstrapServers = bootstrapServers
         self.messageMaxBytes = messageMaxBytes
