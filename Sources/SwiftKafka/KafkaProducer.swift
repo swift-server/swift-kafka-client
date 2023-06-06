@@ -92,19 +92,23 @@ public actor KafkaProducer {
                     return
                 }
 
-                let command = pollingSystem.stateMachineLock.withLockedValue { stateMachine in
-                    let yieldResult = stateMachine.sequenceSource?.yield(messageResult)
-                    switch yieldResult {
-                    case .produceMore:
-                        return stateMachine.produceMore()
-                    case .stopProducing:
-                        stateMachine.stopProducing()
-                        return nil
-                    case .dropped, .none:
-                        return stateMachine.shutDown()
+                // TODO: fix reentrancy
+                let yieldResult = pollingSystem.stateMachineLock.withLockedValue { $0.sequenceSource?.yield(messageResult) }
+                switch yieldResult {
+                case .produceMore:
+                    let action = pollingSystem.stateMachineLock.withLockedValue { $0.produceMore() }
+                    switch action {
+                    case .resume(let continuation):
+                        continuation?.resume()
+                    case .none:
+                        break
                     }
+                case .stopProducing:
+                    pollingSystem.stateMachineLock.withLockedValue { $0.stopProducing() }
+                case .dropped, .none:
+                    let action = pollingSystem.stateMachineLock.withLockedValue { $0.terminate() }
+                    pollingSystem.handleTerminateAction(action)
                 }
-                pollingSystem.handleStateMachineCommand(command)
 
                 // The messagePointer is automatically destroyed by librdkafka
                 // For safety reasons, we only use it inside of this closure

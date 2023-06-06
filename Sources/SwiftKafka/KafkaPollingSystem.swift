@@ -124,8 +124,8 @@ final class KafkaPollingSystem<
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
-                    let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
-                    self.handleStateMachineCommand(command)
+                    let action = self.stateMachineLock.withLockedValue { $0.terminate() }
+                    self.handleTerminateAction(action)
                 }
             case .suspendPollLoop:
                 // The downstream consumer asked us to stop sending new messages.
@@ -135,25 +135,20 @@ final class KafkaPollingSystem<
                         self.stateMachineLock.withLockedValue { $0.suspendLoop(continuation: continuation) }
                     }
                 } onCancel: {
-                    let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
-                    self.handleStateMachineCommand(command)
+                    let action = self.stateMachineLock.withLockedValue { $0.terminate() }
+                    self.handleTerminateAction(action)
                 }
             case .shutdownPollLoop:
                 // We have been asked to close down the poll loop.
-                let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
-                self.handleStateMachineCommand(command)
-                return
+                let action = self.stateMachineLock.withLockedValue { $0.terminate() }
+                self.handleTerminateAction(action)
             }
         }
     }
 
-    /// Handles an optional command that the ``KafkaBackPressurePollingSystem/StateMachine`` has wants us to run.
-    ///
-    /// - Parameter command: The command the ``KafkaBackPressurePollingSystem/StateMachine`` wants us to run.
-    func handleStateMachineCommand(_ command: StateMachine.Command?) {
-        switch command {
-        case .resume(let continuation):
-            continuation?.resume()
+    // TODO: docc
+    func handleTerminateAction(_ action: StateMachine.TerminateAction?) {
+        switch action {
         case .finishSequenceSource:
             self.stateMachineLock.withLockedValue { $0.sequenceSource?.finish() }
         case .finishSequenceSourceAndResume(let continuation):
@@ -167,13 +162,19 @@ final class KafkaPollingSystem<
 
 extension KafkaPollingSystem: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        let command = self.stateMachineLock.withLockedValue { $0.produceMore() }
-        self.handleStateMachineCommand(command)
+        let action = self.stateMachineLock.withLockedValue { $0.produceMore() }
+        switch action {
+        case .resume(let continuation):
+            continuation?.resume()
+        case .none:
+            break
+        }
     }
 
     func didTerminate() {
-        let command = self.stateMachineLock.withLockedValue { $0.shutDown() }
-        self.handleStateMachineCommand(command)
+        // TODO: move terminate switch into a private func
+        let action = self.stateMachineLock.withLockedValue { $0.terminate() }
+        self.handleTerminateAction(action)
     }
 }
 
@@ -230,19 +231,13 @@ extension KafkaPollingSystem {
             }
         }
 
-        /// Represents the commands that can be returned by a state machine
-        /// and shall be executed by the ``KafkaBackPressurePollingSystem``.
-        enum Command {
-            /// Resume the given continuation.
+        // TODO: docc
+        enum ProduceMoreAction {
             case resume(CheckedContinuation<Void, Never>?)
-            /// Invoke `.finish()` on the ``NIOAsyncSequence.Source``.
-            case finishSequenceSource
-            /// Resume the given continuation and invoke `.finish()` on the ``NIOAsyncSequence.Source``.
-            case finishSequenceSourceAndResume(CheckedContinuation<Void, Never>?)
         }
 
         /// Our downstream consumer allowed us to produce more elements.
-        mutating func produceMore() -> Command? {
+        mutating func produceMore() -> ProduceMoreAction? {
             switch self.state {
             case .finished, .producing:
                 break
@@ -282,8 +277,14 @@ extension KafkaPollingSystem {
             }
         }
 
-        /// Shut down the state machine and finish producing elements.
-        mutating func shutDown() -> Command? {
+        // TODO: docc
+        enum TerminateAction {
+            case finishSequenceSource
+            case finishSequenceSourceAndResume(CheckedContinuation<Void, Never>?)
+        }
+
+        /// Terminate the state machine and finish producing elements.
+        mutating func terminate() -> TerminateAction? {
             switch self.state {
             case .finished:
                 return nil
