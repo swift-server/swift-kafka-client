@@ -17,33 +17,11 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
-/// Our `AsyncSequence` implementation wrapping an `NIOAsyncSequenceProducer`.
-public struct KafkaAsyncSequence<Element, BackPressure: NIOAsyncSequenceProducerBackPressureStrategy>: AsyncSequence {
-    typealias PollingSystem = KafkaPollingSystem<Element, BackPressure>
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressure, PollingSystem>
-    let wrappedSequence: WrappedSequence
-
-    /// Our `AsynceIteratorProtocol` implementation wrapping `NIOAsyncSequenceProducer.AsyncIterator`.
-    public struct KafkaAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<Element, BackPressure, PollingSystem>.AsyncIterator
-
-        public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
-        }
-    }
-
-    public func makeAsyncIterator() -> KafkaAsyncIterator {
-        return KafkaAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
-    }
-}
-
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
-final class KafkaPollingSystem<
-    Element,
-    BackPressure: NIOAsyncSequenceProducerBackPressureStrategy
->: Sendable {
+final class KafkaPollingSystem<Element>: Sendable {
+    typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
     /// The producer type used in the system.
-    typealias Producer = NIOAsyncSequenceProducer<Element, BackPressure, KafkaPollingSystem>
+    typealias Producer = NIOAsyncSequenceProducer<Element, HighLowWatermark, KafkaPollingSystem>
 
     /// The state machine that manages the system's state transitions.
     let stateMachineLock: NIOLockedValueBox<StateMachine>
@@ -53,31 +31,6 @@ final class KafkaPollingSystem<
     /// It must rather be initialized using the ``KafkaBackPressurePollingSystem.createSystemAndSequence`` function.
     init() {
         self.stateMachineLock = NIOLockedValueBox(StateMachine())
-    }
-
-    // TODO: remove factory in other commit -> sequences like before
-    /// Factory method creating a ``KafkaBackPressurePollingSystem`` and the ``AsyncSequence`` that receives its messages .
-    /// The caller of this function must retain the sequence in order to receive messages.
-    ///
-    /// - Returns: A tuple containing the ``KafkaBackPressurePollingSystem`` and a reference to the ``KafkaAsyncSequence``.
-    static func createSystemAndSequence(
-        backPressureStrategy: BackPressure
-    ) -> (KafkaPollingSystem, Producer.NewSequence) {
-        let pollingSystem = KafkaPollingSystem()
-
-        // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
-        // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
-        // The source MUST be held by the caller and used to signal new elements or finish.
-        // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
-        // This is due to the fact that deiniting the sequence is used as part of a trigger to
-        // terminate the underlying source.
-        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: Element.self,
-            backPressureStrategy: backPressureStrategy,
-            delegate: pollingSystem
-        )
-
-        return (pollingSystem, sourceAndSequence)
     }
 
     /// Runs the poll loop with the specified poll interval.

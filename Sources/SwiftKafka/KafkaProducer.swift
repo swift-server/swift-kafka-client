@@ -16,13 +16,33 @@ import Crdkafka
 import Logging
 import NIOCore
 
+/// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
+public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
+    public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    public typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, HighLowWatermark, KafkaPollingSystem<Element>>
+    let wrappedSequence: WrappedSequence
+
+    /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
+    public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
+        let wrappedIterator: NIOAsyncSequenceProducer<Element, HighLowWatermark, KafkaPollingSystem<Element>>.AsyncIterator
+
+        public mutating func next() async -> Element? {
+            await self.wrappedIterator.next()
+        }
+    }
+
+    public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
+        return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    }
+}
+
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
     public typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    public typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
 
     /// States that the ``KafkaProducer`` can have.
     private enum State {
@@ -51,12 +71,12 @@ public actor KafkaProducer {
     /// Used for handling the connection to the Kafka cluster.
     private var client: KafkaClient
     /// Mechanism that polls the Kafka cluster for updates periodically.
-    private let pollingSystem: KafkaPollingSystem<Acknowledgement, HighLowWatermark>
+    private let pollingSystem: KafkaPollingSystem<Acknowledgement>
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
-    public nonisolated let acknowledgements: KafkaAsyncSequence<Acknowledgement, HighLowWatermark>
-    private let acknowledgementsSource: KafkaAsyncSequence<Acknowledgement, HighLowWatermark>.WrappedSequence.Source
+    public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
+    private let acknowledgementsSource: AcknowledgedMessagesAsyncSequence.WrappedSequence.Source
 
     /// A class that wraps a closure with a reference to that closure, allowing to change the underlying functionality
     /// of `funcTofunc` after it has been passed.
@@ -101,16 +121,23 @@ public actor KafkaProducer {
             logger: self.logger
         )
 
-        let (pollingSystem, sourceAndSequence) = KafkaPollingSystem<Acknowledgement, HighLowWatermark>
-            .createSystemAndSequence(
-                backPressureStrategy: backPressureStrategy
-            )
+        self.pollingSystem = KafkaPollingSystem()
 
-        self.pollingSystem = pollingSystem
-        self.acknowledgements = KafkaAsyncSequence(
-            wrappedSequence: sourceAndSequence.sequence
+        // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
+        // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
+        // The source MUST be held by the caller and used to signal new elements or finish.
+        // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
+        // This is due to the fact that deiniting the sequence is used as part of a trigger to
+        // terminate the underlying source.
+        let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+            elementType: Acknowledgement.self,
+            backPressureStrategy: backPressureStrategy,
+            delegate: self.pollingSystem
         )
-        self.acknowledgementsSource = sourceAndSequence.source
+        self.acknowledgements = AcknowledgedMessagesAsyncSequence(
+            wrappedSequence: acknowledgementsSourceAndSequence.sequence
+        )
+        self.acknowledgementsSource = acknowledgementsSourceAndSequence.source
 
         callbackClosure.wrappedClosure = { [logger, pollingSystem] messageResult in
             guard let messageResult else {
