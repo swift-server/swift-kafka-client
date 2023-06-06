@@ -48,34 +48,21 @@ final class KafkaPollingSystem<
     /// The state machine that manages the system's state transitions.
     let stateMachineLock: NIOLockedValueBox<StateMachine>
 
-    /// Closure that takes care of polling `librdkafka` for new messages.
-    var pollClosure: (() -> Void)? {
-        get {
-            self.stateMachineLock.withLockedValue { stateMachine in
-                return stateMachine.pollClosure
-            }
-        }
-        set {
-            self.stateMachineLock.withLockedValue { stateMachine in
-                stateMachine.pollClosure = newValue
-            }
-        }
-    }
-
     /// Initializes the ``KafkaBackPressurePollingSystem``.
     /// Private initializer. The ``KafkaBackPressurePollingSystem`` is not supposed to be initialized directly.
     /// It must rather be initialized using the ``KafkaBackPressurePollingSystem.createSystemAndSequence`` function.
-    /* USE createSystemAndSequence, TESTING only */ init() {
+    init() {
         self.stateMachineLock = NIOLockedValueBox(StateMachine())
     }
 
+    // TODO: remove factory in other commit -> sequences like before
     /// Factory method creating a ``KafkaBackPressurePollingSystem`` and the ``AsyncSequence`` that receives its messages .
     /// The caller of this function must retain the sequence in order to receive messages.
     ///
     /// - Returns: A tuple containing the ``KafkaBackPressurePollingSystem`` and a reference to the ``KafkaAsyncSequence``.
     static func createSystemAndSequence(
         backPressureStrategy: BackPressure
-    ) -> (KafkaPollingSystem, KafkaAsyncSequence<Element, BackPressure>) {
+    ) -> (KafkaPollingSystem, Producer.NewSequence) {
         let pollingSystem = KafkaPollingSystem()
 
         // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
@@ -84,43 +71,37 @@ final class KafkaPollingSystem<
         // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
         // This is due to the fact that deiniting the sequence is used as part of a trigger to
         // terminate the underlying source.
-        let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Element.self,
             backPressureStrategy: backPressureStrategy,
             delegate: pollingSystem
         )
 
-        pollingSystem.stateMachineLock.withLockedValue { stateMachine in
-            stateMachine.sequenceSource = acknowledgementsSourceAndSequence.source
-        }
-
-        let sequence = KafkaAsyncSequence(
-            wrappedSequence: acknowledgementsSourceAndSequence.sequence
-        )
-
-        return (pollingSystem, sequence)
+        return (pollingSystem, sourceAndSequence)
     }
 
     /// Runs the poll loop with the specified poll interval.
     ///
     /// - Parameter pollInterval: The desired time interval between two consecutive polls.
     /// - Returns: An awaitable task representing the execution of the poll loop.
-    func run(pollInterval: Duration) async {
-        self.stateMachineLock.withLockedValue { stateMachine in
-            guard stateMachine.running == false else {
-                fatalError("Poll loop must not be started more than once")
-            }
-            stateMachine.running = true
+    func run(pollInterval: Duration, pollClosure: @escaping () -> Void, source: Producer.Source) async {
+        switch self.stateMachineLock.withLockedValue({ $0.run(source, pollClosure) }) {
+        case .alreadyClosed:
+            return
+        case .alreadyRunning:
+            fatalError("Poll loop must not be started more than once")
+        case .startLoop:
+            break
         }
 
         while true {
             let action = self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
 
             switch action {
-            case .pollAndSleep:
+            case .pollAndSleep(let pollClosure):
                 // Poll Kafka for new acknowledgements and sleep for the given
                 // pollInterval to avoid hot looping.
-                self.pollClosure?()
+                pollClosure()
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
@@ -146,13 +127,43 @@ final class KafkaPollingSystem<
         }
     }
 
-    // TODO: docc
+    /// Yield new elements to the underlying `NIOAsyncSequenceProducer`.
+    func yield(_ element: Element) {
+        self.stateMachineLock.withLockedValue { stateMachine in
+            switch stateMachine.state {
+            case .started(let source, _, _), .producing(let source, _, _), .stopProducing(let source, _, _, _):
+                // We can also yield when in .stopProducing,
+                // the AsyncSequenceProducer will buffer for us
+                let yieldResult = source.yield(element)
+                switch yieldResult {
+                case .produceMore:
+                    let action = stateMachine.produceMore()
+                    switch action {
+                    case .resume(let continuation):
+                        continuation?.resume()
+                    case .none:
+                        break
+                    }
+                case .stopProducing:
+                    stateMachine.stopProducing()
+                case .dropped:
+                    let action = stateMachine.terminate()
+                    self.handleTerminateAction(action)
+                }
+            case .idle, .finished:
+                return
+            }
+        }
+    }
+
+    /// Invokes the desired action after ``KafkaPollingSystem/StateMachine/terminate()``
+    /// has been invoked.
     func handleTerminateAction(_ action: StateMachine.TerminateAction?) {
         switch action {
-        case .finishSequenceSource:
-            self.stateMachineLock.withLockedValue { $0.sequenceSource?.finish() }
-        case .finishSequenceSourceAndResume(let continuation):
-            self.stateMachineLock.withLockedValue { $0.sequenceSource?.finish() }
+        case .finishSequenceSource(let source):
+            source.finish()
+        case .finishSequenceSourceAndResume(let source, let continuation):
+            source.finish()
             continuation?.resume()
         case .none:
             break
@@ -172,7 +183,6 @@ extension KafkaPollingSystem: NIOAsyncSequenceProducerDelegate {
     }
 
     func didTerminate() {
-        // TODO: move terminate switch into a private func
         let action = self.stateMachineLock.withLockedValue { $0.terminate() }
         self.handleTerminateAction(action)
     }
@@ -181,33 +191,77 @@ extension KafkaPollingSystem: NIOAsyncSequenceProducerDelegate {
 extension KafkaPollingSystem {
     /// The state machine used by the ``KafkaBackPressurePollingSystem``.
     struct StateMachine {
-        /// A flag that determines if the ``run()`` method has already been invoked.
-        var running = false
-        /// Closure that takes care of polling `librdkafka` for new messages.
-        var pollClosure: (() -> Void)?
-        /// The ``NIOAsyncSequenceProducer.Source`` used for yielding the messages to the ``NIOAsyncSequenceProducer``.
-        var sequenceSource: Producer.Source?
-
         /// The possible states of the state machine.
         enum State {
             /// Initial state.
-            case initial
+            case idle
+            /// The ``run()`` method has been invoked and the ``KafkaPollingSystem`` is ready.
+            case started(
+                source: Producer.Source,
+                pollClosure: () -> Void,
+                running: Bool
+            )
             /// The system up and producing acknowledgement messages.
-            case producing
+            case producing(
+                source: Producer.Source,
+                pollClosure: () -> Void,
+                running: Bool
+            )
             /// The pool loop is currently suspended and we are waiting for an invocation
             /// of `produceMore()` to continue producing messages.
-            case stopProducing(CheckedContinuation<Void, Never>?)
+            case stopProducing(
+                source: Producer.Source,
+                continuation: CheckedContinuation<Void, Never>?,
+                pollClosure: () -> Void,
+                running: Bool
+            )
             /// The system is shut down.
             case finished
         }
 
         /// The current state of the state machine.
-        var state = State.initial
+        var state: State = .idle
+
+        /// Actions to take after ``run()`` has been invoked on the ``KafkaPollingSystem/StateMachine``.
+        enum RunAction {
+            /// Do nothing, the poll loop is already terminated.
+            case alreadyClosed
+            /// The poll loop is already running. ``run()`` should not be invoked more than once!
+            case alreadyRunning
+            /// The poll loop can now be started.
+            case startLoop
+        }
+
+        mutating func run(_ source: Producer.Source, _ pollClosure: @escaping () -> Void) -> RunAction {
+            switch self.state {
+            case .idle:
+                self.state = .started(source: source, pollClosure: pollClosure, running: true)
+            case .started(let source, let pollClosure, let running):
+                guard running == false else {
+                    return .alreadyRunning
+                }
+                self.state = .started(source: source, pollClosure: pollClosure, running: true)
+            case .producing(let source, let pollClosure, let running):
+                guard running == false else {
+                    return .alreadyRunning
+                }
+                self.state = .producing(source: source, pollClosure: pollClosure, running: true)
+            case .stopProducing(let source, let continuation, let pollClosure, let running):
+                guard running == false else {
+                    return .alreadyRunning
+                }
+                self.state = .stopProducing(source: source, continuation: continuation, pollClosure: pollClosure, running: true)
+            case .finished:
+                return .alreadyClosed
+            }
+
+            return .startLoop
+        }
 
         /// The possible actions for the poll loop.
         enum PollLoopAction {
             /// Ask `librdkakfa` to receive new message acknowledgements at a given poll interval.
-            case pollAndSleep
+            case pollAndSleep(pollClosure: () -> Void)
             /// Suspend the poll loop.
             case suspendPollLoop
             /// Shutdown the poll loop.
@@ -219,8 +273,10 @@ extension KafkaPollingSystem {
         /// - Returns: The next action for the poll loop.
         func nextPollLoopAction() -> PollLoopAction {
             switch self.state {
-            case .initial, .producing:
-                return .pollAndSleep
+            case .idle:
+                fatalError("State machine must be initialized with prepare()")
+            case .started(_, let pollClosure, _), .producing(_, let pollClosure, _):
+                return .pollAndSleep(pollClosure: pollClosure)
             case .stopProducing:
                 // We were asked to stop producing,
                 // but the poll loop is still running.
@@ -231,21 +287,22 @@ extension KafkaPollingSystem {
             }
         }
 
-        // TODO: docc
+        /// Actions to take after ``produceMore()`` has been invoked on the ``KafkaPollingSystem/StateMachine``.
         enum ProduceMoreAction {
+            /// Resume the given `continuation`.
             case resume(CheckedContinuation<Void, Never>?)
         }
 
         /// Our downstream consumer allowed us to produce more elements.
         mutating func produceMore() -> ProduceMoreAction? {
             switch self.state {
-            case .finished, .producing:
+            case .idle, .finished, .producing:
                 break
-            case .stopProducing(let continuation):
-                self.state = .producing
+            case .stopProducing(let source, let continuation, let pollClosure, let running):
+                self.state = .producing(source: source, pollClosure: pollClosure, running: running)
                 return .resume(continuation)
-            case .initial:
-                self.state = .producing
+            case .started(let source, let pollClosure, let running):
+                self.state = .producing(source: source, pollClosure: pollClosure, running: running)
             }
             return nil
         }
@@ -253,12 +310,12 @@ extension KafkaPollingSystem {
         /// Our downstream consumer asked us to stop producing new elements.
         mutating func stopProducing() {
             switch self.state {
-            case .finished, .stopProducing:
+            case .idle, .finished, .stopProducing:
                 break
-            case .initial:
+            case .started:
                 fatalError("\(#function) is not supported in state \(self.state)")
-            case .producing:
-                self.state = .stopProducing(nil)
+            case .producing(let source, let pollClosure, let running):
+                self.state = .stopProducing(source: source, continuation: nil, pollClosure: pollClosure, running: running)
             }
         }
 
@@ -268,32 +325,38 @@ extension KafkaPollingSystem {
         /// After resuming the continuation, our poll loop will start running again.
         fileprivate mutating func suspendLoop(continuation: CheckedContinuation<Void, Never>) {
             switch self.state {
-            case .finished:
+            case .idle, .finished:
                 return
-            case .stopProducing(.some):
+            case .stopProducing(_, .some, _, _):
                 fatalError("Internal state inconsistency. Run loop is running more than once")
-            case .initial, .producing, .stopProducing:
-                self.state = .stopProducing(continuation)
+            case .started(let source, let pollClosure, let running), .producing(let source, let pollClosure, let running), .stopProducing(let source, _, let pollClosure, let running):
+                self.state = .stopProducing(source: source, continuation: continuation, pollClosure: pollClosure, running: running)
             }
         }
 
-        // TODO: docc
+        /// Actions to take after ``terminate()`` has been invoked on the ``KafkaPollingSystem/StateMachine``.
         enum TerminateAction {
-            case finishSequenceSource
-            case finishSequenceSourceAndResume(CheckedContinuation<Void, Never>?)
+            /// Invoke `finish()` on the given `NIOAsyncSequenceProducer.Source`.
+            case finishSequenceSource(source: Producer.Source)
+            /// Invoke `finish()` on the given `NIOAsyncSequenceProducer.Source`
+            /// and resume the given `continuation`.
+            case finishSequenceSourceAndResume(
+                source: Producer.Source,
+                continuation: CheckedContinuation<Void, Never>?
+            )
         }
 
         /// Terminate the state machine and finish producing elements.
         mutating func terminate() -> TerminateAction? {
             switch self.state {
-            case .finished:
+            case .idle, .finished:
                 return nil
-            case .initial, .producing:
+            case .started(let source, _, _), .producing(let source, _, _):
                 self.state = .finished
-                return .finishSequenceSource
-            case .stopProducing(let continuation):
+                return .finishSequenceSource(source: source)
+            case .stopProducing(let source, let continuation, _, _):
                 self.state = .finished
-                return .finishSequenceSourceAndResume(continuation)
+                return .finishSequenceSourceAndResume(source: source, continuation: continuation)
             }
         }
     }

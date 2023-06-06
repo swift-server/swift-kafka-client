@@ -92,6 +92,9 @@ struct RDKafkaConfig {
             let actualCallback = opaque.closure
             let messageResult = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer)
             actualCallback(messageResult)
+
+            // The messagePointer is automatically destroyed by librdkafka
+            // For safety reasons, we only use it inside of this callback
         }
 
         rd_kafka_conf_set_dr_msg_cb(

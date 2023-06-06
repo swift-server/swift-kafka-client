@@ -56,6 +56,20 @@ public actor KafkaProducer {
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
     public nonisolated let acknowledgements: KafkaAsyncSequence<Acknowledgement, HighLowWatermark>
+    private let acknowledgementsSource: KafkaAsyncSequence<Acknowledgement, HighLowWatermark>.WrappedSequence.Source
+
+    /// A class that wraps a closure with a reference to that closure, allowing to change the underlying functionality
+    /// of `funcTofunc` after it has been passed.
+    public class ClosureWrapper<Arg> {
+        /// The wrapped closure.
+        var wrappedClosure: ((Arg?) -> Void)?
+
+        /// Function that should be passed on.
+        /// By changing the `wrappedClosure`, the behaviour of `funcTofunc` can be changed.
+        func funcTofunc(_ arg: Arg?) {
+            self.wrappedClosure?(arg)
+        }
+    }
 
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -78,49 +92,33 @@ public actor KafkaProducer {
             highWatermark: 50
         )
 
-        let (pollingSystem, sequence) = KafkaPollingSystem<Acknowledgement, HighLowWatermark>
-            .createSystemAndSequence(backPressureStrategy: backPressureStrategy)
-        self.pollingSystem = pollingSystem
-        self.acknowledgements = sequence
+        let callbackClosure = ClosureWrapper<Acknowledgement>()
 
         self.client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            callback: { [logger, pollingSystem] messageResult in
-                guard let messageResult else {
-                    logger.error("Could not resolve acknowledged message")
-                    return
-                }
-
-                // TODO: fix reentrancy
-                let yieldResult = pollingSystem.stateMachineLock.withLockedValue { $0.sequenceSource?.yield(messageResult) }
-                switch yieldResult {
-                case .produceMore:
-                    let action = pollingSystem.stateMachineLock.withLockedValue { $0.produceMore() }
-                    switch action {
-                    case .resume(let continuation):
-                        continuation?.resume()
-                    case .none:
-                        break
-                    }
-                case .stopProducing:
-                    pollingSystem.stateMachineLock.withLockedValue { $0.stopProducing() }
-                case .dropped, .none:
-                    let action = pollingSystem.stateMachineLock.withLockedValue { $0.terminate() }
-                    pollingSystem.handleTerminateAction(action)
-                }
-
-                // The messagePointer is automatically destroyed by librdkafka
-                // For safety reasons, we only use it inside of this closure
-            },
+            callback: callbackClosure.funcTofunc,
             logger: self.logger
         )
 
-        self.pollingSystem.pollClosure = { [client] in
-            client.withKafkaHandlePointer { handle in
-                rd_kafka_poll(handle, 0)
+        let (pollingSystem, sourceAndSequence) = KafkaPollingSystem<Acknowledgement, HighLowWatermark>
+            .createSystemAndSequence(
+                backPressureStrategy: backPressureStrategy
+            )
+
+        self.pollingSystem = pollingSystem
+        self.acknowledgements = KafkaAsyncSequence(
+            wrappedSequence: sourceAndSequence.sequence
+        )
+        self.acknowledgementsSource = sourceAndSequence.source
+
+        callbackClosure.wrappedClosure = { [logger, pollingSystem] messageResult in
+            guard let messageResult else {
+                logger.error("Could not resolve acknowledged message")
+                return
             }
-            return
+
+            pollingSystem.yield(messageResult)
         }
     }
 
@@ -161,7 +159,16 @@ public actor KafkaProducer {
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run(pollInterval: Duration = .milliseconds(100)) async {
         // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
-        await self.pollingSystem.run(pollInterval: pollInterval)
+        await self.pollingSystem.run(
+            pollInterval: pollInterval,
+            pollClosure: { [client] in
+                client.withKafkaHandlePointer { handle in
+                    rd_kafka_poll(handle, 0)
+                }
+                return
+            },
+            source: self.acknowledgementsSource
+        )
     }
 
     /// Send messages to the Kafka cluster asynchronously, aka "fire and forget".
