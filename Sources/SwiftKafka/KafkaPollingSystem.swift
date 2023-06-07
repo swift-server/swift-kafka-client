@@ -37,7 +37,7 @@ final class KafkaPollingSystem<Element>: Sendable {
     ///
     /// - Parameter pollInterval: The desired time interval between two consecutive polls.
     /// - Returns: An awaitable task representing the execution of the poll loop.
-    func run(pollInterval: Duration, pollClosure: @escaping () -> Void, source: Producer.Source) async {
+    func run(pollInterval: Duration, pollClosure: @escaping () -> Void, source: Producer.Source?) async {
         switch self.stateMachineLock.withLockedValue({ $0.run(source, pollClosure) }) {
         case .alreadyClosed:
             return
@@ -87,7 +87,7 @@ final class KafkaPollingSystem<Element>: Sendable {
             case .started(let source, _, _), .producing(let source, _, _), .stopProducing(let source, _, _, _):
                 // We can also yield when in .stopProducing,
                 // the AsyncSequenceProducer will buffer for us
-                let yieldResult = source.yield(element)
+                let yieldResult = source?.yield(element)
                 switch yieldResult {
                 case .produceMore:
                     let action = stateMachine.produceMore()
@@ -102,6 +102,8 @@ final class KafkaPollingSystem<Element>: Sendable {
                 case .dropped:
                     let action = stateMachine.terminate()
                     self.handleTerminateAction(action)
+                case .none:
+                    break
                 }
             case .idle, .finished:
                 return
@@ -114,9 +116,9 @@ final class KafkaPollingSystem<Element>: Sendable {
     func handleTerminateAction(_ action: StateMachine.TerminateAction?) {
         switch action {
         case .finishSequenceSource(let source):
-            source.finish()
+            source?.finish()
         case .finishSequenceSourceAndResume(let source, let continuation):
-            source.finish()
+            source?.finish()
             continuation?.resume()
         case .none:
             break
@@ -150,20 +152,20 @@ extension KafkaPollingSystem {
             case idle
             /// The ``run()`` method has been invoked and the ``KafkaPollingSystem`` is ready.
             case started(
-                source: Producer.Source,
+                source: Producer.Source?,
                 pollClosure: () -> Void,
                 running: Bool
             )
             /// The system up and producing acknowledgement messages.
             case producing(
-                source: Producer.Source,
+                source: Producer.Source?,
                 pollClosure: () -> Void,
                 running: Bool
             )
             /// The pool loop is currently suspended and we are waiting for an invocation
             /// of `produceMore()` to continue producing messages.
             case stopProducing(
-                source: Producer.Source,
+                source: Producer.Source?,
                 continuation: CheckedContinuation<Void, Never>?,
                 pollClosure: () -> Void,
                 running: Bool
@@ -185,7 +187,7 @@ extension KafkaPollingSystem {
             case startLoop
         }
 
-        mutating func run(_ source: Producer.Source, _ pollClosure: @escaping () -> Void) -> RunAction {
+        mutating func run(_ source: Producer.Source?, _ pollClosure: @escaping () -> Void) -> RunAction {
             switch self.state {
             case .idle:
                 self.state = .started(source: source, pollClosure: pollClosure, running: true)
@@ -290,11 +292,11 @@ extension KafkaPollingSystem {
         /// Actions to take after ``terminate()`` has been invoked on the ``KafkaPollingSystem/StateMachine``.
         enum TerminateAction {
             /// Invoke `finish()` on the given `NIOAsyncSequenceProducer.Source`.
-            case finishSequenceSource(source: Producer.Source)
+            case finishSequenceSource(source: Producer.Source?)
             /// Invoke `finish()` on the given `NIOAsyncSequenceProducer.Source`
             /// and resume the given `continuation`.
             case finishSequenceSourceAndResume(
-                source: Producer.Source,
+                source: Producer.Source?,
                 continuation: CheckedContinuation<Void, Never>?
             )
         }
