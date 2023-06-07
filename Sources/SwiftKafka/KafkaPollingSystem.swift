@@ -278,7 +278,7 @@ extension KafkaPollingSystem {
         ///
         /// - Parameter continuation: The continuation that will be resumed once we are allowed to produce again.
         /// After resuming the continuation, our poll loop will start running again.
-        fileprivate mutating func suspendLoop(continuation: CheckedContinuation<Void, Never>) {
+        mutating func suspendLoop(continuation: CheckedContinuation<Void, Never>) {
             switch self.state {
             case .idle, .finished:
                 return

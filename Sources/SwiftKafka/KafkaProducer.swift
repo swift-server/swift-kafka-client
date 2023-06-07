@@ -80,7 +80,7 @@ public actor KafkaProducer {
 
     /// A class that wraps a closure with a reference to that closure, allowing to change the underlying functionality
     /// of `funcTofunc` after it has been passed.
-    public class ClosureWrapper<Arg> {
+    private class ClosureWrapper<Arg> {
         /// The wrapped closure.
         var wrappedClosure: ((Arg?) -> Void)?
 
