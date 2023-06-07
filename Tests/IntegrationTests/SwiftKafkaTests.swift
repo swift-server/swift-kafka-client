@@ -46,7 +46,7 @@ final class SwiftKafkaTests: XCTestCase {
         )
 
         let basicConfig = KafkaConsumerConfig(
-            consumptionStrategy: .groupBased(groupID: "no-group", topics: []),
+            consumptionStrategy: .group(groupID: "no-group", topics: []),
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )
@@ -58,7 +58,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     override func tearDownWithError() throws {
         let basicConfig = KafkaConsumerConfig(
-            consumptionStrategy: .groupBased(groupID: "no-group", topics: []),
+            consumptionStrategy: .group(groupID: "no-group", topics: []),
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )
@@ -76,7 +76,7 @@ final class SwiftKafkaTests: XCTestCase {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfig(
-            consumptionStrategy: .groupBased(groupID: "subscription-test-group-id", topics: [uniqueTestTopic]),
+            consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [uniqueTestTopic]),
             autoOffsetReset: .beginning, // Always read topics from beginning
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
@@ -117,7 +117,7 @@ final class SwiftKafkaTests: XCTestCase {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfig(
-            consumptionStrategy: .partitionBased(
+            consumptionStrategy: .partition(
                 topic: uniqueTestTopic,
                 partition: KafkaPartition(rawValue: 0),
                 offset: 0
@@ -162,7 +162,7 @@ final class SwiftKafkaTests: XCTestCase {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfig(
-            consumptionStrategy: .groupBased(groupID: "commit-sync-test-group-id", topics: [uniqueTestTopic]),
+            consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [uniqueTestTopic]),
             enableAutoCommit: false,
             autoOffsetReset: .beginning, // Always read topics from beginning
             bootstrapServers: [self.bootstrapServer],

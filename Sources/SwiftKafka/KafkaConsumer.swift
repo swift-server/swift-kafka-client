@@ -112,7 +112,7 @@ public final class KafkaConsumer {
         var lowWatermark = 10
         var highWatermark = 50
         switch config.backPressureStrategy._internal {
-        case .highLowWatermark(lowWatermark: let low, highWatermark: let high):
+        case .watermark(let low, let high):
             lowWatermark = low
             highWatermark = high
         }
@@ -137,9 +137,9 @@ public final class KafkaConsumer {
         )
 
         switch config.consumptionStrategy._internal {
-        case .partitionBased(topic: let topic, partition: let partition, offset: let offset):
+        case .partition(topic: let topic, partition: let partition, offset: let offset):
             try self.assign(topic: topic, partition: partition, offset: offset)
-        case .groupBased(groupID: _, topics: let topics):
+        case .group(groupID: _, topics: let topics):
             try self.subscribe(topics: topics)
         }
     }
@@ -176,7 +176,7 @@ public final class KafkaConsumer {
     private func assign(
         topic: String,
         partition: KafkaPartition,
-        offset: Int64
+        offset: Int
     ) throws {
         assert(!self.closed)
 
@@ -188,7 +188,7 @@ public final class KafkaConsumer {
             fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
         }
 
-        partitionPointer.pointee.offset = offset
+        partitionPointer.pointee.offset = Int64(offset)
 
         let result = self.client.withKafkaHandlePointer { handle in
             rd_kafka_assign(handle, self.subscribedTopicsPointer)
@@ -304,7 +304,7 @@ public final class KafkaConsumer {
         // The offset committed is always the offset of the next requested message.
         // Thus, we increase the offset of the current message by one before committing it.
         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        partitionPointer.pointee.offset = message.offset + 1
+        partitionPointer.pointee.offset = Int64(message.offset + 1)
         let result = self.client.withKafkaHandlePointer { handle in
             rd_kafka_commit(
                 handle,

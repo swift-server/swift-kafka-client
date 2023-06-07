@@ -26,7 +26,7 @@ public struct KafkaConsumerMessage: Hashable {
     /// The body of the message.
     public var value: ByteBuffer
     /// The offset of the message in its partition.
-    public var offset: Int64
+    public var offset: Int
 
     /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
@@ -69,6 +69,6 @@ public struct KafkaConsumerMessage: Hashable {
 
         self.value = ByteBuffer(bytes: valueBufferPointer)
 
-        self.offset = Int64(rdKafkaMessage.offset)
+        self.offset = Int(rdKafkaMessage.offset)
     }
 }
