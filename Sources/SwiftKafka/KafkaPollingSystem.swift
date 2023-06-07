@@ -182,13 +182,13 @@ extension KafkaPollingSystem {
                 pollClosure: () -> Void,
                 running: Bool
             )
-            /// The system up and producing acknowledgement messages.
+            /// The system is up and producing acknowledgement messages.
             case producing(
                 source: Producer.Source?,
                 pollClosure: () -> Void,
                 running: Bool
             )
-            /// The pool loop is currently suspended and we are waiting for an invocation
+            /// The poll loop is currently suspended and we are waiting for an invocation
             /// of `produceMore()` to continue producing messages.
             case stopProducing(
                 source: Producer.Source?,
