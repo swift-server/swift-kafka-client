@@ -13,47 +13,81 @@
 //===----------------------------------------------------------------------===//
 
 import NIOCore
+import NIOConcurrencyHelpers
 @testable import SwiftKafka
 import XCTest
 
-/// `NIOAsyncSequenceProducerBackPressureStrategy` that always returns true.
-struct NoBackPressure: NIOAsyncSequenceProducerBackPressureStrategy {
-    func didYield(bufferDepth: Int) -> Bool { true }
-    func didConsume(bufferDepth: Int) -> Bool { true }
+// MARK: - Helper Classes
+
+/// A class that wraps a closure with a reference to that closure, allowing to change the underlying functionality
+/// of `funcTofunc` after it has been passed.
+class ClosureWrapper {
+    /// The wrapped closure.
+    var wrappedClosure: (() -> Void)?
+
+    /// Function that should be passed on.
+    /// By changing the `wrappedClosure`, the behaviour of `funcTofunc` can be changed.
+    func funcTofunc() {
+        self.wrappedClosure?()
+    }
 }
+
+// MARK: - Tests
 
 final class KafkaPollingSystemTests: XCTestCase {
     typealias Message = String // Could be any type, this is just for testing
-    typealias TestStateMachine = KafkaPollingSystem<Message, NoBackPressure>.StateMachine
+    typealias TestStateMachine = KafkaPollingSystem<Message>.StateMachine
 
     func testBackPressure() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        var expectation: XCTestExpectation?
-        let sut = KafkaPollingSystem<Message, NoBackPressure>()
-        sut.pollClosure = {
-            expectation?.fulfill()
-        }
-
+        let sut = KafkaPollingSystem<Message>()
+        let closureWrapper = ClosureWrapper()
         let runTask = Task {
-            await sut.run(pollInterval: pollInterval)
+            await sut.run(
+                pollInterval: pollInterval,
+                pollClosure: { closureWrapper.funcTofunc() },
+                source: nil
+            )
         }
 
-        expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
+        let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
+        closureWrapper.wrappedClosure = { expectation.fulfill() }
         sut.produceMore()
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
-        XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
+        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: 1)
+        XCTAssertEqual(result, .completed)
+        if case .pollAndSleep = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
 
         sut.stopProducing()
-        XCTAssertEqual(TestStateMachine.PollLoopAction.suspendPollLoop, sut.nextPollLoopAction())
+        if case .suspendPollLoop = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
 
-        expectation = XCTestExpectation(description: "Poll closure invoked after second produceMore()")
+        let secondExpectation = XCTestExpectation(description: "Poll closure invoked after second produceMore()")
+        closureWrapper.wrappedClosure = {
+            secondExpectation.fulfill()
+        }
         sut.produceMore()
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
-        XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
+        let secondResult = await XCTWaiter.fulfillment(of: [secondExpectation], timeout: 1)
+        XCTAssertEqual(secondResult, .completed)
+        if case .pollAndSleep = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
 
         sut.didTerminate()
-        XCTAssertEqual(TestStateMachine.PollLoopAction.shutdownPollLoop, sut.nextPollLoopAction())
+        if case .shutdownPollLoop = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
 
         runTask.cancel()
     }
@@ -61,26 +95,37 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testNoPollsAfterPollLoopSuspension() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        var expectation: XCTestExpectation?
-        let sut = KafkaPollingSystem<Message, NoBackPressure>()
-        sut.pollClosure = {
-            expectation?.fulfill()
-        }
-
+        let sut = KafkaPollingSystem<Message>()
+        let closureWrapper = ClosureWrapper()
         let runTask = Task {
-            await sut.run(pollInterval: pollInterval)
+            await sut.run(
+                pollInterval: pollInterval,
+                pollClosure: { closureWrapper.funcTofunc() },
+                source: nil
+            )
         }
 
-        expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
+        let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
+        closureWrapper.wrappedClosure = { expectation.fulfill() }
         sut.produceMore()
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
-        XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
+        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: 1)
+        XCTAssertEqual(result, .completed)
+        if case .pollAndSleep = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
 
         // We're definitely running now. Now suspend the poll loop.
         sut.stopProducing()
-        XCTAssertEqual(TestStateMachine.PollLoopAction.suspendPollLoop, sut.nextPollLoopAction())
+        if case .suspendPollLoop = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
+
         // We change the poll closure so that our test fails when the poll closure is invoked.
-        sut.pollClosure = {
+        closureWrapper.wrappedClosure = {
             XCTFail("Poll loop still running after stopProducing() has been invoked")
         }
 
@@ -92,31 +137,45 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testRunTaskCancellationShutsDownStateMachine() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        var expectation: XCTestExpectation?
-        let sut = KafkaPollingSystem<Message, NoBackPressure>()
-        sut.pollClosure = {
-            expectation?.fulfill()
-        }
-
+        let sut = KafkaPollingSystem<Message>()
+        let closureWrapper = ClosureWrapper()
         let runTask = Task {
-            await sut.run(pollInterval: pollInterval)
+            await sut.run(
+                pollInterval: pollInterval,
+                pollClosure: { closureWrapper.funcTofunc() },
+                source: nil
+            )
         }
 
-        expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
+        let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
+        closureWrapper.wrappedClosure = { expectation.fulfill() }
         sut.produceMore()
-        XCTAssertEqual(XCTWaiter().wait(for: [expectation!], timeout: 1), .completed)
-        XCTAssertEqual(TestStateMachine.PollLoopAction.pollAndSleep, sut.nextPollLoopAction())
+        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: 1)
+        XCTAssertEqual(result, .completed)
+        if case .pollAndSleep = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
 
         // We're definitely running now. Now suspend the poll loop.
         sut.stopProducing()
-        XCTAssertEqual(TestStateMachine.PollLoopAction.suspendPollLoop, sut.nextPollLoopAction())
+        if case .suspendPollLoop = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
 
         // Cancel the Task that runs the poll loop.
         // This should result in the state machine shutting down.
         runTask.cancel()
         // Sleep for a second to make sure the poll loop's canncellationHandler gets invoked.
         try await Task.sleep(for: .seconds(1))
-        XCTAssertEqual(TestStateMachine.PollLoopAction.shutdownPollLoop, sut.nextPollLoopAction())
+        if case .shutdownPollLoop = sut.nextPollLoopAction() {
+            // Test passed
+        } else {
+            XCTFail()
+        }
     }
 }
 
