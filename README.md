@@ -16,25 +16,28 @@ let producer = try await KafkaProducer(
     logger: .kafkaTest // Your logger here
 )
 
-let runTask = Task {
-    await producer.run()
+await withThrowingTaskGroup(of: Void.self) { group in
+
+    group.addTask {
+        try await producer.run()
+    }
+
+    group.addTask {
+        let messageID = try await producer.sendAsync(
+            KafkaProducerMessage(
+                topic: "topic-name",
+                value: "Hello, World!"
+            )
+        )
+
+        for await acknowledgement in producer.acknowledgements {
+            // Check if acknowledgement belongs to the sent message
+        }
+
+        // Required
+        await producer.shutdownGracefully()
+    }
 }
-
-let messageID = try await producer.sendAsync(
-    KafkaProducerMessage(
-        topic: "topic-name",
-        value: "Hello, World!"
-    )
-)
-
-for await acknowledgement in producer.acknowledgements {
-    // Check if acknowledgement belongs to the sent message
-}
-
-runTask.cancel()
-
-// Required
-await producer.shutdownGracefully()
 ```
 
 ### Consumer API

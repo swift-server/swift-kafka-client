@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIOCore
 import NIOConcurrencyHelpers
+import NIOCore
 @testable import SwiftKafka
 import XCTest
 
@@ -45,8 +45,8 @@ final class KafkaPollingSystemTests: XCTestCase {
         let sut = KafkaPollingSystem<Message>(pollClosure: {
             closureWrapper.funcTofunc()
         })
-        let runTask = Task {
-            await sut.run(pollInterval: pollInterval)
+        let _ = Task {
+            try await sut.run(pollInterval: pollInterval)
         }
 
         let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
@@ -86,8 +86,6 @@ final class KafkaPollingSystemTests: XCTestCase {
         } else {
             XCTFail()
         }
-
-        runTask.cancel()
     }
 
     func testNoPollsAfterPollLoopSuspension() async throws {
@@ -97,8 +95,8 @@ final class KafkaPollingSystemTests: XCTestCase {
         let sut = KafkaPollingSystem<Message>(pollClosure: {
             closureWrapper.funcTofunc()
         })
-        let runTask = Task {
-            await sut.run(pollInterval: pollInterval)
+        let _ = Task {
+            try await sut.run(pollInterval: pollInterval)
         }
 
         let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
@@ -126,8 +124,6 @@ final class KafkaPollingSystemTests: XCTestCase {
         }
 
         try await Task.sleep(for: .seconds(5))
-
-        runTask.cancel()
     }
 
     func testRunTaskCancellationShutsDownStateMachine() async throws {
@@ -138,7 +134,12 @@ final class KafkaPollingSystemTests: XCTestCase {
             closureWrapper.funcTofunc()
         })
         let runTask = Task {
-            await sut.run(pollInterval: pollInterval)
+            do {
+                try await sut.run(pollInterval: pollInterval)
+                XCTFail("Should have thrown error")
+            } catch {
+                XCTAssertTrue(error is CancellationError)
+            }
         }
 
         let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
@@ -170,18 +171,5 @@ final class KafkaPollingSystemTests: XCTestCase {
         } else {
             XCTFail()
         }
-    }
-}
-
-// MARK: - KafkaBackPressurePollingSystem + Extensions
-
-/// These testing-only methods provide more convenient access to the polling system's locked `stateMachine` methods.
-extension KafkaPollingSystem {
-    func nextPollLoopAction() -> KafkaPollingSystem.StateMachine.PollLoopAction {
-        return self.stateMachineLock.withLockedValue { $0.nextPollLoopAction() }
-    }
-
-    func stopProducing() {
-        stateMachineLock.withLockedValue { $0.stopProducing() }
     }
 }

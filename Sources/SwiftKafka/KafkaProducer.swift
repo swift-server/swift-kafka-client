@@ -142,9 +142,7 @@ public actor KafkaProducer {
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
 
-        self.pollingSystem.stateMachineLock.withLockedValue { stateMachine in
-            stateMachine.source = acknowledgementsSourceAndSequence.source
-        }
+        self.pollingSystem.source = acknowledgementsSourceAndSequence.source
 
         callbackClosure.wrappedClosure = { [logger, pollingSystem] messageResult in
             guard let messageResult else {
@@ -191,9 +189,9 @@ public actor KafkaProducer {
     ///
     /// - Parameter pollInterval: The desired time interval between two consecutive polls.
     /// - Returns: An awaitable task representing the execution of the poll loop.
-    public func run(pollInterval: Duration = .milliseconds(100)) async {
+    public func run(pollInterval: Duration = .milliseconds(100)) async throws {
         // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
-        await self.pollingSystem.run(pollInterval: pollInterval)
+        try await self.pollingSystem.run(pollInterval: pollInterval)
     }
 
     /// Send messages to the Kafka cluster asynchronously, aka "fire and forget".
