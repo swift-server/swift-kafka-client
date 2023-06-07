@@ -41,14 +41,12 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testBackPressure() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        let sut = KafkaPollingSystem<Message>()
         let closureWrapper = ClosureWrapper()
+        let sut = KafkaPollingSystem<Message>(pollClosure: {
+            closureWrapper.funcTofunc()
+        })
         let runTask = Task {
-            await sut.run(
-                pollInterval: pollInterval,
-                pollClosure: { closureWrapper.funcTofunc() },
-                source: nil
-            )
+            await sut.run(pollInterval: pollInterval)
         }
 
         let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
@@ -95,14 +93,12 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testNoPollsAfterPollLoopSuspension() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        let sut = KafkaPollingSystem<Message>()
         let closureWrapper = ClosureWrapper()
+        let sut = KafkaPollingSystem<Message>(pollClosure: {
+            closureWrapper.funcTofunc()
+        })
         let runTask = Task {
-            await sut.run(
-                pollInterval: pollInterval,
-                pollClosure: { closureWrapper.funcTofunc() },
-                source: nil
-            )
+            await sut.run(pollInterval: pollInterval)
         }
 
         let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
@@ -137,14 +133,12 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testRunTaskCancellationShutsDownStateMachine() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        let sut = KafkaPollingSystem<Message>()
         let closureWrapper = ClosureWrapper()
+        let sut = KafkaPollingSystem<Message>(pollClosure: {
+            closureWrapper.funcTofunc()
+        })
         let runTask = Task {
-            await sut.run(
-                pollInterval: pollInterval,
-                pollClosure: { closureWrapper.funcTofunc() },
-                source: nil
-            )
+            await sut.run(pollInterval: pollInterval)
         }
 
         let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")

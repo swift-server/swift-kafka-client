@@ -76,7 +76,6 @@ public actor KafkaProducer {
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
     public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
-    private let acknowledgementsSource: AcknowledgedMessagesAsyncSequence.WrappedSequence.Source
 
     /// A class that wraps a closure with a reference to that closure, allowing to change the underlying functionality
     /// of `funcTofunc` after it has been passed.
@@ -121,7 +120,12 @@ public actor KafkaProducer {
             logger: self.logger
         )
 
-        self.pollingSystem = KafkaPollingSystem()
+        self.pollingSystem = KafkaPollingSystem(pollClosure: { [client] in
+            client.withKafkaHandlePointer { handle in
+                rd_kafka_poll(handle, 0)
+            }
+            return
+        })
 
         // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
         // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
@@ -137,7 +141,10 @@ public actor KafkaProducer {
         self.acknowledgements = AcknowledgedMessagesAsyncSequence(
             wrappedSequence: acknowledgementsSourceAndSequence.sequence
         )
-        self.acknowledgementsSource = acknowledgementsSourceAndSequence.source
+
+        self.pollingSystem.stateMachineLock.withLockedValue { stateMachine in
+            stateMachine.source = acknowledgementsSourceAndSequence.source
+        }
 
         callbackClosure.wrappedClosure = { [logger, pollingSystem] messageResult in
             guard let messageResult else {
@@ -186,16 +193,7 @@ public actor KafkaProducer {
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run(pollInterval: Duration = .milliseconds(100)) async {
         // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
-        await self.pollingSystem.run(
-            pollInterval: pollInterval,
-            pollClosure: { [client] in
-                client.withKafkaHandlePointer { handle in
-                    rd_kafka_poll(handle, 0)
-                }
-                return
-            },
-            source: self.acknowledgementsSource
-        )
+        await self.pollingSystem.run(pollInterval: pollInterval)
     }
 
     /// Send messages to the Kafka cluster asynchronously, aka "fire and forget".
