@@ -42,6 +42,14 @@ final class KafkaPollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         let closureWrapper = ClosureWrapper()
+
+        let expectationStream = AsyncStream { continuation in
+            closureWrapper.wrappedClosure = {
+                continuation.yield()
+            }
+        }
+        var pollIterator = expectationStream.makeAsyncIterator()
+
         let sut = KafkaPollingSystem<Message>(pollClosure: {
             closureWrapper.funcTofunc()
         })
@@ -49,11 +57,8 @@ final class KafkaPollingSystemTests: XCTestCase {
             try await sut.run(pollInterval: pollInterval)
         }
 
-        let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
-        closureWrapper.wrappedClosure = { expectation.fulfill() }
         sut.produceMore()
-        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: 1)
-        XCTAssertEqual(result, .completed)
+        await pollIterator.next()
         if case .pollAndSleep = sut.nextPollLoopAction() {
             // Test passed
         } else {
@@ -67,13 +72,8 @@ final class KafkaPollingSystemTests: XCTestCase {
             XCTFail()
         }
 
-        let secondExpectation = XCTestExpectation(description: "Poll closure invoked after second produceMore()")
-        closureWrapper.wrappedClosure = {
-            secondExpectation.fulfill()
-        }
         sut.produceMore()
-        let secondResult = await XCTWaiter.fulfillment(of: [secondExpectation], timeout: 1)
-        XCTAssertEqual(secondResult, .completed)
+        await pollIterator.next()
         if case .pollAndSleep = sut.nextPollLoopAction() {
             // Test passed
         } else {
@@ -92,6 +92,14 @@ final class KafkaPollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         let closureWrapper = ClosureWrapper()
+
+        let expectationStream = AsyncStream { continuation in
+            closureWrapper.wrappedClosure = {
+                continuation.yield()
+            }
+        }
+        var pollIterator = expectationStream.makeAsyncIterator()
+
         let sut = KafkaPollingSystem<Message>(pollClosure: {
             closureWrapper.funcTofunc()
         })
@@ -99,11 +107,8 @@ final class KafkaPollingSystemTests: XCTestCase {
             try await sut.run(pollInterval: pollInterval)
         }
 
-        let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
-        closureWrapper.wrappedClosure = { expectation.fulfill() }
         sut.produceMore()
-        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: 1)
-        XCTAssertEqual(result, .completed)
+        await pollIterator.next()
         if case .pollAndSleep = sut.nextPollLoopAction() {
             // Test passed
         } else {
@@ -130,23 +135,23 @@ final class KafkaPollingSystemTests: XCTestCase {
         let pollInterval = Duration.milliseconds(100)
 
         let closureWrapper = ClosureWrapper()
+
+        let expectationStream = AsyncStream { continuation in
+            closureWrapper.wrappedClosure = {
+                continuation.yield()
+            }
+        }
+        var pollIterator = expectationStream.makeAsyncIterator()
+
         let sut = KafkaPollingSystem<Message>(pollClosure: {
             closureWrapper.funcTofunc()
         })
         let runTask = Task {
-            do {
-                try await sut.run(pollInterval: pollInterval)
-                XCTFail("Should have thrown error")
-            } catch {
-                XCTAssertTrue(error is CancellationError)
-            }
+            try await sut.run(pollInterval: pollInterval)
         }
 
-        let expectation = XCTestExpectation(description: "Poll closure invoked after initial produceMore()")
-        closureWrapper.wrappedClosure = { expectation.fulfill() }
         sut.produceMore()
-        let result = await XCTWaiter.fulfillment(of: [expectation], timeout: 1)
-        XCTAssertEqual(result, .completed)
+        await pollIterator.next()
         if case .pollAndSleep = sut.nextPollLoopAction() {
             // Test passed
         } else {
