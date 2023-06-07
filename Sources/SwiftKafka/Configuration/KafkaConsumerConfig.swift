@@ -19,18 +19,18 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The backpressure strategy to be used for receiveing message acknowledgements.
-    public var backPressureStrategy: ConfigEnums.BackPressureStrategy = .highLowWatermark(
+    public var backPressureStrategy: KafkaSharedConfiguration.BackPressureStrategy = .highLowWatermark(
         lowWatermark: 10,
         highWatermark: 50
     )
 
     // Implicitly unwrapped, because this just backs
     // the non-optional consumptionStrategy variable
-    private var _consumptionStrategy: ConfigEnums.ConsumptionStrategy!
+    private var _consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy!
 
     /// The strategy used for consuming messages.
-    /// See ``ConfigEnums/ConsumptionStrategy`` for more information.
-    public var consumptionStrategy: ConfigEnums.ConsumptionStrategy {
+    /// See ``KafkaSharedConfiguration/ConsumptionStrategy`` for more information.
+    public var consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy {
         get { self._consumptionStrategy }
         set {
             self._consumptionStrategy = newValue
@@ -87,8 +87,8 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         set { self.dictionary["auto.commit.interval.ms"] = String(newValue) }
     }
 
-    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``ConfigEnums/AutoOffsetReset`` for more information.
-    public var autoOffsetReset: ConfigEnums.AutoOffsetReset {
+    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``KafkaSharedConfiguration/AutoOffsetReset`` for more information.
+    public var autoOffsetReset: KafkaSharedConfiguration.AutoOffsetReset {
         get { self.getAutoOffsetReset() ?? .largest }
         set { self.dictionary["auto.offset.reset"] = newValue.description }
     }
@@ -180,7 +180,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     /// A comma-separated list of debug contexts to enable. Detailed Producer debugging: broker,topic,msg. Consumer: consumer,cgrp,topic,fetch.
-    public var debug: [ConfigEnums.DebugOption] {
+    public var debug: [KafkaSharedConfiguration.DebugOption] {
         get { self.getDebugOptions() }
         set {
             if !newValue.isEmpty {
@@ -237,8 +237,8 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         set { self.dictionary["broker.address.ttl"] = String(newValue) }
     }
 
-    /// Allowed broker ``ConfigEnums/IPAddressFamily``.
-    public var brokerAddressFamily: ConfigEnums.IPAddressFamily {
+    /// Allowed broker ``KafkaSharedConfiguration/IPAddressFamily``.
+    public var brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.dictionary["broker.address.family"] = newValue.description }
     }
@@ -255,8 +255,8 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         set { self.dictionary["reconnect.backoff.max.ms"] = String(newValue) }
     }
 
-    /// ``ConfigEnums/SecurityProtocol`` used to communicate with brokers.
-    public var securityProtocol: ConfigEnums.SecurityProtocol {
+    /// ``KafkaSharedConfiguration/SecurityProtocol`` used to communicate with brokers.
+    public var securityProtocol: KafkaSharedConfiguration.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.dictionary["security.protocol"] = newValue.description }
     }
@@ -304,7 +304,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     /// SASL mechanism to use for authentication.
-    public var saslMechanism: ConfigEnums.SASLMechanism? {
+    public var saslMechanism: KafkaSharedConfiguration.SASLMechanism? {
         get { self.getSASLMechanism() }
         set {
             if let newValue {
@@ -334,15 +334,15 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     public init(
-        consumptionStrategy: ConfigEnums.ConsumptionStrategy,
-        backPressureStrategy: ConfigEnums.BackPressureStrategy = .highLowWatermark(lowWatermark: 10, highWatermark: 50),
+        consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy,
+        backPressureStrategy: KafkaSharedConfiguration.BackPressureStrategy = .highLowWatermark(lowWatermark: 10, highWatermark: 50),
         sessionTimeoutMs: UInt = 45000,
         heartbeatIntervalMs: UInt = 3000,
         maxPollInvervalMs: UInt = 300_000,
         enableAutoCommit: Bool = true,
         autoCommitIntervalMs: UInt = 5000,
         enableAutoOffsetStore: Bool = true,
-        autoOffsetReset: ConfigEnums.AutoOffsetReset = .largest,
+        autoOffsetReset: KafkaSharedConfiguration.AutoOffsetReset = .largest,
         allowAutoCreateTopics: Bool = false,
         clientID: String = "rdkafka",
         bootstrapServers: [String] = [],
@@ -356,7 +356,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         topicMetadataRefreshSparse: Bool = true,
         topicMetadataPropagationMaxMs: UInt = 30000,
         topicDenylist: [String] = [],
-        debug: [ConfigEnums.DebugOption] = [],
+        debug: [KafkaSharedConfiguration.DebugOption] = [],
         socketTimeoutMs: UInt = 60000,
         socketSendBufferBytes: UInt = 0,
         socketReceiveBufferBytes: UInt = 0,
@@ -365,10 +365,10 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         socketMaxFails: UInt = 1,
         socketConnectionSetupTimeoutMs: UInt = 30000,
         brokerAddressTTL: UInt = 1000,
-        brokerAddressFamily: ConfigEnums.IPAddressFamily = .any,
+        brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily = .any,
         reconnectBackoffMs: UInt = 100,
         reconnectBackoffMaxMs: UInt = 10000,
-        securityProtocol: ConfigEnums.SecurityProtocol = .plaintext,
+        securityProtocol: KafkaSharedConfiguration.SecurityProtocol = .plaintext,
         sslKeyLocation: String = "",
         sslKeyPassword: String = "",
         sslCertificateLocation: String = "",
@@ -376,7 +376,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         sslCRLLocation: String = "",
         sslKeystoreLocation: String = "",
         sslKeystorePassword: String = "",
-        saslMechanism: ConfigEnums.SASLMechanism? = nil,
+        saslMechanism: KafkaSharedConfiguration.SASLMechanism? = nil,
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
@@ -431,46 +431,46 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
 
     // MARK: - Helpers
 
-    func getDebugOptions() -> [ConfigEnums.DebugOption] {
+    func getDebugOptions() -> [KafkaSharedConfiguration.DebugOption] {
         guard let options = dictionary["debug"] else {
             return []
         }
         return options.components(separatedBy: ",")
-            .map { ConfigEnums.DebugOption(description: $0) }
+            .map { KafkaSharedConfiguration.DebugOption(description: $0) }
     }
 
-    func getIPAddressFamily() -> ConfigEnums.IPAddressFamily? {
+    func getIPAddressFamily() -> KafkaSharedConfiguration.IPAddressFamily? {
         guard let value = dictionary["broker.address.family"] else {
             return nil
         }
-        return ConfigEnums.IPAddressFamily(description: value)
+        return KafkaSharedConfiguration.IPAddressFamily(description: value)
     }
 
-    func getSecurityProtocol() -> ConfigEnums.SecurityProtocol? {
+    func getSecurityProtocol() -> KafkaSharedConfiguration.SecurityProtocol? {
         guard let value = dictionary["security.protocol"] else {
             return nil
         }
-        return ConfigEnums.SecurityProtocol(description: value)
+        return KafkaSharedConfiguration.SecurityProtocol(description: value)
     }
 
-    func getSASLMechanism() -> ConfigEnums.SASLMechanism? {
+    func getSASLMechanism() -> KafkaSharedConfiguration.SASLMechanism? {
         guard let value = dictionary["sasl.mechanism"] else {
             return nil
         }
-        return ConfigEnums.SASLMechanism(description: value)
+        return KafkaSharedConfiguration.SASLMechanism(description: value)
     }
 
-    func getAutoOffsetReset() -> ConfigEnums.AutoOffsetReset? {
+    func getAutoOffsetReset() -> KafkaSharedConfiguration.AutoOffsetReset? {
         guard let value = dictionary["auto.offset.reset"] else {
             return nil
         }
-        return ConfigEnums.AutoOffsetReset(description: value)
+        return KafkaSharedConfiguration.AutoOffsetReset(description: value)
     }
 }
 
-// MARK: - ConfigEnums + AutoOffsetReset
+// MARK: - KafkaSharedConfiguration + AutoOffsetReset
 
-extension ConfigEnums {
+extension KafkaSharedConfiguration {
     /// A struct representing different back pressure strategies for receiving message acknowledgements in ``KafkaConsumer``.
     public struct BackPressureStrategy: Hashable, Equatable {
         enum _BackPressureStrategy: Hashable, Equatable {
