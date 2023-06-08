@@ -108,7 +108,7 @@ struct RDKafkaConfig {
     /// Convert an unsafe`rd_kafka_message_t` object to a safe ``KafkaAcknowledgementResult``.
     /// - Parameter messagePointer: An `UnsafePointer` pointing to the `rd_kafka_message_t` object in memory.
     /// - Returns: A ``KafkaAcknowledgementResult``.
-    static func convertMessageToAcknowledgementResult(
+    private static func convertMessageToAcknowledgementResult(
         messagePointer: UnsafePointer<rd_kafka_message_t>?
     ) -> KafkaAcknowledgementResult? {
         guard let messagePointer else {

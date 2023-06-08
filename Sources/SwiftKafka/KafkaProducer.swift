@@ -16,27 +16,6 @@ import Crdkafka
 import Logging
 import NIOCore
 
-/// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
-public struct AcknowledgedMessagesAsyncSequence: AsyncSequence {
-    public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    public typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, HighLowWatermark, KafkaPollingSystem<Element>>
-    let wrappedSequence: WrappedSequence
-
-    /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
-    public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<Element, HighLowWatermark, KafkaPollingSystem<Element>>.AsyncIterator
-
-        public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
-        }
-    }
-
-    public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
-        return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
-    }
-}
-
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
@@ -75,7 +54,7 @@ public actor KafkaProducer {
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
-    public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
+    public nonisolated let acknowledgements: KafkaAsyncSequence<Acknowledgement>
 
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -92,13 +71,7 @@ public actor KafkaProducer {
         self.topicHandles = [:]
         self.state = .started
 
-        // TODO(felix): this should be injected through config
-        let backPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(
-            lowWatermark: 10,
-            highWatermark: 50
-        )
-
-        self.pollingSystem = KafkaPollingSystem()
+        self.pollingSystem = KafkaPollingSystem<Acknowledgement>()
 
         self.client = try RDKafka.createClient(
             type: .producer,
@@ -114,28 +87,22 @@ public actor KafkaProducer {
             logger: self.logger
         )
 
-        // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
-        // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
-        // The source MUST be held by the caller and used to signal new elements or finish.
-        // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
-        // This is due to the fact that deiniting the sequence is used as part of a trigger to
-        // terminate the underlying source.
-        let acknowledgementsSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: Acknowledgement.self,
-            backPressureStrategy: backPressureStrategy,
-            delegate: self.pollingSystem
-        )
-        self.acknowledgements = AcknowledgedMessagesAsyncSequence(
-            wrappedSequence: acknowledgementsSourceAndSequence.sequence
+        // TODO(felix): this should be injected through config
+        let backPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(
+            lowWatermark: 10,
+            highWatermark: 50
         )
 
-        self.pollingSystem.source = acknowledgementsSourceAndSequence.source
-        self.pollingSystem.pollClosure = { [client] in
-            client.withKafkaHandlePointer { handle in
-                rd_kafka_poll(handle, 0)
+        let sequence = self.pollingSystem.initialize(
+            backPressureStrategy: backPressureStrategy,
+            pollClosure: { [client] in
+                client.withKafkaHandlePointer { handle in
+                    rd_kafka_poll(handle, 0)
+                }
+                return
             }
-            return
-        }
+        )
+        self.acknowledgements = sequence
     }
 
     /// Method to shutdown the ``KafkaProducer``.

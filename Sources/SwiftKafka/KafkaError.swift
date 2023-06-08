@@ -101,6 +101,16 @@ public struct KafkaError: Error, Hashable, CustomStringConvertible {
         )
     }
 
+    static func pollLoop(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .pollLoop, reason: reason, file: file, line: line
+            )
+        )
+    }
+
     static func connectionClosed(
         reason: String, file: String = #fileID, line: UInt = #line
     ) -> KafkaError {
@@ -155,6 +165,7 @@ extension KafkaError {
             case config
             case topicConfig
             case connectionClosed
+            case pollLoop
             case client
             case messageConsumption
             case topicCreation
@@ -177,6 +188,8 @@ extension KafkaError {
         public static let topicConfig = ErrorCode(.topicConfig)
         /// Something or somebody tried to access a client that ended its connection to Kafka.
         public static let connectionClosed = ErrorCode(.connectionClosed)
+        /// An error occured inside the poll loop.
+        public static let pollLoop = ErrorCode(.pollLoop)
         /// Establishing a connection to Kafka failed.
         public static let client = ErrorCode(.client)
         /// Consuming a message failed.
