@@ -114,7 +114,6 @@ public actor KafkaProducer {
             logger: self.logger
         )
 
-
         // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
         // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
         // The source MUST be held by the caller and used to signal new elements or finish.

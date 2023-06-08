@@ -17,51 +17,69 @@ import NIOCore
 @testable import SwiftKafka
 import XCTest
 
-// TODO: stream logic to setup?
 final class KafkaPollingSystemTests: XCTestCase {
     typealias Message = String // Could be any type, this is just for testing
     typealias TestStateMachine = KafkaPollingSystem<Message>.StateMachine
 
-    func testBackPressure() async throws {
-        let pollInterval = Duration.milliseconds(100)
+    let pollInterval = Duration.milliseconds(100)
+    var sut: KafkaPollingSystem<Message>!
+    var expectationStream: AsyncStream<Void>!
+    var pollIterator: AsyncStream<Void>.Iterator!
+    var runTask: Task<Void, Error>!
 
-        let sut = KafkaPollingSystem<Message>()
-        let expectationStream = AsyncStream { continuation in
-            sut.pollClosure = {
+    override func setUp() {
+        self.sut = KafkaPollingSystem<Message>()
+
+        // Enables us to await the next call to pollClosure
+        self.expectationStream = AsyncStream { continuation in
+            self.sut.pollClosure = {
                 continuation.yield()
             }
         }
-        var pollIterator = expectationStream.makeAsyncIterator()
+        self.pollIterator = self.expectationStream.makeAsyncIterator()
 
-        let _ = Task {
-            try await sut.run(pollInterval: pollInterval)
+        self.runTask = Task {
+            try await self.sut.run(pollInterval: self.pollInterval)
         }
 
-        sut.produceMore()
-        await pollIterator.next()
-        if case .pollAndSleep = sut.nextPollLoopAction() {
+        super.setUp()
+    }
+
+    override func tearDown() {
+        self.sut = nil
+        self.expectationStream = nil
+        self.pollIterator = nil
+        self.runTask = nil
+
+        super.tearDown()
+    }
+
+    func testBackPressure() async throws {
+        self.sut.produceMore()
+        await self.pollIterator.next()
+        if case .pollAndSleep = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
         }
 
-        sut.stopProducing()
-        if case .suspendPollLoop = sut.nextPollLoopAction() {
+        self.sut.stopProducing()
+        if case .suspendPollLoop = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
         }
 
-        sut.produceMore()
-        await pollIterator.next()
-        if case .pollAndSleep = sut.nextPollLoopAction() {
+        self.sut.produceMore()
+        await self.pollIterator.next()
+        if case .pollAndSleep = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
         }
 
-        sut.didTerminate()
-        if case .shutdownPollLoop = sut.nextPollLoopAction() {
+        self.sut.didTerminate()
+        if case .shutdownPollLoop = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
@@ -69,39 +87,24 @@ final class KafkaPollingSystemTests: XCTestCase {
     }
 
     func testNoPollsAfterPollLoopSuspension() async throws {
-        let pollInterval = Duration.milliseconds(100)
-
-        let sut = KafkaPollingSystem<Message>()
-
-        let expectationStream = AsyncStream { continuation in
-            sut.pollClosure = {
-                continuation.yield()
-            }
-        }
-        var pollIterator = expectationStream.makeAsyncIterator()
-
-        let _ = Task {
-            try await sut.run(pollInterval: pollInterval)
-        }
-
-        sut.produceMore()
-        await pollIterator.next()
-        if case .pollAndSleep = sut.nextPollLoopAction() {
+        self.sut.produceMore()
+        await self.pollIterator.next()
+        if case .pollAndSleep = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
         }
 
         // We're definitely running now. Now suspend the poll loop.
-        sut.stopProducing()
-        if case .suspendPollLoop = sut.nextPollLoopAction() {
+        self.sut.stopProducing()
+        if case .suspendPollLoop = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
         }
 
         // We change the poll closure so that our test fails when the poll closure is invoked.
-        sut.pollClosure = {
+        self.sut.pollClosure = {
             XCTFail("Poll loop still running after stopProducing() has been invoked")
         }
 
@@ -109,32 +112,17 @@ final class KafkaPollingSystemTests: XCTestCase {
     }
 
     func testRunTaskCancellationShutsDownStateMachine() async throws {
-        let pollInterval = Duration.milliseconds(100)
-
-        let sut = KafkaPollingSystem<Message>()
-
-        let expectationStream = AsyncStream { continuation in
-            sut.pollClosure = {
-                continuation.yield()
-            }
-        }
-        var pollIterator = expectationStream.makeAsyncIterator()
-
-        let runTask = Task {
-            try await sut.run(pollInterval: pollInterval)
-        }
-
-        sut.produceMore()
-        await pollIterator.next()
-        if case .pollAndSleep = sut.nextPollLoopAction() {
+        self.sut.produceMore()
+        await self.pollIterator.next()
+        if case .pollAndSleep = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
         }
 
         // We're definitely running now. Now suspend the poll loop.
-        sut.stopProducing()
-        if case .suspendPollLoop = sut.nextPollLoopAction() {
+        self.sut.stopProducing()
+        if case .suspendPollLoop = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
@@ -142,10 +130,10 @@ final class KafkaPollingSystemTests: XCTestCase {
 
         // Cancel the Task that runs the poll loop.
         // This should result in the state machine shutting down.
-        runTask.cancel()
+        self.runTask.cancel()
         // Sleep for a second to make sure the poll loop's canncellationHandler gets invoked.
         try await Task.sleep(for: .seconds(1))
-        if case .shutdownPollLoop = sut.nextPollLoopAction() {
+        if case .shutdownPollLoop = self.sut.nextPollLoopAction() {
             // Test passed
         } else {
             XCTFail()
