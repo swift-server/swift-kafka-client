@@ -65,7 +65,9 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         set { self.dictionary["enable.auto.offset.store"] = String(newValue) }
     }
 
-    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics. The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect. Note: the default value (true) for the producer is different from the default value (false) for the consumer. Further, the consumer default value is different from the Java consumer (true), and this property is not supported by the Java producer. Requires broker version >= 0.11.0.0, for older broker versions only the broker configuration applies.
+    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
+    /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
+    /// Default value: `false`
     public var allowAutoCreateTopics: Bool {
         get { self.dictionary.getBool("allow.auto.create.topics") ?? false }
         set { self.dictionary["allow.auto.create.topics"] = String(newValue) }
