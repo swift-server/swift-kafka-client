@@ -129,10 +129,12 @@ final class KafkaPollingSystem<Element>: Sendable {
                     }
                 } onCancel: {
                     self.terminate(CancellationError())
+                    return
                 }
             case .shutdownPollLoop:
                 // We have been asked to close down the poll loop.
                 self.terminate()
+                return
             }
         }
     }
@@ -155,7 +157,7 @@ final class KafkaPollingSystem<Element>: Sendable {
     /// Determines the next action to be taken in the poll loop based on the current state.
     ///
     /// - Returns: The next action for the poll loop.
-    private func nextPollLoopAction() -> KafkaPollingSystem.StateMachine.PollLoopAction {
+    func nextPollLoopAction() -> KafkaPollingSystem.StateMachine.PollLoopAction {
         return self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
     }
 

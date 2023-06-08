@@ -18,10 +18,12 @@ let producer = try await KafkaProducer(
 
 await withThrowingTaskGroup(of: Void.self) { group in
 
+    // Run Task
     group.addTask {
         try await producer.run()
     }
 
+    // Task receiving acknowledgements
     group.addTask {
         let messageID = try await producer.sendAsync(
             KafkaProducerMessage(

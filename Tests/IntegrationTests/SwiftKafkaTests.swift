@@ -69,130 +69,155 @@ final class SwiftKafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
-        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
-        let _ = Task {
-            try await producer.run()
-        }
-
-        self.consumerConfig.groupID = "subscription-test-group-id"
-        let consumer = try KafkaConsumer(
-            topics: [uniqueTestTopic],
-            config: consumerConfig,
-            logger: .kafkaTest
-        )
-
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
-        var consumedMessages = [KafkaConsumerMessage]()
-        for await messageResult in consumer.messages {
-            guard case .success(let message) = messageResult else {
-                continue
+        await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await producer.run()
             }
-            consumedMessages.append(message)
 
-            if consumedMessages.count >= testMessages.count {
-                break
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
+                await producer.shutdownGracefully()
+            }
+
+            // Consumer Task
+            group.addTask {
+                self.consumerConfig.groupID = "subscription-test-group-id"
+                let consumer = try KafkaConsumer(
+                    topics: [self.uniqueTestTopic],
+                    config: self.consumerConfig,
+                    logger: .kafkaTest
+                )
+
+                var consumedMessages = [KafkaConsumerMessage]()
+                for await messageResult in consumer.messages {
+                    guard case .success(let message) = messageResult else {
+                        continue
+                    }
+                    consumedMessages.append(message)
+
+                    if consumedMessages.count >= testMessages.count {
+                        break
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+
+                for (index, consumedMessage) in consumedMessages.enumerated() {
+                    XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
+                    XCTAssertEqual(testMessages[index].key, consumedMessage.key)
+                    XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+                }
             }
         }
-
-        XCTAssertEqual(testMessages.count, consumedMessages.count)
-
-        for (index, consumedMessage) in consumedMessages.enumerated() {
-            XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
-            XCTAssertEqual(testMessages[index].key, consumedMessage.key)
-            XCTAssertEqual(testMessages[index].value, consumedMessage.value)
-        }
-
-        await producer.shutdownGracefully()
     }
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
-        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
-        let _ = Task {
-            try await producer.run()
-        }
-
-        let consumer = try KafkaConsumer(
-            topic: uniqueTestTopic,
-            partition: KafkaPartition(rawValue: 0),
-            offset: 0,
-            config: consumerConfig,
-            logger: .kafkaTest
-        )
-
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
-        var consumedMessages = [KafkaConsumerMessage]()
-        for await messageResult in consumer.messages {
-            guard case .success(let message) = messageResult else {
-                continue
+        await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await producer.run()
             }
-            consumedMessages.append(message)
 
-            if consumedMessages.count >= testMessages.count {
-                break
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
+                await producer.shutdownGracefully()
+            }
+
+            // Consumer Task
+            group.addTask {
+                let consumer = try KafkaConsumer(
+                    topic: self.uniqueTestTopic,
+                    partition: KafkaPartition(rawValue: 0),
+                    offset: 0,
+                    config: self.consumerConfig,
+                    logger: .kafkaTest
+                )
+
+                var consumedMessages = [KafkaConsumerMessage]()
+                for await messageResult in consumer.messages {
+                    guard case .success(let message) = messageResult else {
+                        continue
+                    }
+                    consumedMessages.append(message)
+
+                    if consumedMessages.count >= testMessages.count {
+                        break
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+
+                for (index, consumedMessage) in consumedMessages.enumerated() {
+                    XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
+                    XCTAssertEqual(testMessages[index].key, consumedMessage.key)
+                    XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+                }
             }
         }
-
-        XCTAssertEqual(testMessages.count, consumedMessages.count)
-
-        for (index, consumedMessage) in consumedMessages.enumerated() {
-            XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
-            XCTAssertEqual(testMessages[index].key, consumedMessage.key)
-            XCTAssertEqual(testMessages[index].value, consumedMessage.value)
-        }
-
-        await producer.shutdownGracefully()
     }
 
     func testProduceAndConsumeWithCommitSync() async throws {
-        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
-        let _ = Task {
-            try await producer.run()
-        }
-
-        self.consumerConfig.groupID = "commit-sync-test-group-id"
-        self.consumerConfig.enableAutoCommit = false
-        let consumer = try KafkaConsumer(
-            topics: [uniqueTestTopic],
-            config: consumerConfig,
-            logger: .kafkaTest
-        )
-
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
-        var consumedMessages = [KafkaConsumerMessage]()
-        for await messageResult in consumer.messages {
-            guard case .success(let message) = messageResult else {
-                continue
+        await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await producer.run()
             }
-            consumedMessages.append(message)
-            try await consumer.commitSync(message)
 
-            if consumedMessages.count >= testMessages.count {
-                break
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
+                await producer.shutdownGracefully()
+            }
+
+            // Consumer Task
+            group.addTask {
+                self.consumerConfig.groupID = "commit-sync-test-group-id"
+                self.consumerConfig.enableAutoCommit = false
+                let consumer = try KafkaConsumer(
+                    topics: [self.uniqueTestTopic],
+                    config: self.consumerConfig,
+                    logger: .kafkaTest
+                )
+
+                var consumedMessages = [KafkaConsumerMessage]()
+                for await messageResult in consumer.messages {
+                    guard case .success(let message) = messageResult else {
+                        continue
+                    }
+                    consumedMessages.append(message)
+                    try await consumer.commitSync(message)
+
+                    if consumedMessages.count >= testMessages.count {
+                        break
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+
+                // Additionally test that commit does not work on closed consumer
+                do {
+                    guard let consumedMessage = consumedMessages.first else {
+                        XCTFail("No messages consumed")
+                        return
+                    }
+                    try await consumer.commitSync(consumedMessage)
+                    XCTFail("Invoking commitSync on closed consumer should have failed")
+                } catch {}
             }
         }
-
-        XCTAssertEqual(testMessages.count, consumedMessages.count)
-
-        await producer.shutdownGracefully()
-
-        // Additionally test that commit does not work on closed consumer
-        do {
-            guard let consumedMessage = consumedMessages.first else {
-                XCTFail("No messages consumed")
-                return
-            }
-            try await consumer.commitSync(consumedMessage)
-            XCTFail("Invoking commitSync on closed consumer should have failed")
-        } catch {}
     }
-
-    // TODO: also test concurrently?
 
     // MARK: - Helpers
 
