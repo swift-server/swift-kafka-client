@@ -68,27 +68,14 @@ public actor KafkaProducer {
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
     private var topicHandles: [String: OpaquePointer]
 
-    /// Used for handling the connection to the Kafka cluster.
-    private var client: KafkaClient
     /// Mechanism that polls the Kafka cluster for updates periodically.
     private let pollingSystem: KafkaPollingSystem<Acknowledgement>
+    /// Used for handling the connection to the Kafka cluster.
+    private var client: KafkaClient
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
     public nonisolated let acknowledgements: AcknowledgedMessagesAsyncSequence
-
-    /// A class that wraps a closure with a reference to that closure, allowing to change the underlying functionality
-    /// of `funcTofunc` after it has been passed.
-    private class ClosureWrapper<Arg> {
-        /// The wrapped closure.
-        var wrappedClosure: ((Arg?) -> Void)?
-
-        /// Function that should be passed on.
-        /// By changing the `wrappedClosure`, the behaviour of `funcTofunc` can be changed.
-        func funcTofunc(_ arg: Arg?) {
-            self.wrappedClosure?(arg)
-        }
-    }
 
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -111,21 +98,22 @@ public actor KafkaProducer {
             highWatermark: 50
         )
 
-        let callbackClosure = ClosureWrapper<Acknowledgement>()
+        self.pollingSystem = KafkaPollingSystem()
 
         self.client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            callback: callbackClosure.funcTofunc,
+            callback: { [logger, pollingSystem] messageResult in
+                guard let messageResult else {
+                    logger.error("Could not resolve acknowledged message")
+                    return
+                }
+
+                pollingSystem.yield(messageResult)
+            },
             logger: self.logger
         )
 
-        self.pollingSystem = KafkaPollingSystem(pollClosure: { [client] in
-            client.withKafkaHandlePointer { handle in
-                rd_kafka_poll(handle, 0)
-            }
-            return
-        })
 
         // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
         // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
@@ -143,14 +131,11 @@ public actor KafkaProducer {
         )
 
         self.pollingSystem.source = acknowledgementsSourceAndSequence.source
-
-        callbackClosure.wrappedClosure = { [logger, pollingSystem] messageResult in
-            guard let messageResult else {
-                logger.error("Could not resolve acknowledged message")
-                return
+        self.pollingSystem.pollClosure = { [client] in
+            client.withKafkaHandlePointer { handle in
+                rd_kafka_poll(handle, 0)
             }
-
-            pollingSystem.yield(messageResult)
+            return
         }
     }
 

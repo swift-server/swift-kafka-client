@@ -17,23 +17,7 @@ import NIOCore
 @testable import SwiftKafka
 import XCTest
 
-// MARK: - Helper Classes
-
-/// A class that wraps a closure with a reference to that closure, allowing to change the underlying functionality
-/// of `funcTofunc` after it has been passed.
-class ClosureWrapper {
-    /// The wrapped closure.
-    var wrappedClosure: (() -> Void)?
-
-    /// Function that should be passed on.
-    /// By changing the `wrappedClosure`, the behaviour of `funcTofunc` can be changed.
-    func funcTofunc() {
-        self.wrappedClosure?()
-    }
-}
-
-// MARK: - Tests
-
+// TODO: stream logic to setup?
 final class KafkaPollingSystemTests: XCTestCase {
     typealias Message = String // Could be any type, this is just for testing
     typealias TestStateMachine = KafkaPollingSystem<Message>.StateMachine
@@ -41,18 +25,14 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testBackPressure() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        let closureWrapper = ClosureWrapper()
-
+        let sut = KafkaPollingSystem<Message>()
         let expectationStream = AsyncStream { continuation in
-            closureWrapper.wrappedClosure = {
+            sut.pollClosure = {
                 continuation.yield()
             }
         }
         var pollIterator = expectationStream.makeAsyncIterator()
 
-        let sut = KafkaPollingSystem<Message>(pollClosure: {
-            closureWrapper.funcTofunc()
-        })
         let _ = Task {
             try await sut.run(pollInterval: pollInterval)
         }
@@ -91,18 +71,15 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testNoPollsAfterPollLoopSuspension() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        let closureWrapper = ClosureWrapper()
+        let sut = KafkaPollingSystem<Message>()
 
         let expectationStream = AsyncStream { continuation in
-            closureWrapper.wrappedClosure = {
+            sut.pollClosure = {
                 continuation.yield()
             }
         }
         var pollIterator = expectationStream.makeAsyncIterator()
 
-        let sut = KafkaPollingSystem<Message>(pollClosure: {
-            closureWrapper.funcTofunc()
-        })
         let _ = Task {
             try await sut.run(pollInterval: pollInterval)
         }
@@ -124,7 +101,7 @@ final class KafkaPollingSystemTests: XCTestCase {
         }
 
         // We change the poll closure so that our test fails when the poll closure is invoked.
-        closureWrapper.wrappedClosure = {
+        sut.pollClosure = {
             XCTFail("Poll loop still running after stopProducing() has been invoked")
         }
 
@@ -134,18 +111,15 @@ final class KafkaPollingSystemTests: XCTestCase {
     func testRunTaskCancellationShutsDownStateMachine() async throws {
         let pollInterval = Duration.milliseconds(100)
 
-        let closureWrapper = ClosureWrapper()
+        let sut = KafkaPollingSystem<Message>()
 
         let expectationStream = AsyncStream { continuation in
-            closureWrapper.wrappedClosure = {
+            sut.pollClosure = {
                 continuation.yield()
             }
         }
         var pollIterator = expectationStream.makeAsyncIterator()
 
-        let sut = KafkaPollingSystem<Message>(pollClosure: {
-            closureWrapper.funcTofunc()
-        })
         let runTask = Task {
             try await sut.run(pollInterval: pollInterval)
         }

@@ -37,11 +37,22 @@ final class KafkaPollingSystem<Element>: Sendable {
         }
     }
 
+    /// Closure that is used to poll the upstream producer for new updates.
+    /// In our case the upstream producer is the Kafka cluster.
+    var pollClosure: (() -> Void)? {
+        get {
+            self.stateMachine.withLockedValue { $0.pollClosure }
+        }
+        set {
+            self.stateMachine.withLockedValue { $0.pollClosure = newValue }
+        }
+    }
+
     /// Initializes the ``KafkaPollingSystem``.
     /// Private initializer. The ``KafkaPollingSystem`` is not supposed to be initialized directly.
     /// It must rather be initialized using the ``KafkaPollingSystem.createSystemAndSequence`` function.
-    init(pollClosure: @escaping () -> Void) {
-        self.stateMachine = NIOLockedValueBox(StateMachine(pollClosure: pollClosure))
+    init() {
+        self.stateMachine = NIOLockedValueBox(StateMachine())
     }
 
     /// Runs the poll loop with the specified poll interval.
@@ -65,7 +76,7 @@ final class KafkaPollingSystem<Element>: Sendable {
             case .pollAndSleep(let pollClosure):
                 // Poll Kafka for new acknowledgements and sleep for the given
                 // pollInterval to avoid hot looping.
-                pollClosure()
+                pollClosure?()
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
@@ -179,13 +190,13 @@ extension KafkaPollingSystem {
             /// Initial state.
             case idle(
                 source: Producer.Source?,
-                pollClosure: () -> Void,
+                pollClosure: (() -> Void)?,
                 running: Bool
             )
             /// The system is up and producing acknowledgement messages.
             case producing(
                 source: Producer.Source?,
-                pollClosure: () -> Void,
+                pollClosure: (() -> Void)?,
                 running: Bool
             )
             /// The poll loop is currently suspended and we are waiting for an invocation
@@ -193,7 +204,7 @@ extension KafkaPollingSystem {
             case stopProducing(
                 source: Producer.Source?,
                 continuation: CheckedContinuation<Void, Error>?,
-                pollClosure: () -> Void,
+                pollClosure: (() -> Void)?,
                 running: Bool
             )
             /// The system is shut down.
@@ -234,8 +245,39 @@ extension KafkaPollingSystem {
             }
         }
 
-        init(pollClosure: @escaping () -> Void) {
-            self.state = .idle(source: nil, pollClosure: pollClosure, running: false)
+        /// Closure that is used to poll the upstream producer for new updates.
+        /// In our case the upstream producer is the Kafka cluster.
+        var pollClosure: (() -> Void)? {
+            get {
+                // Extracts pollClosure from state machine
+                switch self.state {
+                case .idle(_, let pollClosure, _):
+                    return pollClosure
+                case .producing(_, let pollClosure, _):
+                    return pollClosure
+                case .stopProducing(_, _, let pollClosure, _):
+                    return pollClosure
+                case .finished:
+                    return nil
+                }
+            }
+            set {
+                // Add new pollClosure to current state
+                switch self.state {
+                case .idle(let source, _, let running):
+                    self.state = .idle(source: source, pollClosure: newValue, running: running)
+                case .producing(let source, _, let running):
+                    self.state = .producing(source: source, pollClosure: newValue, running: running)
+                case .stopProducing(let source, let continuation, _, let running):
+                    self.state = .stopProducing(source: source, continuation: continuation, pollClosure: newValue, running: running)
+                case .finished:
+                    break
+                }
+            }
+        }
+
+        init() {
+            self.state = .idle(source: nil, pollClosure: nil, running: false)
         }
 
         /// Actions to take after ``run()`` has been invoked on the ``KafkaPollingSystem/StateMachine``.
@@ -275,7 +317,7 @@ extension KafkaPollingSystem {
         /// The possible actions for the poll loop.
         enum PollLoopAction {
             /// Ask `librdkakfa` to receive new message acknowledgements at a given poll interval.
-            case pollAndSleep(pollClosure: () -> Void)
+            case pollAndSleep(pollClosure: (() -> Void)?)
             /// Suspend the poll loop.
             case suspendPollLoop
             /// Shutdown the poll loop.
