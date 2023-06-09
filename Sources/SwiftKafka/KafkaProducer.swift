@@ -50,20 +50,17 @@ public actor KafkaProducer {
     /// Mechanism that polls the Kafka cluster for updates periodically.
     private let pollingSystem: KafkaPollingSystem<Acknowledgement>
     /// Used for handling the connection to the Kafka cluster.
-    private var client: KafkaClient
+    private let client: KafkaClient
 
-    /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
-    /// acknowledged by the Kafka cluster.
-    public nonisolated let acknowledgements: KafkaAsyncSequence<Acknowledgement>
-
+    // Private. `KafkaProducer.newProducer` should be used to create a new producer.
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
-    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    public init(
-        config: KafkaProducerConfig = KafkaProducerConfig(),
-        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
+    /// - Throws: A ``KafkaError`` if initializing the producer failed.
+    private init(
+        config: KafkaProducerConfig,
+        topicConfig: KafkaTopicConfig,
         logger: Logger
     ) async throws {
         self.topicConfig = topicConfig
@@ -86,6 +83,26 @@ public actor KafkaProducer {
             },
             logger: self.logger
         )
+    }
+
+    /// Initialize a new ``KafkaProducer`` alongside a ``KafkaAsyncSequence`` that can be used
+    /// to receive message acknowlegements.
+    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
+    /// - Parameter logger: A logger.
+    /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaAsyncSequence``
+    /// used for receiving message acknowledgements.
+    /// - Throws: A ``KafkaError`` if initializing the producer failed.
+    public static func newProducer(
+        config: KafkaProducerConfig = KafkaProducerConfig(),
+        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
+        logger: Logger
+    ) async throws -> (KafkaProducer, KafkaAsyncSequence<Acknowledgement>) {
+        let producer = try await KafkaProducer(
+            config: config,
+            topicConfig: topicConfig,
+            logger: logger
+        )
 
         // TODO(felix): this should be injected through config
         let backPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(
@@ -93,7 +110,8 @@ public actor KafkaProducer {
             highWatermark: 50
         )
 
-        let sequence = self.pollingSystem.initialize(
+        let client = producer.client
+        let sequence = producer.pollingSystem.initialize(
             backPressureStrategy: backPressureStrategy,
             pollClosure: { [client] in
                 client.withKafkaHandlePointer { handle in
@@ -102,7 +120,8 @@ public actor KafkaProducer {
                 return
             }
         )
-        self.acknowledgements = sequence
+
+        return (producer, sequence)
     }
 
     /// Method to shutdown the ``KafkaProducer``.
