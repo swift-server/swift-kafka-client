@@ -187,8 +187,6 @@ final class KafkaPollingSystemTests: XCTestCase {
         sut.yield(5)
         XCTAssertTrue(Self.isSuspendPollLoop(sut.nextPollLoopAction()))
 
-        // Ok, we're definitely up and running now.
-
         // Cancel the Task that runs the poll loop.
         // This should result in the poll loop shutting down.
         runTask.cancel()

@@ -124,6 +124,15 @@ final class KafkaPollingSystem<Element>: Sendable {
                 // The downstream consumer asked us to stop sending new messages.
                 // We therefore await until we are unsuspended again.
                 try await withTaskCancellationHandler {
+                    // Necessary.
+                    // We don't want to create a leaking continuation
+                    // when we are already cancelled.
+                    // The cancellation of a Task does not mean
+                    // its code will not still be executed.
+                    guard Task.isCancelled == false else {
+                        self.terminate(CancellationError())
+                        throw CancellationError()
+                    }
                     try await withCheckedThrowingContinuation { continuation in
                         self.stateMachine.withLockedValue { $0.suspendLoop(continuation: continuation) }
                     }
