@@ -24,8 +24,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         high: 50
     )
 
-    // Implicitly unwrapped, because this just backs
-    // the non-optional consumptionStrategy variable
+    // This backs the consumptionStrategy computed property.
     private var _consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy
 
     /// The strategy used for consuming messages.
@@ -489,8 +488,8 @@ extension KafkaSharedConfiguration {
         /// The consumer maintains a buffer size between a low watermark and a high watermark
         /// to control the flow of incoming messages.
         ///
-        /// - Parameter lowWatermark: The lower threshold for the buffer size.
-        /// - Parameter highWatermark: The upper threshold for the buffer size.
+        /// - Parameter low: The lower threshold for the buffer size (low watermark).
+        /// - Parameter high: The upper threshold for the buffer size (high watermark).
         public static func watermark(low: Int, high: Int) -> BackPressureStrategy {
             return .init(backPressureStrategy: .watermark(low: low, high: high))
         }
