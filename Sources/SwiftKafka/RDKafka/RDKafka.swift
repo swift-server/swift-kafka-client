@@ -27,19 +27,20 @@ struct RDKafka {
     static func createClient(
         type: ClientType,
         configDictionary: [String: String],
-        callback: ((RDKafkaConfig.KafkaAcknowledgementResult?) -> Void)? = nil,
-        logger: Logger
+        callback: ((UnsafePointer<rd_kafka_message_t>?) -> Void)? = nil,
+        logger: Logger, redirectLogging: Bool = true
     ) throws -> KafkaClient {
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
 
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
 
-        let closurePointer: RDKafkaConfig.CapturedClosure?
-        if let callback {
-            // CapturedClosure must be retained by KafkaClient as long as message acknowledgements are received
-            closurePointer = RDKafkaConfig.setDeliveryReportCallback(configPointer: rdConfig, callback)
-        } else {
-            closurePointer = nil
+        let opaque = RDKafkaConfig.setOpaque(configPointer: rdConfig)
+
+        if let callback, type == .producer {
+            RDKafkaConfig.setDeliveryReportCallback(configPointer: rdConfig, opaquePointer: opaque, callback)
+        }
+        if redirectLogging {
+            RDKafkaConfig.setLoggingCallback(configPointer: rdConfig, opaquePointer: opaque, logger: logger)
         }
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
@@ -58,6 +59,6 @@ struct RDKafka {
             throw KafkaError.client(reason: errorString)
         }
 
-        return KafkaClient(kafkaHandle: handle, opaque: closurePointer, logger: logger)
+        return KafkaClient(kafkaHandle: handle, opaque: opaque, logger: logger)
     }
 }

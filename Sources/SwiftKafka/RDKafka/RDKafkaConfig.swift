@@ -13,18 +13,19 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
+import Logging
 
 /// A collection of helper functions wrapping common `rd_kafka_conf_*` functions in Swift.
 struct RDKafkaConfig {
     typealias KafkaAcknowledgementResult = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     /// Wraps a Swift closure inside of a class to be able to pass it to `librdkafka` as an `OpaquePointer`.
-    final class CapturedClosure {
-        typealias Closure = (KafkaAcknowledgementResult?) -> Void
-        let closure: Closure
+    final class Opaque {
+        typealias Closure = (UnsafePointer<rd_kafka_message_t>?) -> Void
+        var acknowledgement: Closure?
 
-        init(_ closure: @escaping Closure) {
-            self.closure = closure
-        }
+        var logger: Logger?
+
+        init() { }
     }
 
     /// Create a new `rd_kafka_conf_t` object in memory and initialize it with the given configuration properties.
@@ -63,22 +64,32 @@ struct RDKafkaConfig {
         }
     }
 
-    /// A Swift wrapper for `rd_kafka_conf_set_dr_msg_cb`.
-    /// Defines a function that is called upon every message acknowledgement.
+    /// Sets the application's opaque pointer that will be passed to callbacks.
     /// - Parameter configPointer: An `OpaquePointer` pointing to the `rd_kafka_conf_t` object in memory.
-    /// - Parameter callback: A closure that is invoked upon message acknowledgement.
-    /// - Returns: A ``CapturedClosure`` object that must me retained by the caller as long as acknowledgements are received.
-    static func setDeliveryReportCallback(
-        configPointer: OpaquePointer,
-        _ callback: @escaping ((KafkaAcknowledgementResult?) -> Void)
-    ) -> CapturedClosure {
-        let capturedClosure = CapturedClosure(callback)
-        // Pass the captured closure to the C closure as an opaque object
-        let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
+    /// - Returns: A ``Opaque`` object that must me retained by the caller as long as it exists.
+    static func setOpaque(
+        configPointer: OpaquePointer
+    ) -> Opaque {
+        let opaque = Opaque()
+        // Pass the the reference to Opaque as an opaque object
+        let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(opaque).toOpaque()
         rd_kafka_conf_set_opaque(
             configPointer,
             opaquePointer
         )
+        return opaque
+    }
+
+    /// A Swift wrapper for `rd_kafka_conf_set_dr_msg_cb`.
+    /// Defines a function that is called upon every message acknowledgement.
+    /// - Parameter configPointer: An `OpaquePointer` pointing to the `rd_kafka_conf_t` object in memory.
+    /// - Parameter callback: A closure that is invoked upon message acknowledgement.
+    static func setDeliveryReportCallback(
+        configPointer: OpaquePointer,
+        opaquePointer: Opaque,
+        _ callback: @escaping ((UnsafePointer<rd_kafka_message_t>?) -> Void)
+    ) {
+        opaquePointer.acknowledgement = callback
 
         // Create a C closure that calls the captured closure
         let callbackWrapper: (
@@ -87,22 +98,67 @@ struct RDKafkaConfig {
             guard let opaquePointer = opaquePointer else {
                 fatalError("Could not resolve reference to KafkaProducer instance")
             }
-            let opaque = Unmanaged<CapturedClosure>.fromOpaque(opaquePointer).takeUnretainedValue()
+            let opaque = Unmanaged<Opaque>.fromOpaque(opaquePointer).takeUnretainedValue()
 
-            let actualCallback = opaque.closure
-            let messageResult = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer)
-            actualCallback(messageResult)
-
-            // The messagePointer is automatically destroyed by librdkafka
-            // For safety reasons, we only use it inside of this callback
+            if let actualCallback = opaque.acknowledgement {
+                actualCallback(messagePointer)
+            }
         }
 
         rd_kafka_conf_set_dr_msg_cb(
             configPointer,
             callbackWrapper
         )
+    }
 
-        return capturedClosure
+    /// A Swift wrapper for `rd_kafka_conf_set_log_cb`.
+    /// Defines a function that is called upon every log and redirects output to ``logger``.
+    /// - Parameter configPointer: An `OpaquePointer` pointing to the `rd_kafka_conf_t` object in memory.
+    /// - Parameter logger: Logger instance
+    static func setLoggingCallback(
+        configPointer: OpaquePointer,
+        opaquePointer: Opaque,
+        logger: Logger
+    ) {
+        opaquePointer.logger = logger
+
+        let loggingWrapper: (
+            @convention(c) (OpaquePointer?, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> Void
+        ) = { rkKafkaT, level, fac, buf in
+            guard let fac, let buf else {
+                return
+            }
+
+            guard let opaquePointer = rd_kafka_opaque(rkKafkaT) else {
+                fatalError("Could not resolve reference to KafkaProducer instance")
+            }
+            let opaque = Unmanaged<Opaque>.fromOpaque(opaquePointer).takeUnretainedValue()
+
+            guard let logger = opaque.logger else {
+                fatalError("Could not resolve logger instance")
+            }
+
+            // Mapping according to https://en.wikipedia.org/wiki/Syslog
+            switch level {
+            case 0 ... 2: /* Emergency, Alert, Critical */
+                logger.critical(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
+            case 3: /* Error */
+                logger.error(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
+            case 4: /* Warning */
+                logger.warning(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
+            case 5: /* Notice */
+                logger.notice(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
+            case 6: /* Informational */
+                logger.info(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
+            default: /* Debug */
+                logger.debug(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
+            }
+        }
+
+        rd_kafka_conf_set_log_cb(
+            configPointer,
+            loggingWrapper
+        )
     }
 
     /// Convert an unsafe`rd_kafka_message_t` object to a safe ``KafkaAcknowledgementResult``.
