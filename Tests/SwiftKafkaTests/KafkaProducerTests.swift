@@ -219,7 +219,6 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testNoMemoryLeakAfterShutdown() async throws {
-        // TODO: task group here as well?
         var producer: KafkaProducer?
         producer = try await KafkaProducer(config: self.config, logger: .kafkaTest)
 
