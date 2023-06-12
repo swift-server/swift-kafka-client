@@ -17,29 +17,6 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
-/// Our `AsyncSequence` implementation wrapping an `NIOAsyncSequenceProducer`.
-public struct KafkaAsyncSequence<Element>: AsyncSequence {
-    typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
-    typealias PollingSystem = KafkaPollingSystem<Element>
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, HighLowWatermark, PollingSystem>
-    let wrappedSequence: WrappedSequence
-
-    /// Our `AsynceIteratorProtocol` implementation wrapping `NIOAsyncSequenceProducer.AsyncIterator`.
-    public struct KafkaAsyncIterator: AsyncIteratorProtocol {
-        let wrappedIterator: NIOAsyncSequenceProducer<Element, HighLowWatermark, PollingSystem>.AsyncIterator
-
-        public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
-        }
-    }
-
-    public func makeAsyncIterator() -> KafkaAsyncIterator {
-        return KafkaAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
-    }
-}
-
-// MARK: - KafkaPollingSystem
-
 /// A back-pressure aware polling system for managing the poll loop that polls `librdkafka` for new acknowledgements.
 final class KafkaPollingSystem<Element>: Sendable {
     typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
@@ -68,7 +45,7 @@ final class KafkaPollingSystem<Element>: Sendable {
     func initialize(
         backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
         pollClosure: @escaping () -> Void
-    ) -> KafkaAsyncSequence<Element> {
+    ) -> NIOAsyncSequenceProducer<Element, HighLowWatermark, KafkaPollingSystem> {
         // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
         // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
         // The source MUST be held by the caller and used to signal new elements or finish.
@@ -80,7 +57,6 @@ final class KafkaPollingSystem<Element>: Sendable {
             backPressureStrategy: backPressureStrategy,
             delegate: self
         )
-        let sequence = KafkaAsyncSequence(wrappedSequence: sourceAndSequence.sequence)
 
         self.stateMachine.withLockedValue {
             $0.initialize(
@@ -89,7 +65,7 @@ final class KafkaPollingSystem<Element>: Sendable {
             )
         }
 
-        return sequence
+        return sourceAndSequence.sequence
     }
 
     /// Runs the poll loop with the specified poll interval.

@@ -16,6 +16,28 @@ import Crdkafka
 import Logging
 import NIOCore
 
+/// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
+public struct KafkaMessageAcknowledgements: AsyncSequence {
+    public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    typealias Delegate = KafkaPollingSystem<Element>
+    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, Delegate>
+    let wrappedSequence: WrappedSequence
+
+    /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
+    public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
+        let wrappedIterator: NIOAsyncSequenceProducer<Element, BackPressureStrategy, Delegate>.AsyncIterator
+
+        public mutating func next() async -> Element? {
+            await self.wrappedIterator.next()
+        }
+    }
+
+    public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
+        return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    }
+}
+
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
@@ -54,9 +76,7 @@ public actor KafkaProducer {
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
-    public nonisolated let acknowledgements: KafkaAsyncSequence<
-        Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    >
+    public nonisolated let acknowledgements: KafkaMessageAcknowledgements
 
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -104,7 +124,7 @@ public actor KafkaProducer {
                 return
             }
         )
-        self.acknowledgements = sequence
+        self.acknowledgements = KafkaMessageAcknowledgements(wrappedSequence: sequence)
     }
 
     /// Method to shutdown the ``KafkaProducer``.

@@ -19,7 +19,11 @@ import XCTest
 
 final class KafkaPollingSystemTests: XCTestCase {
     typealias Message = Int // Could be any type, this is just for testing
-    typealias TestStateMachine = KafkaPollingSystem<Message>.StateMachine
+    typealias Producer = NIOAsyncSequenceProducer<
+        Message,
+        NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
+        KafkaPollingSystem<Message>
+    >
 
     let pollInterval = Duration.milliseconds(100)
 
@@ -44,7 +48,7 @@ final class KafkaPollingSystemTests: XCTestCase {
 
             // Test Task
             group.addTask {
-                var iterator: KafkaAsyncSequence<Message>.AsyncIterator? = stream.makeAsyncIterator()
+                var iterator: Producer.AsyncIterator? = stream.makeAsyncIterator()
 
                 // Produce elements until we reach the high watermark
                 // should work fine.
