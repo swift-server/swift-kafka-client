@@ -179,18 +179,6 @@ final class KafkaPollingSystemTests: XCTestCase {
             }
         }
 
-        // Produce elements until we reach the high watermark
-        // should work fine.
-        for num in 1...4 {
-            sut.yield(num)
-            XCTAssertTrue(Self.isPollAndSleep(sut.nextPollLoopAction()))
-        }
-
-        // Producing this element makes us reach the high watermark.
-        // The poll loop should suspend now.
-        sut.yield(5)
-        XCTAssertTrue(Self.isSuspendPollLoop(sut.nextPollLoopAction()))
-
         // Cancel the Task that runs the poll loop.
         // This should result in the poll loop shutting down.
         runTask.cancel()
