@@ -50,7 +50,7 @@ public actor KafkaProducer {
     /// Mechanism that polls the Kafka cluster for updates periodically.
     private let pollingSystem: KafkaPollingSystem<Acknowledgement>
     /// Used for handling the connection to the Kafka cluster.
-    private var client: KafkaClient
+    private let client: KafkaClient
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
