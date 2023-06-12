@@ -176,8 +176,8 @@ final class KafkaPollingSystem<Element>: Sendable {
         self.stateMachine.withLockedValue { $0.stopProducing() }
     }
 
-    /// Shut down the ``KafkaPollingSystem`` and free its resources.
-    private func terminate(_ error: Error? = nil) {
+    /// Kill the ``KafkaPollingSystem``'s poll loop and free its resources.
+    func terminate(_ error: Error? = nil) {
         let action = self.stateMachine.withLockedValue { $0.terminate(error) }
         self.handleTerminateAction(action)
     }

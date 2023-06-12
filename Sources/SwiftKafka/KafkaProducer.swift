@@ -129,6 +129,9 @@ public actor KafkaProducer {
             }
         }
 
+        // Kill poll loop in polling system
+        self.pollingSystem.terminate()
+
         for (_, topicHandle) in self.topicHandles {
             rd_kafka_topic_destroy(topicHandle)
         }

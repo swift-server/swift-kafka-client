@@ -146,7 +146,7 @@ final class KafkaPollingSystemTests: XCTestCase {
                 try await Task.sleep(for: .seconds(5))
 
                 // Kill sut to unblock Run Task
-                sut.didTerminate()
+                sut.terminate()
             }
         }
     }

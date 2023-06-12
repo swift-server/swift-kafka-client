@@ -206,14 +206,6 @@ final class KafkaProducerTests: XCTestCase {
                     try await producer.sendAsync(message)
                     XCTFail("Method should have thrown error")
                 } catch {}
-
-                // This subscribes to the acknowledgements stream and immediately terminates the stream.
-                // Required to kill the run task.
-                var iterator: KafkaAsyncSequence<KafkaProducer.Acknowledgement>.AsyncIterator? = producer
-                    .acknowledgements
-                    .makeAsyncIterator()
-                _ = iterator
-                iterator = nil
             }
         }
     }
