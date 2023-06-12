@@ -98,9 +98,9 @@ final class KafkaPollingSystem<Element>: Sendable {
     /// - Returns: An awaitable task representing the execution of the poll loop.
     func run(pollInterval: Duration) async throws {
         switch self.stateMachine.withLockedValue({ $0.run() }) {
-        case .alreadyClosed:
+        case .throwError:
             throw KafkaError.pollLoop(reason: "Invocation of \(#function) failed, poll loop already closed.")
-        case .alreadyRunning:
+        case .alreadyRunningThrowFatalError:
             fatalError("Poll loop must not be started more than once")
         case .startLoop:
             break
@@ -113,7 +113,7 @@ final class KafkaPollingSystem<Element>: Sendable {
             case .pollAndSleep(let pollClosure):
                 // Poll Kafka for new acknowledgements and sleep for the given
                 // pollInterval to avoid hot looping.
-                pollClosure?()
+                pollClosure()
                 do {
                     try await Task.sleep(for: pollInterval)
                 } catch {
@@ -152,12 +152,16 @@ final class KafkaPollingSystem<Element>: Sendable {
     func yield(_ element: Element) {
         let action = self.stateMachine.withLockedValue { $0.yield(element) }
         switch action {
-        case .produceMore:
-            self.produceMore()
-        case .stopProducing:
-            self.stopProducing()
-        case .terminate:
-            self.terminate()
+        case .yieldElement(let element, let source):
+            let yieldResult = source.yield(element)
+            switch yieldResult {
+            case .produceMore:
+                self.produceMore()
+            case .stopProducing:
+                self.stopProducing()
+            case .dropped:
+                self.terminate()
+            }
         case .none:
             break
         }
@@ -187,12 +191,12 @@ final class KafkaPollingSystem<Element>: Sendable {
     private func handleTerminateAction(_ action: StateMachine.TerminateAction?) {
         switch action {
         case .finishSequenceSource(let source):
-            source?.finish()
+            source.finish()
         case .finishSequenceSourceAndResume(let source, let continuation):
-            source?.finish()
+            source.finish()
             continuation?.resume()
         case .finishSequenceSourceAndResumeWithError(let source, let continuation, let error):
-            source?.finish()
+            source.finish()
             continuation?.resume(throwing: error)
         case .none:
             break
@@ -226,22 +230,22 @@ extension KafkaPollingSystem {
             case uninitialized
             /// Initialized state (idle).
             case idle(
-                source: Producer.Source?,
-                pollClosure: (() -> Void)?,
+                source: Producer.Source,
+                pollClosure: () -> Void,
                 running: Bool
             )
             /// The system is up and producing acknowledgement messages.
             case producing(
-                source: Producer.Source?,
-                pollClosure: (() -> Void)?,
+                source: Producer.Source,
+                pollClosure: () -> Void,
                 running: Bool
             )
             /// The poll loop is currently suspended and we are waiting for an invocation
             /// of `produceMore()` to continue producing messages.
             case stopProducing(
-                source: Producer.Source?,
+                source: Producer.Source,
                 continuation: CheckedContinuation<Void, Error>?,
-                pollClosure: (() -> Void)?,
+                pollClosure: () -> Void,
                 running: Bool
             )
             /// The system is shut down.
@@ -265,10 +269,10 @@ extension KafkaPollingSystem {
 
         /// Actions to take after ``run()`` has been invoked on the ``KafkaPollingSystem/StateMachine``.
         enum RunAction {
-            /// Do nothing, the poll loop is already terminated.
-            case alreadyClosed
-            /// The poll loop is already running. ``run()`` should not be invoked more than once!
-            case alreadyRunning
+            /// Throw an error.
+            case throwError
+            /// `run()` has been invoked more than once. Throw a `fatalError`
+            case alreadyRunningThrowFatalError
             /// The poll loop can now be started.
             case startLoop
         }
@@ -276,33 +280,30 @@ extension KafkaPollingSystem {
         mutating func run() -> RunAction {
             switch self.state {
             case .uninitialized:
-                fatalError("\(#function) invoked while still in state .uninitialized")
+                fatalError("\(#function) invoked while still in state \(self.state)")
             case .idle(let source, let pollClosure, let running):
                 guard running == false else {
-                    return .alreadyRunning
+                    return .alreadyRunningThrowFatalError
                 }
                 self.state = .idle(source: source, pollClosure: pollClosure, running: true)
-            case .producing(let source, let pollClosure, let running):
-                guard running == false else {
-                    return .alreadyRunning
-                }
-                self.state = .producing(source: source, pollClosure: pollClosure, running: true)
+                return .startLoop
+            case .producing:
+                return .alreadyRunningThrowFatalError
             case .stopProducing(let source, let continuation, let pollClosure, let running):
                 guard running == false else {
-                    return .alreadyRunning
+                    return .alreadyRunningThrowFatalError
                 }
                 self.state = .stopProducing(source: source, continuation: continuation, pollClosure: pollClosure, running: true)
+                return .startLoop
             case .finished:
-                return .alreadyClosed
+                return .throwError
             }
-
-            return .startLoop
         }
 
         /// The possible actions for the poll loop.
         enum PollLoopAction {
             /// Ask `librdkakfa` to receive new message acknowledgements at a given poll interval.
-            case pollAndSleep(pollClosure: (() -> Void)?)
+            case pollAndSleep(pollClosure: () -> Void)
             /// Suspend the poll loop.
             case suspendPollLoop
             /// Shutdown the poll loop.
@@ -330,33 +331,19 @@ extension KafkaPollingSystem {
 
         /// Actions to take after an element has been yielded to the underlying ``NIOAsyncSequenceProducer.Source``.
         enum YieldAction {
-            /// Produce more elements.
-            case produceMore
-            /// Stop producing new elements.
-            case stopProducing
-            /// Shut down the ``KafkaPollingSystem``.
-            case terminate
+            /// Yield element to the given source.
+            case yieldElement(element: Element, source: Producer.Source)
         }
 
         /// Yield new elements to the underlying `NIOAsyncSequenceProducer`.
-        mutating func yield(_ element: Element) -> YieldAction? {
+        func yield(_ element: Element) -> YieldAction? {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state .uninitialized")
             case .idle(let source, _, _), .producing(let source, _, _), .stopProducing(let source, _, _, _):
                 // We can also yield when in .stopProducing,
                 // the AsyncSequenceProducer will buffer for us
-                let yieldResult = source?.yield(element)
-                switch yieldResult {
-                case .produceMore:
-                    return .produceMore
-                case .stopProducing:
-                    return .stopProducing
-                case .dropped:
-                    return .terminate
-                case .none:
-                    return nil
-                }
+                return .yieldElement(element: element, source: source)
             case .finished:
                 return nil
             }
@@ -374,14 +361,14 @@ extension KafkaPollingSystem {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state .uninitialized")
             case .finished, .producing:
-                break
+                return nil
             case .stopProducing(let source, let continuation, let pollClosure, let running):
                 self.state = .producing(source: source, pollClosure: pollClosure, running: running)
                 return .resume(continuation)
             case .idle(let source, let pollClosure, let running):
                 self.state = .producing(source: source, pollClosure: pollClosure, running: running)
+                return nil
             }
-            return nil
         }
 
         /// Our downstream consumer asked us to stop producing new elements.
@@ -416,17 +403,17 @@ extension KafkaPollingSystem {
         /// Actions to take after ``terminate()`` has been invoked on the ``KafkaPollingSystem/StateMachine``.
         enum TerminateAction {
             /// Invoke `finish()` on the given `NIOAsyncSequenceProducer.Source`.
-            case finishSequenceSource(source: Producer.Source?)
+            case finishSequenceSource(source: Producer.Source)
             /// Invoke `finish()` on the given `NIOAsyncSequenceProducer.Source`
             /// and resume the given `continuation`.
             case finishSequenceSourceAndResume(
-                source: Producer.Source?,
+                source: Producer.Source,
                 continuation: CheckedContinuation<Void, Error>?
             )
             /// Invoke `finish()` on the given `NIOAsyncSequenceProducer.Source`
             /// and resume the given `continuation` with an error.
             case finishSequenceSourceAndResumeWithError(
-                source: Producer.Source?,
+                source: Producer.Source,
                 continuation: CheckedContinuation<Void, Error>?,
                 error: Error
             )

@@ -21,8 +21,6 @@ import NIOCore
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
-    public typealias Acknowledgement = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-
     /// States that the ``KafkaProducer`` can have.
     private enum State {
         /// The ``KafkaProducer`` has started and is ready to use.
@@ -48,13 +46,17 @@ public actor KafkaProducer {
     private var topicHandles: [String: OpaquePointer]
 
     /// Mechanism that polls the Kafka cluster for updates periodically.
-    private let pollingSystem: KafkaPollingSystem<Acknowledgement>
+    private let pollingSystem: KafkaPollingSystem<
+        Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    >
     /// Used for handling the connection to the Kafka cluster.
     private let client: KafkaClient
 
     /// `AsyncSequence` that returns all ``KafkaProducerMessage`` objects that have been
     /// acknowledged by the Kafka cluster.
-    public nonisolated let acknowledgements: KafkaAsyncSequence<Acknowledgement>
+    public nonisolated let acknowledgements: KafkaAsyncSequence<
+        Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+    >
 
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -71,7 +73,7 @@ public actor KafkaProducer {
         self.topicHandles = [:]
         self.state = .started
 
-        self.pollingSystem = KafkaPollingSystem<Acknowledgement>()
+        self.pollingSystem = KafkaPollingSystem<Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>>()
 
         self.client = try RDKafka.createClient(
             type: .producer,
