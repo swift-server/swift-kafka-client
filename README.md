@@ -11,7 +11,7 @@ The `sendAsync(_:)` method of `KafkaProducer` returns a message-id that can late
 ```swift
 let config = KafkaProducerConfig(bootstrapServers: ["localhost:9092"])
 
-let (producer, acknowledgements) = try await KafkaProducer.newProducer(
+let producer = try await KafkaProducer(
     config: config,
     logger: .kafkaTest // Your logger here
 )
@@ -32,7 +32,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
             )
         )
 
-        for await acknowledgement in acknowledgements {
+        for await acknowledgement in producer.acknowledgements {
             // Check if acknowledgement belongs to the sent message
         }
 

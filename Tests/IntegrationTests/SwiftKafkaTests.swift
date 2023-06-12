@@ -70,7 +70,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.producerConfig, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -80,11 +80,7 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
-                    producer: producer,
-                    acknowledgements: acks,
-                    messages: testMessages
-                )
+                try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
                 await producer.shutdownGracefully()
             }
 
@@ -122,7 +118,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.producerConfig, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -132,11 +128,7 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
-                    producer: producer,
-                    acknowledgements: acks,
-                    messages: testMessages
-                )
+                try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
                 await producer.shutdownGracefully()
             }
 
@@ -175,7 +167,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithCommitSync() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.producerConfig, logger: .kafkaTest)
+        let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -185,11 +177,7 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
-                    producer: producer,
-                    acknowledgements: acks,
-                    messages: testMessages
-                )
+                try await Self.sendAndAcknowledgeMessages(producer: producer, messages: testMessages)
                 await producer.shutdownGracefully()
             }
 
@@ -245,7 +233,6 @@ final class SwiftKafkaTests: XCTestCase {
 
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
-        acknowledgements: KafkaAsyncSequence<KafkaProducer.Acknowledgement>,
         messages: [KafkaProducerMessage]
     ) async throws {
         var messageIDs = Set<UInt>()
@@ -256,7 +243,7 @@ final class SwiftKafkaTests: XCTestCase {
 
         var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
-        for await messageResult in acknowledgements {
+        for await messageResult in producer.acknowledgements {
             guard case .success(let acknowledgedMessage) = messageResult else {
                 XCTFail()
                 return
