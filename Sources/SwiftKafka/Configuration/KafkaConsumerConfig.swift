@@ -12,16 +12,49 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
+import struct Foundation.UUID
+
 public struct KafkaConsumerConfig: Hashable, Equatable {
+    // MARK: - SwiftKafka-specific Config properties
+
+    /// The backpressure strategy to be used for message consumption.
+    public var backPressureStrategy: KafkaSharedConfiguration.BackPressureStrategy = .watermark(
+        low: 10,
+        high: 50
+    )
+
+    // This backs the consumptionStrategy computed property.
+    private var _consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy
+
+    /// The strategy used for consuming messages.
+    /// See ``KafkaSharedConfiguration/ConsumptionStrategy`` for more information.
+    public var consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy {
+        get { self._consumptionStrategy }
+        set {
+            self._consumptionStrategy = newValue
+
+            // We do not expose the group.id option to the user
+            // but rather set it ourselves as part of our much safer
+            // consumptionStrategy option.
+            switch newValue._internal {
+            case .partition:
+                // Although an assignment is not related to a consumer group,
+                // librdkafka requires us to set a `group.id`.
+                // This is a known issue:
+                // https://github.com/edenhill/librdkafka/issues/3261
+                self.dictionary["group.id"] = UUID().uuidString
+            case .group(groupID: let groupID, topics: _):
+                self.dictionary["group.id"] = groupID
+            }
+        }
+    }
+
+    // MARK: - librdkafka Config properties
+
     var dictionary: [String: String] = [:]
 
     // MARK: - Consumer-specific Config Properties
-
-    /// Client group id string. All clients sharing the same group.id belong to the same group.
-    public var groupID: String {
-        get { self.dictionary["group.id"] ?? "" }
-        set { self.dictionary["group.id"] = String(newValue) }
-    }
 
     /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
     public var sessionTimeoutMs: UInt {
@@ -53,7 +86,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         set { self.dictionary["auto.commit.interval.ms"] = String(newValue) }
     }
 
-    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``ConfigEnums/AutoOffsetReset`` for more information.
+    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``KafkaSharedConfiguration/AutoOffsetReset`` for more information.
     public var autoOffsetReset: KafkaSharedConfiguration.AutoOffsetReset {
         get { self.getAutoOffsetReset() ?? .largest }
         set { self.dictionary["auto.offset.reset"] = newValue.description }
@@ -205,7 +238,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         set { self.dictionary["broker.address.ttl"] = String(newValue) }
     }
 
-    /// Allowed broker ``ConfigEnums/IPAddressFamily``.
+    /// Allowed broker ``KafkaSharedConfiguration/IPAddressFamily``.
     public var brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.dictionary["broker.address.family"] = newValue.description }
@@ -223,7 +256,7 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         set { self.dictionary["reconnect.backoff.max.ms"] = String(newValue) }
     }
 
-    /// ``ConfigEnums/SecurityProtocol`` used to communicate with brokers.
+    /// ``KafkaSharedConfiguration/SecurityProtocol`` used to communicate with brokers.
     public var securityProtocol: KafkaSharedConfiguration.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.dictionary["security.protocol"] = newValue.description }
@@ -302,7 +335,8 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 
     public init(
-        groupID: String = "",
+        consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy,
+        backPressureStrategy: KafkaSharedConfiguration.BackPressureStrategy = .watermark(low: 10, high: 50),
         sessionTimeoutMs: UInt = 45000,
         heartbeatIntervalMs: UInt = 3000,
         maxPollInvervalMs: UInt = 300_000,
@@ -347,7 +381,10 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
-        self.groupID = groupID
+        self._consumptionStrategy = consumptionStrategy
+        self.consumptionStrategy = consumptionStrategy // used to invoke set { } method
+        self.backPressureStrategy = backPressureStrategy
+
         self.sessionTimeoutMs = sessionTimeoutMs
         self.heartbeatIntervalMs = heartbeatIntervalMs
         self.maxPollInvervalMs = maxPollInvervalMs
@@ -433,9 +470,70 @@ public struct KafkaConsumerConfig: Hashable, Equatable {
     }
 }
 
-// MARK: - ConfigEnums + AutoOffsetReset
+// MARK: - KafkaSharedConfiguration + Consumer Additions
 
 extension KafkaSharedConfiguration {
+    /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
+    public struct BackPressureStrategy: Hashable, Equatable {
+        enum _BackPressureStrategy: Hashable, Equatable {
+            case watermark(low: Int, high: Int)
+        }
+
+        let _internal: _BackPressureStrategy
+
+        private init(backPressureStrategy: _BackPressureStrategy) {
+            self._internal = backPressureStrategy
+        }
+
+        /// A back pressure strategy based on high and low watermarks.
+        ///
+        /// The consumer maintains a buffer size between a low watermark and a high watermark
+        /// to control the flow of incoming messages.
+        ///
+        /// - Parameter low: The lower threshold for the buffer size (low watermark).
+        /// - Parameter high: The upper threshold for the buffer size (high watermark).
+        public static func watermark(low: Int, high: Int) -> BackPressureStrategy {
+            return .init(backPressureStrategy: .watermark(low: low, high: high))
+        }
+    }
+
+    /// A struct representing the different Kafka message consumption strategies.
+    public struct ConsumptionStrategy: Hashable, Equatable {
+        enum _ConsumptionStrategy: Hashable, Equatable {
+            case partition(topic: String, partition: KafkaPartition, offset: Int)
+            case group(groupID: String, topics: [String])
+        }
+
+        let _internal: _ConsumptionStrategy
+
+        private init(consumptionStrategy: _ConsumptionStrategy) {
+            self._internal = consumptionStrategy
+        }
+
+        /// A consumption strategy based on partition assignment.
+        /// The consumer reads from a specific partition of a topic at a given offset.
+        ///
+        /// - Parameter topic: The name of the Kafka topic.
+        /// - Parameter partition: The partition of the topic to consume from.
+        /// - Parameter offset: The offset to start consuming from.
+        public static func partition(
+            topic: String,
+            partition: KafkaPartition,
+            offset: Int = Int(RD_KAFKA_OFFSET_END)
+        ) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
+        }
+
+        /// A consumption strategy based on consumer group membership.
+        /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
+        ///
+        /// - Parameter groupID: The ID of the consumer group to join.
+        /// - Parameter topics: An array of topic names to consume from.
+        public static func group(groupID: String, topics: [String]) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
+        }
+    }
+
     /// Available actions to take when there is no initial offset in offset store / offset is out of range.
     public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
         public let description: String

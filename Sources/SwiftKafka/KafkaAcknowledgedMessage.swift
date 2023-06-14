@@ -30,7 +30,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
     /// The body of the message.
     public var value: ByteBuffer
     /// The offset of the message in its partition.
-    public var offset: Int64
+    public var offset: Int
 
     /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
@@ -63,6 +63,6 @@ public struct KafkaAcknowledgedMessage: Hashable {
             self.key = nil
         }
 
-        self.offset = Int64(rdKafkaMessage.offset)
+        self.offset = Int(rdKafkaMessage.offset)
     }
 }

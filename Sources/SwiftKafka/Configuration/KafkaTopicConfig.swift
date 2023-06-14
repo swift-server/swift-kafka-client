@@ -34,7 +34,7 @@ public struct KafkaTopicConfig: Hashable, Equatable {
         set { self.dictionary["message.timeout.ms"] = String(newValue) }
     }
 
-    /// Paritioner. See ``ConfigEnums/Partitioner`` for more information.
+    /// Paritioner. See ``KafkaSharedConfiguration/Partitioner`` for more information.
     public var partitioner: KafkaSharedConfiguration.Partitioner {
         get { self.getPartitioner() ?? .consistentRandom }
         set { self.dictionary["partitioner"] = newValue.description }

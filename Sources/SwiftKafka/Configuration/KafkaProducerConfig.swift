@@ -199,7 +199,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         set { self.dictionary["broker.address.ttl"] = String(newValue) }
     }
 
-    /// Allowed broker ``ConfigEnums/IPAddressFamily``.
+    /// Allowed broker ``KafkaSharedConfiguration/IPAddressFamily``.
     public var brokerAddressFamily: KafkaSharedConfiguration.IPAddressFamily {
         get { self.getIPAddressFamily() ?? .any }
         set { self.dictionary["broker.address.family"] = newValue.description }
@@ -217,7 +217,7 @@ public struct KafkaProducerConfig: Hashable, Equatable {
         set { self.dictionary["reconnect.backoff.max.ms"] = String(newValue) }
     }
 
-    /// ``ConfigEnums/SecurityProtocol`` used to communicate with brokers.
+    /// ``KafkaSharedConfiguration/SecurityProtocol`` used to communicate with brokers.
     public var securityProtocol: KafkaSharedConfiguration.SecurityProtocol {
         get { self.getSecurityProtocol() ?? .plaintext }
         set { self.dictionary["security.protocol"] = newValue.description }

@@ -35,7 +35,6 @@ final class SwiftKafkaTests: XCTestCase {
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
     var bootstrapServer: String!
     var producerConfig: KafkaProducerConfig!
-    var consumerConfig: KafkaConsumerConfig!
     var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
@@ -46,34 +45,44 @@ final class SwiftKafkaTests: XCTestCase {
             brokerAddressFamily: .v4
         )
 
-        self.consumerConfig = KafkaConsumerConfig(
-            autoOffsetReset: .beginning, // Always read topics from beginning
+        let basicConfig = KafkaConsumerConfig(
+            consumptionStrategy: .group(groupID: "no-group", topics: []),
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )
 
         // TODO: ok to block here? How to make setup async?
-        let client = try RDKafka.createClient(type: .consumer, configDictionary: self.consumerConfig.dictionary, logger: .kafkaTest)
+        let client = try RDKafka.createClient(type: .consumer, configDictionary: basicConfig.dictionary, logger: .kafkaTest)
         self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
     }
 
     override func tearDownWithError() throws {
+        let basicConfig = KafkaConsumerConfig(
+            consumptionStrategy: .group(groupID: "no-group", topics: []),
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
+
         // TODO: ok to block here? Problem: Tests may finish before topic is deleted
-        let client = try RDKafka.createClient(type: .consumer, configDictionary: self.consumerConfig.dictionary, logger: .kafkaTest)
+        let client = try RDKafka.createClient(type: .consumer, configDictionary: basicConfig.dictionary, logger: .kafkaTest)
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
 
         self.bootstrapServer = nil
         self.producerConfig = nil
-        self.consumerConfig = nil
         self.uniqueTestTopic = nil
     }
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
-        self.consumerConfig.groupID = "subscription-test-group-id"
+        let consumerConfig = KafkaConsumerConfig(
+            consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [uniqueTestTopic]),
+            autoOffsetReset: .beginning, // Always read topics from beginning
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
+
         let consumer = try KafkaConsumer(
-            topics: [uniqueTestTopic],
             config: consumerConfig,
             logger: .kafkaTest
         )
@@ -106,10 +115,19 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
+
+        let consumerConfig = KafkaConsumerConfig(
+            consumptionStrategy: .partition(
+                topic: uniqueTestTopic,
+                partition: KafkaPartition(rawValue: 0),
+                offset: 0
+            ),
+            autoOffsetReset: .beginning, // Always read topics from beginning
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
+
         let consumer = try KafkaConsumer(
-            topic: uniqueTestTopic,
-            partition: KafkaPartition(rawValue: 0),
-            offset: 0,
             config: consumerConfig,
             logger: .kafkaTest
         )
@@ -143,10 +161,15 @@ final class SwiftKafkaTests: XCTestCase {
     func testProduceAndConsumeWithCommitSync() async throws {
         let producer = try await KafkaProducer(config: producerConfig, logger: .kafkaTest)
 
-        self.consumerConfig.groupID = "commit-sync-test-group-id"
-        self.consumerConfig.enableAutoCommit = false
+        let consumerConfig = KafkaConsumerConfig(
+            consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [uniqueTestTopic]),
+            enableAutoCommit: false,
+            autoOffsetReset: .beginning, // Always read topics from beginning
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
+
         let consumer = try KafkaConsumer(
-            topics: [uniqueTestTopic],
             config: consumerConfig,
             logger: .kafkaTest
         )

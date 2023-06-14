@@ -14,7 +14,6 @@
 
 import Crdkafka
 import Dispatch
-import struct Foundation.UUID
 import Logging
 import NIOCore
 
@@ -24,11 +23,11 @@ private struct ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDe
     let didTerminateClosure: @Sendable () -> Void
 
     func produceMore() {
-        produceMoreClosure()
+        self.produceMoreClosure()
     }
 
     func didTerminate() {
-        didTerminateClosure()
+        self.didTerminateClosure()
     }
 }
 
@@ -89,7 +88,7 @@ public final class KafkaConsumer {
     /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
-    private init(
+    public init(
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
@@ -110,9 +109,16 @@ public final class KafkaConsumer {
 
         self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
 
+        var lowWatermark = 10
+        var highWatermark = 50
+        switch config.backPressureStrategy._internal {
+        case .watermark(let low, let high):
+            lowWatermark = low
+            highWatermark = high
+        }
         let backpressureStrategy = ConsumerMessagesAsyncSequence.HighLowWatermark(
-            lowWatermark: 5,
-            highWatermark: 10
+            lowWatermark: lowWatermark,
+            highWatermark: highWatermark
         )
 
         let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate { [weak self] in
@@ -129,57 +135,13 @@ public final class KafkaConsumer {
         self.messages = ConsumerMessagesAsyncSequence(
             wrappedSequence: messagesSourceAndSequence.sequence
         )
-    }
 
-    /// Initialize a new ``KafkaConsumer`` and subscribe to the given list of `topics` as part of
-    /// the consumer group specified in `groupID`.
-    /// - Parameter topics: An array of topic names to subscribe to.
-    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
-    /// - Parameter logger: A logger.
-    /// - Throws: A ``KafkaError`` if the initialization failed.
-    public convenience init(
-        topics: [String],
-        config: KafkaConsumerConfig,
-        logger: Logger
-    ) throws {
-        try self.init(
-            config: config,
-            logger: logger
-        )
-        try self.subscribe(topics: topics)
-    }
-
-    /// Initialize a new ``KafkaConsumer`` and assign it to a specific `partition` of a `topic`.
-    /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
-    /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
-    /// - Parameter offset: The topic offset where reading begins. Defaults to the offset of the last read message.
-    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
-    /// - Parameter logger: A logger.
-    /// - Throws: A ``KafkaError`` if the initialization failed.
-    /// - Note: This consumer ignores the `group.id` property of its `config`.
-    public convenience init(
-        topic: String,
-        partition: KafkaPartition,
-        offset: Int64 = Int64(RD_KAFKA_OFFSET_END),
-        config: KafkaConsumerConfig,
-        logger: Logger
-    ) throws {
-        // Although an assignment is not related to a consumer group,
-        // librdkafka requires us to set a `group.id`.
-        // This is a known issue:
-        // https://github.com/edenhill/librdkafka/issues/3261
-        var config = config
-        config.groupID = UUID().uuidString
-
-        try self.init(
-            config: config,
-            logger: logger
-        )
-        try self.assign(
-            topic: topic,
-            partition: partition,
-            offset: offset
-        )
+        switch config.consumptionStrategy._internal {
+        case .partition(topic: let topic, partition: let partition, offset: let offset):
+            try self.assign(topic: topic, partition: partition, offset: offset)
+        case .group(groupID: _, topics: let topics):
+            try self.subscribe(topics: topics)
+        }
     }
 
     /// Subscribe to the given list of `topics`.
@@ -187,7 +149,7 @@ public final class KafkaConsumer {
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     private func subscribe(topics: [String]) throws {
-        assert(!closed)
+        assert(!self.closed)
 
         for topic in topics {
             rd_kafka_topic_partition_list_add(
@@ -198,7 +160,7 @@ public final class KafkaConsumer {
         }
 
         let result = self.client.withKafkaHandlePointer { handle in
-            rd_kafka_subscribe(handle, subscribedTopicsPointer)
+            rd_kafka_subscribe(handle, self.subscribedTopicsPointer)
         }
 
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
@@ -214,9 +176,9 @@ public final class KafkaConsumer {
     private func assign(
         topic: String,
         partition: KafkaPartition,
-        offset: Int64
+        offset: Int
     ) throws {
-        assert(!closed)
+        assert(!self.closed)
 
         guard let partitionPointer = rd_kafka_topic_partition_list_add(
             self.subscribedTopicsPointer,
@@ -226,7 +188,7 @@ public final class KafkaConsumer {
             fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
         }
 
-        partitionPointer.pointee.offset = offset
+        partitionPointer.pointee.offset = Int64(offset)
 
         let result = self.client.withKafkaHandlePointer { handle in
             rd_kafka_assign(handle, self.subscribedTopicsPointer)
@@ -275,7 +237,7 @@ public final class KafkaConsumer {
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     private func poll(timeout: Int32 = 100) throws -> KafkaConsumerMessage? {
         dispatchPrecondition(condition: .onQueue(self.serialQueue))
-        assert(!closed)
+        assert(!self.closed)
 
         guard let messagePointer = self.client.withKafkaHandlePointer({ handle in
             rd_kafka_consumer_poll(handle, timeout)
@@ -342,7 +304,7 @@ public final class KafkaConsumer {
         // The offset committed is always the offset of the next requested message.
         // Thus, we increase the offset of the current message by one before committing it.
         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        partitionPointer.pointee.offset = message.offset + 1
+        partitionPointer.pointee.offset = Int64(message.offset + 1)
         let result = self.client.withKafkaHandlePointer { handle in
             rd_kafka_commit(
                 handle,
