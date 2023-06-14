@@ -33,7 +33,7 @@ final class KafkaPollingSystem<Element>: Sendable {
         self.stateMachine = NIOLockedValueBox(StateMachine())
     }
 
-    /// Initialize the ``KafkaPollingSystem`` and create the ``KafkaAsyncSequence`` that publishes
+    /// Initialize the ``KafkaPollingSystem`` and create the ``NIOAsyncSequenceProducer`` that publishes
     /// message acknowledgements.
     ///
     /// We use this second `initialize()` method to support delayed initialization,
@@ -41,7 +41,7 @@ final class KafkaPollingSystem<Element>: Sendable {
     /// to an existing ``KafkaPollingSystem`` object but our ``StateMachine`` in turn needs a reference to
     /// the ``NIOAsyncSequenceProducer.Source`` object.
     ///
-    /// - Returns: The newly created ``KafkaAsyncSequence`` object.
+    /// - Returns: The newly created ``NIOAsyncSequenceProducer`` object.
     func initialize(
         backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
         pollClosure: @escaping () -> Void

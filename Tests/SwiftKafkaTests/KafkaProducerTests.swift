@@ -52,7 +52,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendAsync() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -91,7 +91,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendAsyncEmptyMessage() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -129,7 +129,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendAsyncTwoTopics() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         await withThrowingTaskGroup(of: Void.self) { group in
 
             // Run Task
@@ -185,7 +185,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testProducerNotUsableAfterShutdown() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         await producer.shutdownGracefully()
 
         await withThrowingTaskGroup(of: Void.self) { group in
@@ -209,7 +209,7 @@ final class KafkaProducerTests: XCTestCase {
 
                 // This subscribes to the acknowledgements stream and immediately terminates the stream.
                 // Required to kill the run task.
-                var iterator: KafkaAsyncSequence<KafkaProducer.Acknowledgement>.AsyncIterator? = acks.makeAsyncIterator()
+                var iterator: KafkaMessageAcknowledgements.AsyncIterator? = acks.makeAsyncIterator()
                 _ = iterator
                 iterator = nil
             }
@@ -218,8 +218,8 @@ final class KafkaProducerTests: XCTestCase {
 
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
-        var acks: KafkaAsyncSequence<KafkaProducer.Acknowledgement>
-        (producer, acks) = try await KafkaProducer.newProducer(config: self.config, logger: .kafkaTest)
+        var acks: KafkaMessageAcknowledgements
+        (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         _ = acks
 
         weak var producerCopy = producer

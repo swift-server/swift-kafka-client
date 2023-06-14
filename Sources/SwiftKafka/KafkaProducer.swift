@@ -70,29 +70,75 @@ public actor KafkaProducer {
     /// Mechanism that polls the Kafka cluster for updates periodically.
     private let pollingSystem: KafkaPollingSystem<
         Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    >
+    >?
     /// Used for handling the connection to the Kafka cluster.
     private let client: KafkaClient
 
-    // Private. `KafkaProducer.newProducer` should be used to create a new producer.
+    // Private initializer, use factory methods to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
-        config: KafkaProducerConfig,
+        client: KafkaClient,
+        pollingSystem: KafkaPollingSystem<Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>>? = nil,
         topicConfig: KafkaTopicConfig,
         logger: Logger
     ) async throws {
+        self.client = client
+        self.pollingSystem = pollingSystem
         self.topicConfig = topicConfig
-        self.logger = logger
         self.topicHandles = [:]
+        self.logger = logger
         self.state = .started
+    }
 
-        self.pollingSystem = KafkaPollingSystem<Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>>()
+    /// Initialize a new ``KafkaProducer`` that ignores incoming message acknowledgements.
+    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
+    /// - Parameter logger: A logger.
+    /// - Returns: The newly created ``KafkaProducer``.
+    /// - Throws: A ``KafkaError`` if initializing the producer failed.
+    public static func newProducer(
+        config: KafkaProducerConfig = KafkaProducerConfig(),
+        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
+        logger: Logger
+    ) async throws -> KafkaProducer {
+        let client = try RDKafka.createClient(
+            type: .producer,
+            configDictionary: config.dictionary,
+            // Having no callback will discard any incoming acknowlegement messages
+            // Ref: rdkafka_broker.c:rd_kafka_dr_msgq
+            callback: nil,
+            logger: logger
+        )
 
-        self.client = try RDKafka.createClient(
+        let producer = try await KafkaProducer(
+            client: client,
+            pollingSystem: nil, // we don't receive acknowlegements so no pollingSystem needed
+            topicConfig: topicConfig,
+            logger: logger
+        )
+
+        return producer
+    }
+
+    /// Initialize a new ``KafkaProducer`` alongside a ``KafkaMessageAcknowledgements`` `AsyncSequence` that can be used
+    /// to receive message acknowlegements.
+    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
+    /// - Parameter logger: A logger.
+    /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaMessageAcknowledgements``
+    /// `AsyncSequence` used for receiving message acknowledgements.
+    /// - Throws: A ``KafkaError`` if initializing the producer failed.
+    public static func newProducerWithAcknowledgements(
+        config: KafkaProducerConfig = KafkaProducerConfig(),
+        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
+        logger: Logger
+    ) async throws -> (KafkaProducer, KafkaMessageAcknowledgements) {
+        let pollingSystem = KafkaPollingSystem<Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>>()
+        let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
             callback: { [logger, pollingSystem] messageResult in
@@ -103,25 +149,12 @@ public actor KafkaProducer {
 
                 pollingSystem.yield(messageResult)
             },
-            logger: self.logger
+            logger: logger
         )
-    }
 
-    /// Initialize a new ``KafkaProducer`` alongside a ``KafkaAsyncSequence`` that can be used
-    /// to receive message acknowlegements.
-    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
-    /// - Parameter logger: A logger.
-    /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaAsyncSequence``
-    /// used for receiving message acknowledgements.
-    /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public static func newProducer(
-        config: KafkaProducerConfig = KafkaProducerConfig(),
-        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
-        logger: Logger
-    ) async throws -> (KafkaProducer, KafkaAsyncSequence<Acknowledgement>) {
         let producer = try await KafkaProducer(
-            config: config,
+            client: client,
+            pollingSystem: pollingSystem,
             topicConfig: topicConfig,
             logger: logger
         )
@@ -132,8 +165,7 @@ public actor KafkaProducer {
             highWatermark: 50
         )
 
-        let client = producer.client
-        let sequence = producer.pollingSystem.initialize(
+        let _sequence = pollingSystem.initialize(
             backPressureStrategy: backPressureStrategy,
             pollClosure: { [client] in
                 client.withKafkaHandlePointer { handle in
@@ -142,8 +174,9 @@ public actor KafkaProducer {
                 return
             }
         )
+        let acknowlegementsSequence = KafkaMessageAcknowledgements(wrappedSequence: _sequence)
 
-        return (producer, sequence)
+        return (producer, acknowlegementsSequence)
     }
 
     /// Method to shutdown the ``KafkaProducer``.
@@ -163,7 +196,7 @@ public actor KafkaProducer {
 
     private func _shutDownGracefully(timeout: Int32) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            // Wait 10 seconds for outstanding messages to be sent and callbacks to be called
+            // Wait `timeout` seconds for outstanding messages to be sent and callbacks to be called
             self.client.withKafkaHandlePointer { handle in
                 rd_kafka_flush(handle, timeout)
                 continuation.resume()
@@ -171,7 +204,7 @@ public actor KafkaProducer {
         }
 
         // Kill poll loop in polling system
-        self.pollingSystem.terminate()
+        self.pollingSystem?.terminate()
 
         for (_, topicHandle) in self.topicHandles {
             rd_kafka_topic_destroy(topicHandle)
@@ -186,7 +219,10 @@ public actor KafkaProducer {
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run(pollInterval: Duration = .milliseconds(100)) async throws {
         // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
-        try await self.pollingSystem.run(pollInterval: pollInterval)
+        guard let pollingSystem else {
+            fatalError("Method \(#function) should only be used with the acknowledgement receiving producer.")
+        }
+        try await pollingSystem.run(pollInterval: pollInterval)
     }
 
     /// Send messages to the Kafka cluster asynchronously, aka "fire and forget".

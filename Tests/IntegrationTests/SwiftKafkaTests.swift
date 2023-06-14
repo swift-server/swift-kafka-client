@@ -70,7 +70,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -122,7 +122,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -175,7 +175,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithCommitSync() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try await KafkaProducer.newProducer(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -245,7 +245,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
-        acknowledgements: KafkaAsyncSequence<KafkaProducer.Acknowledgement>,
+        acknowledgements: KafkaMessageAcknowledgements,
         messages: [KafkaProducerMessage]
     ) async throws {
         var messageIDs = Set<UInt>()
