@@ -11,7 +11,7 @@ The `sendAsync(_:)` method of `KafkaProducer` returns a message-id that can late
 ```swift
 let config = KafkaProducerConfig(bootstrapServers: ["localhost:9092"])
 
-let (producer, acknowledgements) = try await KafkaProducer.newProducerWithAcknowledgements(
+let (producer, acknowledgements) = try await KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
     logger: .kafkaTest // Your logger here
 )

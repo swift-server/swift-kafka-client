@@ -52,7 +52,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendAsync() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -91,7 +91,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendAsyncEmptyMessage() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -129,7 +129,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendAsyncTwoTopics() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         await withThrowingTaskGroup(of: Void.self) { group in
 
             // Run Task
@@ -185,7 +185,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testProducerNotUsableAfterShutdown() async throws {
-        let (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         await producer.shutdownGracefully()
 
         await withThrowingTaskGroup(of: Void.self) { group in
@@ -219,7 +219,7 @@ final class KafkaProducerTests: XCTestCase {
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
         var acks: KafkaMessageAcknowledgements
-        (producer, acks) = try await KafkaProducer.newProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         _ = acks
 
         weak var producerCopy = producer

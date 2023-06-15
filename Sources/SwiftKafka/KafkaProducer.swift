@@ -98,13 +98,17 @@ public actor KafkaProducer {
         self.state = .started
     }
 
-    /// Initialize a new ``KafkaProducer`` that ignores incoming message acknowledgements.
-    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
+
+    /// Initialize a new ``KafkaProducer``.
+    ///
+    /// This factory method creates a producer without message acknowledgements.
+    ///
+    /// - Parameter configuration: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfiguration: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Returns: The newly created ``KafkaProducer``.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public static func newProducer(
+    public static func makeProducer(
         config: KafkaProducerConfig = KafkaProducerConfig(),
         topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
         logger: Logger
@@ -112,7 +116,7 @@ public actor KafkaProducer {
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            // Having no callback will discard any incoming acknowlegement messages
+            // Having no callback will discard any incoming acknowledgement messages
             // Ref: rdkafka_broker.c:rd_kafka_dr_msgq
             callback: nil,
             logger: logger
@@ -127,15 +131,19 @@ public actor KafkaProducer {
         return producer
     }
 
-    /// Initialize a new ``KafkaProducer`` alongside a ``KafkaMessageAcknowledgements`` `AsyncSequence` that can be used
-    /// to receive message acknowlegements.
+    /// Initialize a new ``KafkaProducer`` and a ``KafkaMessageAcknowledgements`` asynchronous sequence.
+    ///
+    /// Use the asynchronous sequence to consume message acknowledgements.
+    ///
+    /// - Important: When the asynchronous sequence is deinited the producer will be shutdown.
+    ///
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaMessageAcknowledgements``
     /// `AsyncSequence` used for receiving message acknowledgements.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public static func newProducerWithAcknowledgements(
+    public static func makeProducerWithAcknowledgements(
         config: KafkaProducerConfig = KafkaProducerConfig(),
         topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
         logger: Logger
@@ -162,7 +170,8 @@ public actor KafkaProducer {
                     return
                 }
 
-                _ = source.yield(messageResult) // Ignore YieldResult
+                // Ignore YieldResult as we don't support back pressure in KafkaProducer
+                _ = source.yield(messageResult)
             },
             logger: logger
         )
@@ -215,9 +224,7 @@ public actor KafkaProducer {
     public func run(pollInterval: Duration = .milliseconds(100)) async throws {
         // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
         while self.state == .started {
-            self.client.withKafkaHandlePointer { handle in
-                rd_kafka_poll(handle, 0)
-            }
+            self.client.poll(timeout: 0)
             try await Task.sleep(for: pollInterval)
         }
     }
