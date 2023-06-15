@@ -163,7 +163,7 @@ final class SwiftKafkaTests: XCTestCase {
                 )
 
                 let consumer = try KafkaConsumer(
-                    config: consumerConfig,
+                    config: consumerConfiguration,
                     logger: .kafkaTest
                 )
 
