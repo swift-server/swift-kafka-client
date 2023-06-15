@@ -35,12 +35,12 @@ final class KafkaProducerTests: XCTestCase {
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
     var bootstrapServer: String!
-    var config: KafkaProducerConfig!
+    var config: KafkaProducerConfiguration!
 
     override func setUpWithError() throws {
         self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
 
-        self.config = KafkaProducerConfig(
+        self.config = KafkaProducerConfiguration(
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )

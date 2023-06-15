@@ -9,7 +9,7 @@ SwiftKafka is a Swift Package in development that provides a convenient way to c
 The `sendAsync(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
 
 ```swift
-let config = KafkaProducerConfig(bootstrapServers: ["localhost:9092"])
+let config = KafkaProducerConfiguration(bootstrapServers: ["localhost:9092"])
 
 let (producer, acknowledgements) = try await KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
@@ -47,7 +47,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 After initializing the `KafkaConsumer` with a topic-partition pair to read from, messages can be consumed using the `messages` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence).
 
 ```swift
-let config = KafkaConsumerConfig(
+let config = KafkaConsumerConfiguration(
     consumptionStrategy: .partition(
         topic: "topic-name",
         partition: KafkaPartition(rawValue: 0)
@@ -75,7 +75,7 @@ for await messageResult in consumer.messages {
 SwiftKafka also allows users to subscribe to an array of topics as part of a consumer group.
 
 ```swift
-let config = KafkaConsumerConfig(
+let config = KafkaConsumerConfiguration(
     consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"]),
     bootstrapServers: ["localhost:9092"]
 )
@@ -100,7 +100,7 @@ for await messageResult in consumer.messages {
 By default, the `KafkaConsumer` automatically commits message offsets after receiving the corresponding message. However, we allow users to disable this setting and commit message offsets manually.
 
 ```swift
-let config = KafkaConsumerConfig(
+let config = KafkaConsumerConfiguration(
     consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"]),
     enableAutoCommit: false,
     bootstrapServers: ["localhost:9092"]

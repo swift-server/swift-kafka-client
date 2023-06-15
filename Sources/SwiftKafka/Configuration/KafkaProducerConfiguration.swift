@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct KafkaProducerConfig: Hashable, Equatable {
+public struct KafkaProducerConfiguration: Hashable, Equatable {
     var dictionary: [String: String] = [:]
 
     // MARK: - Producer-specific Config Properties

@@ -15,7 +15,7 @@
 import Crdkafka
 import struct Foundation.UUID
 
-public struct KafkaConsumerConfig: Hashable, Equatable {
+public struct KafkaConsumerConfiguration: Hashable, Equatable {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The backpressure strategy to be used for message consumption.

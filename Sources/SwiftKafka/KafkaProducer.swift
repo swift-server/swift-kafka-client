@@ -38,7 +38,7 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
 
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
-/// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfig``
+/// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public actor KafkaProducer {
     /// States that the ``KafkaProducer`` can have.
@@ -58,8 +58,8 @@ public actor KafkaProducer {
     /// Counter that is used to assign each message a unique ID.
     /// Every time a new message is sent to the Kafka cluster, the counter is increased by one.
     private var messageIDCounter: UInt = 0
-    /// The ``TopicConfig`` used for newly created topics.
-    private let topicConfig: KafkaTopicConfig
+    /// The ``TopicConfiguration`` used for newly created topics.
+    private let topicConfig: KafkaTopicConfiguration
     /// A logger.
     private let logger: Logger
     /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
@@ -70,13 +70,13 @@ public actor KafkaProducer {
 
     // Private initializer, use factory methods to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
-    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfig`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         client: KafkaClient,
-        topicConfig: KafkaTopicConfig,
+        topicConfig: KafkaTopicConfiguration,
         logger: Logger
     ) async throws {
         self.client = client
@@ -96,8 +96,8 @@ public actor KafkaProducer {
     /// - Returns: The newly created ``KafkaProducer``.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public static func makeProducer(
-        config: KafkaProducerConfig = KafkaProducerConfig(),
-        topicConfig: KafkaTopicConfig = KafkaTopicConfig(),
+        config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
+        topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) async throws -> KafkaProducer {
         let client = try RDKafka.createClient(

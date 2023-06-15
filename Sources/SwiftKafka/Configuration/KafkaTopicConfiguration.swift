@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 /// Used to configure new topics created by the ``KafkaProducer``.
-public struct KafkaTopicConfig: Hashable, Equatable {
+public struct KafkaTopicConfiguration: Hashable, Equatable {
     var dictionary: [String: String] = [:]
 
     /// This field indicates the number of acknowledgements the leader broker must receive from ISR brokers before responding to the request: 0=Broker does not send any response/ack to client, -1 or all=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.

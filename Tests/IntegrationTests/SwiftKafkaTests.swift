@@ -34,18 +34,18 @@ final class SwiftKafkaTests: XCTestCase {
     let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
     var bootstrapServer: String!
-    var producerConfig: KafkaProducerConfig!
+    var producerConfig: KafkaProducerConfiguration!
     var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
         self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
 
-        self.producerConfig = KafkaProducerConfig(
+        self.producerConfig = KafkaProducerConfiguration(
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )
 
-        let basicConfig = KafkaConsumerConfig(
+        let basicConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(groupID: "no-group", topics: []),
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
@@ -57,7 +57,7 @@ final class SwiftKafkaTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        let basicConfig = KafkaConsumerConfig(
+        let basicConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(groupID: "no-group", topics: []),
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
@@ -94,7 +94,7 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Consumer Task
             group.addTask {
-                let consumerConfig = KafkaConsumerConfig(
+                let consumerConfig = KafkaConsumerConfiguration(
                     consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
                     autoOffsetReset: .beginning, // Always read topics from beginning
                     bootstrapServers: [self.bootstrapServer],
@@ -151,7 +151,7 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Consumer Task
             group.addTask {
-                let consumerConfig = KafkaConsumerConfig(
+                let consumerConfiguration = KafkaConsumerConfiguration(
                     consumptionStrategy: .partition(
                         topic: self.uniqueTestTopic,
                         partition: KafkaPartition(rawValue: 0),
@@ -212,7 +212,7 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Consumer Task
             group.addTask {
-                let consumerConfig = KafkaConsumerConfig(
+                let consumerConfig = KafkaConsumerConfiguration(
                     consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
                     enableAutoCommit: false,
                     autoOffsetReset: .beginning, // Always read topics from beginning
