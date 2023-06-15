@@ -218,7 +218,7 @@ final class KafkaProducerTests: XCTestCase {
 
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
-        var acks: KafkaMessageAcknowledgements
+        var acks: KafkaMessageAcknowledgements?
         (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         _ = acks
 
@@ -226,6 +226,8 @@ final class KafkaProducerTests: XCTestCase {
 
         await producer?.shutdownGracefully()
         producer = nil
+        // Make sure to terminate the AsyncSequence
+        acks = nil
 
         // Wait for rd_kafka_flush to complete
         try await Task.sleep(nanoseconds: 10 * 1_000_000_000)
