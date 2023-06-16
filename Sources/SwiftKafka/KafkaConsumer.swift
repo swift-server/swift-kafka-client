@@ -15,43 +15,53 @@
 import Crdkafka
 import Dispatch
 import Logging
-import NIOCore
+import NIOConcurrencyHelpers
 
-/// `NIOAsyncSequenceProducerDelegate` implementation handling backpressure for ``KafkaConsumer``.
-private struct ConsumerMessagesAsyncSequenceDelegate: NIOAsyncSequenceProducerDelegate {
-    let produceMoreClosure: @Sendable () -> Void
-    let didTerminateClosure: @Sendable () -> Void
+// TODO: update readme
+// TODO: move other stuff also to RDKafka
+// TODO: remove NIOCore imports where possible
+// TODO: remove backpressure option in config
+// TODO: synchronization (remove dispatch, does this make sense?)
 
-    func produceMore() {
-        self.produceMoreClosure()
-    }
+// TODO: state machine containig all the variables -> statemachine is passed to ConsumerMessagesAsyncSequence -> statemachine to different commit
 
-    func didTerminate() {
-        self.didTerminateClosure()
-    }
-}
-
+// TODO: rename branch
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaConsumerMessage, KafkaError>
-    typealias HighLowWatermark = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
-    fileprivate let wrappedSequence: NIOAsyncSequenceProducer<Element, HighLowWatermark, ConsumerMessagesAsyncSequenceDelegate>
+    internal let client: KafkaClient
+    internal let logger: Logger
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
-        fileprivate let wrappedIterator: NIOAsyncSequenceProducer<
-            Element,
-            HighLowWatermark,
-            ConsumerMessagesAsyncSequenceDelegate
-        >.AsyncIterator
+        internal let client: KafkaClient
+        internal let logger: Logger
 
         public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
+            // TODO: refactor
+            let messageResult: Result<KafkaConsumerMessage, KafkaError>
+            while !Task.isCancelled {
+                do {
+                    // TODO: timeout
+                    guard let message = try await client.consumerPoll() else { // TODO: pollInterval here
+                        continue
+                    }
+                    messageResult = .success(message)
+                } catch let kafkaError as KafkaError {
+                    messageResult = .failure(kafkaError)
+                } catch {
+                    logger.error("KafkaConsumer caught error: \(error)")
+                    continue
+                }
+                return messageResult
+            }
+            // TODO: close KafkaConsumer
+            return nil // Returning nil ends the sequence
         }
     }
 
     public func makeAsyncIterator() -> ConsumerMessagesAsyncIterator {
-        return ConsumerMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+        return ConsumerMessagesAsyncIterator(client: self.client, logger: self.logger)
     }
 }
 
@@ -68,19 +78,12 @@ public final class KafkaConsumer {
     /// Variable to ensure that no operations are invoked on closed consumer.
     private var closed = false
 
+    // TODO: remove
     /// Serial queue used to run all blocking operations. Additionally ensures that no data races occur.
     private let serialQueue: DispatchQueue
 
-    // We use implicitly unwrapped optionals here as these properties need to access self upon initialization
-    /// Type of the values returned by the ``messages`` sequence.
-    private typealias Element = Result<KafkaConsumerMessage, KafkaError>
-    private var messagesSource: NIOAsyncSequenceProducer<
-        Element,
-        ConsumerMessagesAsyncSequence.HighLowWatermark,
-        ConsumerMessagesAsyncSequenceDelegate
-    >.Source!
     /// `AsyncSequence` that returns all ``KafkaConsumerMessage`` objects that the consumer receives.
-    public private(set) var messages: ConsumerMessagesAsyncSequence!
+    public let messages: ConsumerMessagesAsyncSequence
 
     /// Initialize a new ``KafkaConsumer``.
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
@@ -95,6 +98,7 @@ public final class KafkaConsumer {
         self.config = config
         self.logger = logger
         self.client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)
+        self.messages = ConsumerMessagesAsyncSequence(client: self.client, logger: self.logger)
 
         self.subscribedTopicsPointer = rd_kafka_topic_partition_list_new(1)
 
@@ -109,46 +113,16 @@ public final class KafkaConsumer {
 
         self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
 
-        var lowWatermark = 10
-        var highWatermark = 50
-        switch config.backPressureStrategy._internal {
-        case .watermark(let low, let high):
-            lowWatermark = low
-            highWatermark = high
-        }
-        let backpressureStrategy = ConsumerMessagesAsyncSequence.HighLowWatermark(
-            lowWatermark: lowWatermark,
-            highWatermark: highWatermark
-        )
-
-        // (NIOAsyncSequenceProducer.makeSequence Documentation Excerpt)
-        // This method returns a struct containing a NIOAsyncSequenceProducer.Source and a NIOAsyncSequenceProducer.
-        // The source MUST be held by the caller and used to signal new elements or finish.
-        // The sequence MUST be passed to the actual consumer and MUST NOT be held by the caller.
-        // This is due to the fact that deiniting the sequence is used as part of a trigger to
-        // terminate the underlying source.
-        // TODO: make self delegate to avoid weak reference here
-        let messagesSequenceDelegate = ConsumerMessagesAsyncSequenceDelegate { [weak self] in
-            self?.produceMore()
-        } didTerminateClosure: { [weak self] in
-            self?.close()
-        }
-        let messagesSourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: Element.self,
-            backPressureStrategy: backpressureStrategy,
-            delegate: messagesSequenceDelegate
-        )
-        self.messagesSource = messagesSourceAndSequence.source
-        self.messages = ConsumerMessagesAsyncSequence(
-            wrappedSequence: messagesSourceAndSequence.sequence
-        )
-
         switch config.consumptionStrategy._internal {
         case .partition(topic: let topic, partition: let partition, offset: let offset):
             try self.assign(topic: topic, partition: partition, offset: offset)
         case .group(groupID: _, topics: let topics):
             try self.subscribe(topics: topics)
         }
+    }
+
+    deinit {
+        // TODO: close
     }
 
     /// Subscribe to the given list of `topics`.
@@ -206,71 +180,6 @@ public final class KafkaConsumer {
         }
     }
 
-    /// Receive new messages and forward the result to the ``messages`` `AsyncSequence`.
-    func produceMore() {
-        self.serialQueue.async {
-            guard !self.closed else {
-                return
-            }
-
-            let messageResult: Element
-            do {
-                guard let message = try self.poll() else {
-                    self.produceMore()
-                    return
-                }
-                messageResult = .success(message)
-            } catch let kafkaError as KafkaError {
-                messageResult = .failure(kafkaError)
-            } catch {
-                self.logger.error("KafkaConsumer caught error: \(error)")
-                return
-            }
-
-            let yieldresult = self.messagesSource.yield(messageResult)
-            switch yieldresult {
-            case .produceMore:
-                self.produceMore()
-            case .dropped, .stopProducing:
-                return
-            }
-        }
-    }
-
-    /// Request a new message from the Kafka cluster.
-    /// This method blocks for a maximum of `timeout` milliseconds.
-    /// - Parameter timeout: Maximum amount of milliseconds this method waits for a new message.
-    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
-    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    private func poll(timeout: Int32 = 100) throws -> KafkaConsumerMessage? {
-        dispatchPrecondition(condition: .onQueue(self.serialQueue))
-        assert(!self.closed)
-
-        guard let messagePointer = self.client.withKafkaHandlePointer({ handle in
-            rd_kafka_consumer_poll(handle, timeout)
-        }) else {
-            // No error, there might be no more messages
-            return nil
-        }
-
-        defer {
-            // Destroy message otherwise poll() will block forever
-            rd_kafka_message_destroy(messagePointer)
-        }
-
-        // Reached the end of the topic+partition queue on the broker
-        if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
-            return nil
-        }
-
-        do {
-            let message = try KafkaConsumerMessage(messagePointer: messagePointer)
-            return message
-        } catch {
-            throw error
-        }
-    }
-
     /// Mark `message` in the topic as read and request the next message from the topic.
     /// This method is only used for manual offset management.
     /// - Parameter message: Last received message that shall be marked as read.
@@ -325,6 +234,7 @@ public final class KafkaConsumer {
         return
     }
 
+    // TODO: make public shutdownGracefully
     /// Stop consuming messages. This step is irreversible.
     func close() {
         self.serialQueue.async {
@@ -344,7 +254,7 @@ public final class KafkaConsumer {
                 return
             }
 
-            self.closed = true
+            self.closed = true // TODO: hoist up
         }
     }
 

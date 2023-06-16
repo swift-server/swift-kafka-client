@@ -76,8 +76,20 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
+        let consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
+            autoOffsetReset: .beginning, // Always read topics from beginning
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
+
+        let consumer = try KafkaConsumer(
+            config: consumerConfig,
+            logger: .kafkaTest
+        )
+
         await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
+            // Producer Run Task
             group.addTask {
                 try await producer.run()
             }
@@ -94,18 +106,6 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Consumer Task
             group.addTask {
-                let consumerConfig = KafkaConsumerConfiguration(
-                    consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
-                    autoOffsetReset: .beginning, // Always read topics from beginning
-                    bootstrapServers: [self.bootstrapServer],
-                    brokerAddressFamily: .v4
-                )
-
-                let consumer = try KafkaConsumer(
-                    config: consumerConfig,
-                    logger: .kafkaTest
-                )
-
                 var consumedMessages = [KafkaConsumerMessage]()
                 for await messageResult in consumer.messages {
                     guard case .success(let message) = messageResult else {
@@ -133,8 +133,24 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
+        let consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .partition(
+                topic: self.uniqueTestTopic,
+                partition: KafkaPartition(rawValue: 0),
+                offset: 0
+            ),
+            autoOffsetReset: .beginning, // Always read topics from beginning
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
+
+        let consumer = try KafkaConsumer(
+            config: consumerConfig,
+            logger: .kafkaTest
+        )
+
         await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
+            // Producer Run Task
             group.addTask {
                 try await producer.run()
             }
@@ -151,22 +167,6 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Consumer Task
             group.addTask {
-                let consumerConfiguration = KafkaConsumerConfiguration(
-                    consumptionStrategy: .partition(
-                        topic: self.uniqueTestTopic,
-                        partition: KafkaPartition(rawValue: 0),
-                        offset: 0
-                    ),
-                    autoOffsetReset: .beginning, // Always read topics from beginning
-                    bootstrapServers: [self.bootstrapServer],
-                    brokerAddressFamily: .v4
-                )
-
-                let consumer = try KafkaConsumer(
-                    config: consumerConfiguration,
-                    logger: .kafkaTest
-                )
-
                 var consumedMessages = [KafkaConsumerMessage]()
                 for await messageResult in consumer.messages {
                     guard case .success(let message) = messageResult else {
@@ -194,8 +194,21 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
+        let consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
+            enableAutoCommit: false,
+            autoOffsetReset: .beginning, // Always read topics from beginning
+            bootstrapServers: [self.bootstrapServer],
+            brokerAddressFamily: .v4
+        )
+
+        let consumer = try KafkaConsumer(
+            config: consumerConfig,
+            logger: .kafkaTest
+        )
+
         await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
+            // Producer Run Task
             group.addTask {
                 try await producer.run()
             }
@@ -212,19 +225,6 @@ final class SwiftKafkaTests: XCTestCase {
 
             // Consumer Task
             group.addTask {
-                let consumerConfig = KafkaConsumerConfiguration(
-                    consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
-                    enableAutoCommit: false,
-                    autoOffsetReset: .beginning, // Always read topics from beginning
-                    bootstrapServers: [self.bootstrapServer],
-                    brokerAddressFamily: .v4
-                )
-
-                let consumer = try KafkaConsumer(
-                    config: consumerConfig,
-                    logger: .kafkaTest
-                )
-
                 var consumedMessages = [KafkaConsumerMessage]()
                 for await messageResult in consumer.messages {
                     guard case .success(let message) = messageResult else {

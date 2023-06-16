@@ -56,6 +56,44 @@ final class KafkaClient {
         return rd_kafka_poll(self.kafkaHandle, timeout)
     }
 
+    /// Request a new message from the Kafka cluster.
+    ///
+    /// This method blocks for a maximum of `timeout` milliseconds.
+    ///
+    /// - Important: This method should only be invoked from ``KafkaConsumer``.
+    ///
+    /// - Parameter timeout: Maximum amount of milliseconds this method waits for a new message.
+    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
+    func consumerPoll(timeout: Int32 = 100) async throws -> KafkaConsumerMessage? {
+        try await withCheckedThrowingContinuation { continuation in
+            guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, timeout) else {
+                // No error, there might be no more messages
+                continuation.resume(returning: nil)
+                return
+            }
+
+            defer {
+                // Destroy message otherwise poll() will block forever
+                rd_kafka_message_destroy(messagePointer)
+            }
+
+            // Reached the end of the topic+partition queue on the broker
+            if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
+                continuation.resume(returning: nil)
+                return
+            }
+
+            do {
+                let message = try KafkaConsumerMessage(messagePointer: messagePointer)
+                continuation.resume(returning: message)
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure will use the Kafka handle pointer.
