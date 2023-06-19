@@ -29,10 +29,10 @@ let rdkafkaExclude = [
 let package = Package(
     name: "swift-kafka-gsoc",
     platforms: [
-        .macOS(.v10_15),
-        .iOS(.v13),
-        .watchOS(.v6),
-        .tvOS(.v13),
+        .macOS(.v13),
+        .iOS(.v16),
+        .watchOS(.v9),
+        .tvOS(.v16),
     ],
     products: [
         .library(

@@ -27,7 +27,7 @@ struct RDKafka {
     static func createClient(
         type: ClientType,
         configDictionary: [String: String],
-        callback: ((UnsafePointer<rd_kafka_message_t>?) -> Void)? = nil,
+        callback: ((RDKafkaConfig.KafkaAcknowledgementResult?) -> Void)? = nil,
         logger: Logger
     ) throws -> KafkaClient {
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER

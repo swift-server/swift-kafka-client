@@ -42,6 +42,20 @@ final class KafkaClient {
         rd_kafka_destroy(kafkaHandle)
     }
 
+    /// Polls the Kafka client for events.
+    ///
+    /// Events will cause application-provided callbacks to be called.
+    ///
+    /// - Parameter timeout: Specifies the maximum amount of time
+    /// (in milliseconds) that the call will block waiting for events.
+    /// For non-blocking calls, provide 0 as `timeout`.
+    /// To wait indefinitely for an event, provide -1.
+    /// - Returns: The number of events served.
+    @discardableResult
+    func poll(timeout: Int32) -> Int32 {
+        return rd_kafka_poll(self.kafkaHandle, timeout)
+    }
+
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure will use the Kafka handle pointer.

@@ -11,24 +11,35 @@ The `sendAsync(_:)` method of `KafkaProducer` returns a message-id that can late
 ```swift
 let config = KafkaProducerConfig(bootstrapServers: ["localhost:9092"])
 
-let producer = try await KafkaProducer(
+let (producer, acknowledgements) = try await KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
     logger: .kafkaTest // Your logger here
 )
 
-let messageID = try await producer.sendAsync(
-    KafkaProducerMessage(
-        topic: "topic-name",
-        value: "Hello, World!"
-    )
-)
+await withThrowingTaskGroup(of: Void.self) { group in
 
-for await acknowledgement in producer.acknowledgements {
-    // Check if acknowledgement belongs to the sent message
+    // Run Task
+    group.addTask {
+        try await producer.run()
+    }
+
+    // Task receiving acknowledgements
+    group.addTask {
+        let messageID = try await producer.sendAsync(
+            KafkaProducerMessage(
+                topic: "topic-name",
+                value: "Hello, World!"
+            )
+        )
+
+        for await acknowledgement in acknowledgements {
+            // Check if acknowledgement belongs to the sent message
+        }
+
+        // Required
+        await producer.shutdownGracefully()
+    }
 }
-
-// Required
-await producer.shutdownGracefully()
 ```
 
 ### Consumer API
