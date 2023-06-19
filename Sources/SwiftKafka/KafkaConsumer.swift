@@ -16,8 +16,6 @@ import Crdkafka
 import Logging
 import NIOConcurrencyHelpers
 
-// TODO: update readme
-// TODO: remove KafkaConsumer tests
 // TODO: move other stuff also to RDKafka
 // TODO: remove NIOCore imports where possible
 // TODO: remove backpressure option in config
