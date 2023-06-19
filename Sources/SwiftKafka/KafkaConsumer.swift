@@ -16,9 +16,6 @@ import Crdkafka
 import Logging
 import NIOConcurrencyHelpers
 
-// TODO: move other stuff also to RDKafka
-// TODO: remove backpressure option in config
-
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaConsumerMessage, KafkaError>
