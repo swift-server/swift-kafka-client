@@ -14,7 +14,6 @@
 
 import Crdkafka
 import Logging
-import NIOCore
 
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct KafkaMessageAcknowledgements: AsyncSequence {

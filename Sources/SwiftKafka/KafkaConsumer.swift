@@ -17,7 +17,6 @@ import Logging
 import NIOConcurrencyHelpers
 
 // TODO: move other stuff also to RDKafka
-// TODO: remove NIOCore imports where possible
 // TODO: remove backpressure option in config
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
