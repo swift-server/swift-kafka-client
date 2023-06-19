@@ -27,21 +27,19 @@ struct RDKafka {
     static func createClient(
         type: ClientType,
         configDictionary: [String: String],
-        callback: ((UnsafePointer<rd_kafka_message_t>?) -> Void)? = nil,
-        logger: Logger, redirectLogging: Bool = true
+        deliveryReport: RDKafkaConfig.CapturedClosures.DeliveryReportClosure? = nil,
+        logger: Logger
     ) throws -> KafkaClient {
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
 
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
 
-        let opaque = RDKafkaConfig.setOpaque(configPointer: rdConfig)
-
-        if let callback, type == .producer {
-            RDKafkaConfig.setDeliveryReportCallback(configPointer: rdConfig, opaquePointer: opaque, callback)
-        }
-        if redirectLogging {
-            RDKafkaConfig.setLoggingCallback(configPointer: rdConfig, opaquePointer: opaque, logger: logger)
-        }
+        let opaque = RDKafkaConfig.setCallbackClosures(
+            type: type,
+            configPointer: rdConfig,
+            deliveryReport: deliveryReport,
+            logger: logger
+        )
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorChars.deallocate() }
