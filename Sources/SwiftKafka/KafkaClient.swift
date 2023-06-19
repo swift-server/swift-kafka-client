@@ -93,7 +93,6 @@ final class KafkaClient {
         }
     }
 
-
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure will use the Kafka handle pointer.

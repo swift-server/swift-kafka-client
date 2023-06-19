@@ -39,7 +39,6 @@ final class KafkaConsumerTests: XCTestCase {
         self.config = nil
     }
 
-
     func testNoMemoryLeakAfterShutdown() async throws {
         var consumer: KafkaConsumer? = try KafkaConsumer(config: config, logger: .kafkaTest)
         weak var consumerCopy = consumer

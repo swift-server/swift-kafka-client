@@ -13,55 +13,86 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 
 // TODO: update readme
+// TODO: remove KafkaConsumer tests
 // TODO: move other stuff also to RDKafka
 // TODO: remove NIOCore imports where possible
 // TODO: remove backpressure option in config
-// TODO: synchronization (remove dispatch, does this make sense?)
 
-// TODO: state machine containig all the variables -> statemachine is passed to ConsumerMessagesAsyncSequence -> statemachine to different commit
-
-// TODO: rename branch
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct ConsumerMessagesAsyncSequence: AsyncSequence {
     public typealias Element = Result<KafkaConsumerMessage, KafkaError>
-    internal let client: KafkaClient
-    internal let logger: Logger
+    internal let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
-        internal let client: KafkaClient
-        internal let logger: Logger
-
-        public mutating func next() async -> Element? {
-            // TODO: refactor
-            let messageResult: Result<KafkaConsumerMessage, KafkaError>
-            while !Task.isCancelled {
-                do {
-                    // TODO: timeout
-                    guard let message = try await client.consumerPoll() else { // TODO: pollInterval here
-                        continue
-                    }
-                    messageResult = .success(message)
-                } catch let kafkaError as KafkaError {
-                    messageResult = .failure(kafkaError)
-                } catch {
-                    logger.error("KafkaConsumer caught error: \(error)")
-                    continue
-                }
-                return messageResult
+        class _Internal {
+            private let _stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
+            init(stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>) {
+                self._stateMachine = stateMachine
             }
-            // TODO: close KafkaConsumer
-            return nil // Returning nil ends the sequence
+
+            deinit {
+                self.shutdownGracefully()
+            }
+
+            internal func next() async -> Element? {
+                let messageResult: Result<KafkaConsumerMessage, KafkaError>
+                while !Task.isCancelled {
+                    let nextAction = self._stateMachine.withLockedValue { $0.nextPollAction() }
+                    switch nextAction {
+                    case .pollForMessage(let client, let logger):
+                        do {
+                            // TODO: timeout
+                            guard let message = try await client.consumerPoll() else { // TODO: pollInterval here
+                                continue
+                            }
+                            messageResult = .success(message)
+                        } catch let kafkaError as KafkaError {
+                            messageResult = .failure(kafkaError)
+                        } catch {
+                            logger.error("KafkaConsumer caught error: \(error)")
+                            continue
+                        }
+                        return messageResult
+                    case .none:
+                        return nil
+                    }
+                }
+                return nil // Returning nil ends the sequence
+            }
+
+            private func shutdownGracefully() {
+                let action = self._stateMachine.withLockedValue { $0.finish() }
+                switch action {
+                case .shutdownGracefully(let client, let subscribedTopicsPointer, let logger):
+                    KafkaConsumer.shutdownGracefully(
+                        client: client,
+                        subscribedTopicsPointer: subscribedTopicsPointer,
+                        logger: logger
+                    )
+                case .none:
+                    return
+                }
+            }
+        }
+
+        private let _internal: _Internal
+
+        init(stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>) {
+            self._internal = .init(stateMachine: stateMachine)
+        }
+
+        public func next() async -> Element? {
+            await self._internal.next()
         }
     }
 
     public func makeAsyncIterator() -> ConsumerMessagesAsyncIterator {
-        return ConsumerMessagesAsyncIterator(client: self.client, logger: self.logger)
+        return ConsumerMessagesAsyncIterator(stateMachine: self.stateMachine)
     }
 }
 
@@ -69,18 +100,8 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
 public final class KafkaConsumer {
     /// The configuration object of the consumer client.
     private var config: KafkaConsumerConfiguration
-    /// A logger.
-    private let logger: Logger
-    /// Used for handling the connection to the Kafka cluster.
-    private let client: KafkaClient
-    /// Pointer to a list of topics + partition pairs.
-    private let subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
-    /// Variable to ensure that no operations are invoked on closed consumer.
-    private var closed = false
-
-    // TODO: remove
-    /// Serial queue used to run all blocking operations. Additionally ensures that no data races occur.
-    private let serialQueue: DispatchQueue
+    /// State of the `KafkaConsumer`.
+    private let stateMachine: NIOLockedValueBox<StateMachine>
 
     /// `AsyncSequence` that returns all ``KafkaConsumerMessage`` objects that the consumer receives.
     public let messages: ConsumerMessagesAsyncSequence
@@ -96,22 +117,24 @@ public final class KafkaConsumer {
         logger: Logger
     ) throws {
         self.config = config
-        self.logger = logger
-        self.client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)
-        self.messages = ConsumerMessagesAsyncSequence(client: self.client, logger: self.logger)
 
-        self.subscribedTopicsPointer = rd_kafka_topic_partition_list_new(1)
+        let client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: logger)
+
+        guard let subscribedTopicsPointer = rd_kafka_topic_partition_list_new(1) else {
+            throw KafkaError.client(reason: "Failed to allocate Topic+Partition list.")
+        }
+
+        self.stateMachine = NIOLockedValueBox(StateMachine(state: .initializing(client: client, subscribedTopicsPointer: subscribedTopicsPointer, logger: logger)))
+        self.messages = ConsumerMessagesAsyncSequence(stateMachine: self.stateMachine)
 
         // Events that would be triggered by rd_kafka_poll
         // will now be also triggered by rd_kafka_consumer_poll
-        let result = self.client.withKafkaHandlePointer { handle in
+        let result = client.withKafkaHandlePointer { handle in
             rd_kafka_poll_set_consumer(handle)
         }
         guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
             throw KafkaError.rdKafkaError(wrapping: result)
         }
-
-        self.serialQueue = DispatchQueue(label: "swift-kafka-gsoc.consumer.serial")
 
         switch config.consumptionStrategy._internal {
         case .partition(topic: let topic, partition: let partition, offset: let offset):
@@ -122,7 +145,8 @@ public final class KafkaConsumer {
     }
 
     deinit {
-        // TODO: close
+        // This occurs e.g. when for await loop is exited through break
+        self.shutdownGracefully()
     }
 
     /// Subscribe to the given list of `topics`.
@@ -130,22 +154,24 @@ public final class KafkaConsumer {
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     private func subscribe(topics: [String]) throws {
-        assert(!self.closed)
+        let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+        switch action {
+        case .setUpConnection(let client, let subscribedTopicsPointer):
+            for topic in topics {
+                rd_kafka_topic_partition_list_add(
+                    subscribedTopicsPointer,
+                    topic,
+                    KafkaPartition.unassigned.rawValue
+                )
+            }
 
-        for topic in topics {
-            rd_kafka_topic_partition_list_add(
-                self.subscribedTopicsPointer,
-                topic,
-                KafkaPartition.unassigned.rawValue
-            )
-        }
+            let result = client.withKafkaHandlePointer { handle in
+                rd_kafka_subscribe(handle, subscribedTopicsPointer)
+            }
 
-        let result = self.client.withKafkaHandlePointer { handle in
-            rd_kafka_subscribe(handle, self.subscribedTopicsPointer)
-        }
-
-        guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(wrapping: result)
+            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
         }
     }
 
@@ -159,24 +185,26 @@ public final class KafkaConsumer {
         partition: KafkaPartition,
         offset: Int
     ) throws {
-        assert(!self.closed)
+        let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+        switch action {
+        case .setUpConnection(let client, let subscribedTopicsPointer):
+            guard let partitionPointer = rd_kafka_topic_partition_list_add(
+                subscribedTopicsPointer,
+                topic,
+                partition.rawValue
+            ) else {
+                fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
+            }
 
-        guard let partitionPointer = rd_kafka_topic_partition_list_add(
-            self.subscribedTopicsPointer,
-            topic,
-            partition.rawValue
-        ) else {
-            fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
-        }
+            partitionPointer.pointee.offset = Int64(offset)
 
-        partitionPointer.pointee.offset = Int64(offset)
+            let result = client.withKafkaHandlePointer { handle in
+                rd_kafka_assign(handle, subscribedTopicsPointer)
+            }
 
-        let result = self.client.withKafkaHandlePointer { handle in
-            rd_kafka_assign(handle, self.subscribedTopicsPointer)
-        }
-
-        guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(wrapping: result)
+            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
         }
     }
 
@@ -186,10 +214,9 @@ public final class KafkaConsumer {
     /// - Throws: A ``KafkaError`` if committing failed.
     /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
-        try await self.serializeWithThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-
+        try await withCheckedThrowingContinuation { continuation in
             do {
-                try self._commitSync(message)
+                try self._commitSync(message) // Blocks until commiting the offset is done
                 continuation.resume()
             } catch {
                 continuation.resume(throwing: error)
@@ -198,73 +225,224 @@ public final class KafkaConsumer {
     }
 
     private func _commitSync(_ message: KafkaConsumerMessage) throws {
-        dispatchPrecondition(condition: .onQueue(self.serialQueue))
-        guard !self.closed else {
+        let action = self.stateMachine.withLockedValue { $0.commitSync() }
+        switch action {
+        case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
-        }
+        case .commitSync(let client):
+            guard self.config.enableAutoCommit == false else {
+                throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
+            }
 
-        guard self.config.enableAutoCommit == false else {
-            throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
-        }
-
-        let changesList = rd_kafka_topic_partition_list_new(1)
-        defer { rd_kafka_topic_partition_list_destroy(changesList) }
-        guard let partitionPointer = rd_kafka_topic_partition_list_add(
-            changesList,
-            message.topic,
-            message.partition.rawValue
-        ) else {
-            fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
-        }
-
-        // The offset committed is always the offset of the next requested message.
-        // Thus, we increase the offset of the current message by one before committing it.
-        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        partitionPointer.pointee.offset = Int64(message.offset + 1)
-        let result = self.client.withKafkaHandlePointer { handle in
-            rd_kafka_commit(
-                handle,
+            let changesList = rd_kafka_topic_partition_list_new(1)
+            defer { rd_kafka_topic_partition_list_destroy(changesList) }
+            guard let partitionPointer = rd_kafka_topic_partition_list_add(
                 changesList,
-                0
+                message.topic,
+                message.partition.rawValue
+            ) else {
+                fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
+            }
+
+            // The offset committed is always the offset of the next requested message.
+            // Thus, we increase the offset of the current message by one before committing it.
+            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+            partitionPointer.pointee.offset = Int64(message.offset + 1)
+            let result = client.withKafkaHandlePointer { handle in
+                rd_kafka_commit(
+                    handle,
+                    changesList,
+                    0
+                ) // Blocks until commiting the offset is done
+            }
+            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+        }
+    }
+
+    /// This function is used to gracefully shut down a Kafka consumer client.
+    ///
+    /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
+    /// will already shut down when consumption of the ``ConsumerMessagesAsyncSequence`` has ended.
+    public func shutdownGracefully() {
+        let action = self.stateMachine.withLockedValue { $0.finish() }
+        switch action {
+        case .shutdownGracefully(let client, let subscribedTopicsPointer, let logger):
+            KafkaConsumer.shutdownGracefully(
+                client: client,
+                subscribedTopicsPointer: subscribedTopicsPointer,
+                logger: logger
+            )
+        case .none:
+            return
+        }
+    }
+}
+
+// MARK: - KafkaConsumer + static shutdownGracefully
+
+extension KafkaConsumer {
+    /// This function is used to gracefully shut down a Kafka consumer client.
+    fileprivate static func shutdownGracefully(
+        client: KafkaClient,
+        subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>,
+        logger: Logger
+    ) {
+        let result = client.withKafkaHandlePointer { handle in
+            rd_kafka_consumer_close(handle)
+        }
+
+        rd_kafka_topic_partition_list_destroy(subscribedTopicsPointer)
+
+        guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            let error = KafkaError.rdKafkaError(wrapping: result)
+            logger.error("Closing KafkaConsumer failed: \(error.description)")
+            return
+        }
+    }
+}
+
+// MARK: - KafkaConsumer + StateMachine
+
+extension KafkaConsumer {
+    /// State machine representing the state of the ``KafkaConsumer``.
+    struct StateMachine {
+        /// The state of the ``StateMachine``.
+        enum State {
+            /// We are in the process of initializing the ``KafkaConsumer``,
+            /// though ``subscribe()`` / ``assign()`` have not been invoked.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
+            /// - Parameter logger: A logger.
+            case initializing(
+                client: KafkaClient,
+                subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>,
+                logger: Logger
+            )
+            /// The ``KafkaConsumer`` is consuming messages.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
+            /// - Parameter logger: A logger.
+            case consuming(
+                client: KafkaClient,
+                subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>,
+                logger: Logger
+            )
+            /// The ``KafkaConsumer`` has been closed.
+            case finished
+        }
+
+        /// The current state of the StateMachine.
+        var state: State
+
+        /// Action to be taken when wanting to poll for a new message.
+        enum PollAction {
+            /// Poll for a new ``KafkaConsumerMessage``.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter logger: A logger.
+            case pollForMessage(
+                client: KafkaClient,
+                logger: Logger
             )
         }
-        guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(wrapping: result)
+
+        /// Returns the next action to be taken when wanting to poll.
+        /// - Returns: The next action to be taken when wanting to poll, or `nil` if there is no action to be taken.
+        ///
+        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        func nextPollAction() -> PollAction? {
+            switch self.state {
+            case .initializing:
+                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .consuming(let client, _, let logger):
+                return .pollForMessage(client: client, logger: logger)
+            case .finished:
+                return nil
+            }
         }
-        return
-    }
 
-    // TODO: make public shutdownGracefully
-    /// Stop consuming messages. This step is irreversible.
-    func close() {
-        self.serialQueue.async {
-            guard !self.closed else {
-                return
-            }
-
-            let result = self.client.withKafkaHandlePointer { handle in
-                rd_kafka_consumer_close(handle)
-            }
-
-            rd_kafka_topic_partition_list_destroy(self.subscribedTopicsPointer)
-
-            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                let error = KafkaError.rdKafkaError(wrapping: result)
-                self.logger.error("Closing KafkaConsumer failed: \(error.description)")
-                return
-            }
-
-            self.closed = true // TODO: hoist up
+        /// Action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
+        enum SetUpConnectionAction {
+            /// Set up the connection through ``subscribe()`` or ``assign()``.
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
+            case setUpConnection(client: KafkaClient, subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>)
         }
-    }
 
-    /// Helper function that enqueues a task with a checked throwing continuation into the ``KafkaConsumer``'s serial queue.
-    private func serializeWithThrowingContinuation<T>(_ body: @escaping (CheckedContinuation<T, Error>) -> Void) async throws -> T {
-        try await withCheckedThrowingContinuation { continuation in
-            self.serialQueue.async {
-                body(continuation)
-                // Note: we do not support cancellation yet
-                // https://github.com/swift-server/swift-kafka-gsoc/issues/33
+        /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
+        /// - Returns: The action to be taken.
+        mutating func setUpConnection() -> SetUpConnectionAction {
+            switch self.state {
+            case .initializing(let client, let subscribedTopicsPointer, let logger):
+                self.state = .consuming(
+                    client: client,
+                    subscribedTopicsPointer: subscribedTopicsPointer,
+                    logger: logger
+                )
+                return .setUpConnection(client: client, subscribedTopicsPointer: subscribedTopicsPointer)
+            case .consuming, .finished:
+                fatalError("\(#function) should only be invoked upon initialization of KafkaConsumer")
+            }
+        }
+
+        /// Action to be taken when wanting to do a synchronous commit.
+        enum CommitSyncAction {
+            /// Do a synchronous commit.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case commitSync(
+                client: KafkaClient
+            )
+            /// Throw an error. The ``KafkaConsumer`` is closed.
+            case throwClosedError
+        }
+
+        /// Get action to be taken when wanting to do a synchronous commit.
+        /// - Returns: The action to be taken.
+        ///
+        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        func commitSync() -> CommitSyncAction {
+            switch self.state {
+            case .initializing:
+                fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
+            case .consuming(let client, _, _):
+                return .commitSync(client: client)
+            case .finished:
+                return .throwClosedError
+            }
+        }
+
+        /// Action to be taken when wanting to do close the consumer.
+        enum FinishAction {
+            /// Shut down the ``KafkaConsumer``.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
+            /// - Parameter logger: A logger.
+            case shutdownGracefully(
+                client: KafkaClient,
+                subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>,
+                logger: Logger
+            )
+        }
+
+        /// Get action to be taken when wanting to do close the consumer.
+        /// - Returns: The action to be taken,  or `nil` if there is no action to be taken.
+        ///
+        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        mutating func finish() -> FinishAction? {
+            switch self.state {
+            case .initializing:
+                fatalError("subscribe() / assign() should have been invoked before \(#function)")
+            case .consuming(let client, let subscribedTopicsPointer, let logger):
+                self.state = .finished
+                return .shutdownGracefully(client: client, subscribedTopicsPointer: subscribedTopicsPointer, logger: logger)
+            case .finished:
+                return nil
             }
         }
     }

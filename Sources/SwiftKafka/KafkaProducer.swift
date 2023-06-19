@@ -180,13 +180,13 @@ public actor KafkaProducer {
         switch self.state {
         case .started:
             self.state = .shuttingDown
-            await self._shutDownGracefully(timeout: timeout)
+            await self._shutdownGracefully(timeout: timeout)
         case .shuttingDown, .shutDown:
             return
         }
     }
 
-    private func _shutDownGracefully(timeout: Int32) async {
+    private func _shutdownGracefully(timeout: Int32) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             // Wait `timeout` seconds for outstanding messages to be sent and callbacks to be called
             self.client.withKafkaHandlePointer { handle in
