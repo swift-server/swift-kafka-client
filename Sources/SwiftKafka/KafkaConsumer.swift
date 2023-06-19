@@ -38,10 +38,9 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
                 while !Task.isCancelled {
                     let nextAction = self._stateMachine.withLockedValue { $0.nextPollAction() }
                     switch nextAction {
-                    case .pollForMessage(let client, let logger):
+                    case .pollForMessage(let pollTimeout, let client, let logger):
                         do {
-                            // TODO: timeout
-                            guard let message = try await client.consumerPoll() else { // TODO: pollInterval here
+                            guard let message = try await client.consumerPoll(timeout: pollTimeout) else {
                                 continue
                             }
                             messageResult = .success(message)
@@ -107,6 +106,7 @@ public final class KafkaConsumer {
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public init(
+        pollTimeout: Int32 = 100, // TODO(felix): poll intervals through config in separate PR
         config: KafkaConsumerConfiguration,
         logger: Logger
     ) throws {
@@ -118,7 +118,16 @@ public final class KafkaConsumer {
             throw KafkaError.client(reason: "Failed to allocate Topic+Partition list.")
         }
 
-        self.stateMachine = NIOLockedValueBox(StateMachine(state: .initializing(client: client, subscribedTopicsPointer: subscribedTopicsPointer, logger: logger)))
+        self.stateMachine = NIOLockedValueBox(
+            StateMachine(
+                state: .initializing(
+                    pollTimeout: pollTimeout,
+                    client: client,
+                    subscribedTopicsPointer: subscribedTopicsPointer,
+                    logger: logger
+                )
+            )
+        )
         self.messages = ConsumerMessagesAsyncSequence(stateMachine: self.stateMachine)
 
         // Events that would be triggered by rd_kafka_poll
@@ -307,20 +316,24 @@ extension KafkaConsumer {
             /// We are in the process of initializing the ``KafkaConsumer``,
             /// though ``subscribe()`` / ``assign()`` have not been invoked.
             ///
+            /// - Parameter pollTimeout: Poll timeout in millieseconds.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
             /// - Parameter logger: A logger.
             case initializing(
+                pollTimeout: Int32,
                 client: KafkaClient,
                 subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>,
                 logger: Logger
             )
             /// The ``KafkaConsumer`` is consuming messages.
             ///
+            /// - Parameter pollTimeout: Poll timeout in millieseconds.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
             /// - Parameter logger: A logger.
             case consuming(
+                pollTimeout: Int32,
                 client: KafkaClient,
                 subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>,
                 logger: Logger
@@ -339,6 +352,7 @@ extension KafkaConsumer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter logger: A logger.
             case pollForMessage(
+                pollTimeout: Int32,
                 client: KafkaClient,
                 logger: Logger
             )
@@ -352,8 +366,8 @@ extension KafkaConsumer {
             switch self.state {
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .consuming(let client, _, let logger):
-                return .pollForMessage(client: client, logger: logger)
+            case .consuming(let pollTimeout, let client, _, let logger):
+                return .pollForMessage(pollTimeout: pollTimeout, client: client, logger: logger)
             case .finished:
                 return nil
             }
@@ -371,8 +385,9 @@ extension KafkaConsumer {
         /// - Returns: The action to be taken.
         mutating func setUpConnection() -> SetUpConnectionAction {
             switch self.state {
-            case .initializing(let client, let subscribedTopicsPointer, let logger):
+            case .initializing(let pollTimeout, let client, let subscribedTopicsPointer, let logger):
                 self.state = .consuming(
+                    pollTimeout: pollTimeout,
                     client: client,
                     subscribedTopicsPointer: subscribedTopicsPointer,
                     logger: logger
@@ -403,7 +418,7 @@ extension KafkaConsumer {
             switch self.state {
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
-            case .consuming(let client, _, _):
+            case .consuming(_, let client, _, _):
                 return .commitSync(client: client)
             case .finished:
                 return .throwClosedError
@@ -432,7 +447,7 @@ extension KafkaConsumer {
             switch self.state {
             case .initializing:
                 fatalError("subscribe() / assign() should have been invoked before \(#function)")
-            case .consuming(let client, let subscribedTopicsPointer, let logger):
+            case .consuming(_, let client, let subscribedTopicsPointer, let logger):
                 self.state = .finished
                 return .shutdownGracefully(client: client, subscribedTopicsPointer: subscribedTopicsPointer, logger: logger)
             case .finished:
