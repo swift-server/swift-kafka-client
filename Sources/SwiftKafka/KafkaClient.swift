@@ -65,7 +65,7 @@ final class KafkaClient {
     /// - Parameter timeout: Maximum amount of milliseconds this method waits for a new message.
     /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    func consumerPoll(timeout: Int32 = 100) async throws -> KafkaConsumerMessage? {
+    func consumerPoll(timeout: Int32) async throws -> KafkaConsumerMessage? {
         try await withCheckedThrowingContinuation { continuation in
             guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, timeout) else {
                 // No error, there might be no more messages

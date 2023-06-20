@@ -104,6 +104,11 @@ final class SwiftKafkaTests: XCTestCase {
                 await producer.shutdownGracefully()
             }
 
+            // Consumer Run Task
+            group.addTask {
+                try await consumer.run()
+            }
+
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
@@ -165,6 +170,11 @@ final class SwiftKafkaTests: XCTestCase {
                 await producer.shutdownGracefully()
             }
 
+            // Consumer Run Task
+            group.addTask {
+                try await consumer.run()
+            }
+
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
@@ -221,6 +231,11 @@ final class SwiftKafkaTests: XCTestCase {
                     messages: testMessages
                 )
                 await producer.shutdownGracefully()
+            }
+
+            // Consumer Run Task
+            group.addTask {
+                try await consumer.run()
             }
 
             // Consumer Task
