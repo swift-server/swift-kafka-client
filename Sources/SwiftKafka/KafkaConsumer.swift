@@ -58,7 +58,7 @@ public struct ConsumerMessagesAsyncSequence: AsyncSequence {
 /// Receive messages from the Kafka cluster.
 public final class KafkaConsumer {
     /// The configuration object of the consumer client.
-    private var config: KafkaConsumerConfig
+    private var config: KafkaConsumerConfiguration
     /// A logger.
     private let logger: Logger
     /// Used for handling the connection to the Kafka cluster.
@@ -85,11 +85,11 @@ public final class KafkaConsumer {
     /// Initialize a new ``KafkaConsumer``.
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
-    /// - Parameter config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
+    /// - Parameter config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public init(
-        config: KafkaConsumerConfig,
+        config: KafkaConsumerConfiguration,
         logger: Logger
     ) throws {
         self.config = config

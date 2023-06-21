@@ -36,7 +36,7 @@ unacceptable_terms=(
 # which is considered unacceptable by us.
 exclude_files=(
     CODE_OF_CONDUCT.md
-    *Config.swift
+    *Configuration.swift
 )
 for word in "${exclude_files[@]}"; do
     exclude_files+=(":(exclude)$word")
