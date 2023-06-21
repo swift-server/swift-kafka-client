@@ -52,7 +52,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSend() async throws {
-        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -70,7 +70,7 @@ final class KafkaProducerTests: XCTestCase {
                     value: "Hello, World!"
                 )
 
-                let messageID = try await producer.send(message)
+                let messageID = try producer.send(message)
 
                 for await messageResult in acks {
                     guard case .success(let acknowledgedMessage) = messageResult else {
@@ -91,7 +91,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendEmptyMessage() async throws {
-        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -108,7 +108,7 @@ final class KafkaProducerTests: XCTestCase {
                     value: ByteBuffer()
                 )
 
-                let messageID = try await producer.send(message)
+                let messageID = try producer.send(message)
 
                 for await messageResult in acks {
                     guard case .success(let acknowledgedMessage) = messageResult else {
@@ -129,7 +129,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendTwoTopics() async throws {
-        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         await withThrowingTaskGroup(of: Void.self) { group in
 
             // Run Task
@@ -152,8 +152,8 @@ final class KafkaProducerTests: XCTestCase {
 
                 var messageIDs = Set<KafkaProducerMessageID>()
 
-                messageIDs.insert(try await producer.send(message1))
-                messageIDs.insert(try await producer.send(message2))
+                messageIDs.insert(try producer.send(message1))
+                messageIDs.insert(try producer.send(message2))
 
                 var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
@@ -185,7 +185,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testProducerNotUsableAfterShutdown() async throws {
-        let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         await producer.shutdownGracefully()
 
         await withThrowingTaskGroup(of: Void.self) { group in
@@ -203,7 +203,7 @@ final class KafkaProducerTests: XCTestCase {
                 )
 
                 do {
-                    try await producer.send(message)
+                    try producer.send(message)
                     XCTFail("Method should have thrown error")
                 } catch {}
 
@@ -219,7 +219,7 @@ final class KafkaProducerTests: XCTestCase {
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
         var acks: KafkaMessageAcknowledgements?
-        (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         _ = acks
 
         weak var producerCopy = producer
