@@ -30,7 +30,7 @@ The `send(_:)` method of `KafkaProducer` returns a message-id that can later be 
 ```swift
 let config = KafkaProducerConfiguration(bootstrapServers: ["localhost:9092"])
 
-let (producer, acknowledgements) = try await KafkaProducer.makeProducerWithAcknowledgements(
+let (producer, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
     logger: .kafkaTest // Your logger here
 )
