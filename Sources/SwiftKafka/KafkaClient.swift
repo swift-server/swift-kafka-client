@@ -126,6 +126,85 @@ final class KafkaClient {
         }
     }
 
+    /// Wraps a Swift closure inside of a class to be able to pass it to `librdkafka` as an `OpaquePointer`.
+    /// This is specifically used to pass a Swift closure as a commit callback for the ``KafkaConsumer``.
+    final class CapturedCommitCallback {
+        typealias Closure = (Result<Void, KafkaError>) -> Void
+        let closure: Closure
+
+        init(_ closure: @escaping Closure) {
+            self.closure = closure
+        }
+    }
+
+    /// Non-blocking commit of a the `message`'s offset to Kafka.
+    ///
+    /// - Parameter message: Last received message that shall be marked as read.
+    func commitSync(_ message: KafkaConsumerMessage) async throws {
+        // Declare captured closure outside of withCheckedContinuation.
+        // We do that because do an unretained pass of the captured closure to
+        // librdkafka which means we have to keep a reference to the closure
+        // ourselves to make sure it does not get deallocated before
+        // commitSync returns.
+        var capturedClosure: CapturedCommitCallback!
+        try await withCheckedThrowingContinuation { continuation in
+            capturedClosure = CapturedCommitCallback { result in
+                continuation.resume(with: result)
+            }
+
+            // The offset committed is always the offset of the next requested message.
+            // Thus, we increase the offset of the current message by one before committing it.
+            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+            let changesList = RDKafkaTopicPartitionList()
+            changesList.setOffset(
+                topic: message.topic,
+                partition: message.partition,
+                offset: Int64(message.offset + 1)
+            )
+
+            // Unretained pass because the reference that librdkafka holds to capturedClosure
+            // should not be counted in ARC as this can lead to memory leaks.
+            let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
+
+            let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle)
+
+            // Create a C closure that calls the captured closure
+            let callbackWrapper: (
+                @convention(c) (
+                    OpaquePointer?,
+                    rd_kafka_resp_err_t,
+                    UnsafeMutablePointer<rd_kafka_topic_partition_list_t>?,
+                    UnsafeMutableRawPointer?
+                ) -> Void
+            ) = { _, error, _, opaquePointer in
+
+                guard let opaquePointer = opaquePointer else {
+                    fatalError("Could not resolve reference to catpured Swift callback instance")
+                }
+                let opaque = Unmanaged<CapturedCommitCallback>.fromOpaque(opaquePointer).takeUnretainedValue()
+
+                let actualCallback = opaque.closure
+
+                if error == RD_KAFKA_RESP_ERR_NO_ERROR {
+                    actualCallback(.success(()))
+                } else {
+                    let kafkaError = KafkaError.rdKafkaError(wrapping: error)
+                    actualCallback(.failure(kafkaError))
+                }
+            }
+
+            changesList.withListPointer { listPointer in
+                rd_kafka_commit_queue(
+                    self.kafkaHandle,
+                    listPointer,
+                    consumerQueue,
+                    callbackWrapper,
+                    opaquePointer
+                )
+            }
+        }
+    }
+
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure will use the Kafka handle pointer.

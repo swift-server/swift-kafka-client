@@ -223,17 +223,6 @@ public final class KafkaConsumer {
     /// - Throws: A ``KafkaError`` if committing failed.
     /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            do {
-                try self._commitSync(message) // Blocks until commiting the offset is done
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
-    }
-
-    private func _commitSync(_ message: KafkaConsumerMessage) throws {
         let action = self.stateMachine.withLockedValue { $0.commitSync() }
         switch action {
         case .throwClosedError:
@@ -243,29 +232,7 @@ public final class KafkaConsumer {
                 throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
             }
 
-            // The offset committed is always the offset of the next requested message.
-            // Thus, we increase the offset of the current message by one before committing it.
-            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-            let changesList = RDKafkaTopicPartitionList()
-            changesList.setOffset(
-                topic: message.topic,
-                partition: message.partition,
-                offset: Int64(message.offset + 1)
-            )
-
-            let result = client.withKafkaHandlePointer { handle in
-                changesList.withListPointer { listPointer in
-                    rd_kafka_commit(
-                        handle,
-                        listPointer,
-                        0
-                    ) // Blocks until commiting the offset is done
-                    // -> Will be resolved by: https://github.com/swift-server/swift-kafka-gsoc/pull/68
-                }
-            }
-            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                throw KafkaError.rdKafkaError(wrapping: result)
-            }
+            try await client.commitSync(message)
         }
     }
 
