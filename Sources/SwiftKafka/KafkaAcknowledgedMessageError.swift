@@ -62,3 +62,11 @@ public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
         )
     }
 }
+
+// MARK: - KafkaAcknowledgedMessageError + Hashable
+
+extension KafkaAcknowledgedMessageError: Hashable {}
+
+// MARK: - KafkaAcknowledgedMessageError + Equatable
+
+extension KafkaAcknowledgedMessageError: Equatable {}

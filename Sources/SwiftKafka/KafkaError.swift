@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-public struct KafkaError: Error, Hashable, CustomStringConvertible {
+public struct KafkaError: Error, CustomStringConvertible {
     private var backing: Backing
 
     /// Represents the kind of error that was encountered.
@@ -192,6 +192,8 @@ extension KafkaError {
     }
 }
 
+// MARK: - KafkaError + Backing
+
 extension KafkaError {
     final class Backing: Hashable {
         var code: KafkaError.ErrorCode
@@ -228,3 +230,11 @@ extension KafkaError {
         }
     }
 }
+
+// MARK: - KafkaError + Hashable
+
+extension KafkaError: Hashable {}
+
+// MARK: - KafkaError + Equatable
+
+extension KafkaError: Equatable {}
