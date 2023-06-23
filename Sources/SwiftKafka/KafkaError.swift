@@ -14,6 +14,9 @@
 
 import Crdkafka
 
+/// An error that can occur on `Kafka` operations
+///
+/// - Note: `Hashable` conformance only considers the ``KafkaError/code``.
 public struct KafkaError: Error, CustomStringConvertible {
     private var backing: Backing
 
@@ -233,8 +236,12 @@ extension KafkaError {
 
 // MARK: - KafkaError + Hashable
 
-extension KafkaError: Hashable {}
+extension KafkaError: Hashable {
+    public static func == (lhs: KafkaError, rhs: KafkaError) -> Bool {
+        return lhs.backing == rhs.backing
+    }
 
-// MARK: - KafkaError + Equatable
-
-extension KafkaError: Equatable {}
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(backing)
+    }
+}

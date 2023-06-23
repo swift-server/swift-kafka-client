@@ -15,6 +15,9 @@
 import Crdkafka
 
 /// Error caused by the Kafka cluster when trying to process a message produced by ``KafkaProducer``.
+///
+/// - Note: `Hashable` conformance only considers the underlying ``KafkaAcknowledgedMessageError/error``'s
+/// ``KafkaError/code``.
 public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
     /// Identifier of the message that caused the error.
     public var messageID: UInt
@@ -65,8 +68,12 @@ public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
 
 // MARK: - KafkaAcknowledgedMessageError + Hashable
 
-extension KafkaAcknowledgedMessageError: Hashable {}
+extension KafkaAcknowledgedMessageError: Hashable {
+    public static func == (lhs: KafkaAcknowledgedMessageError, rhs: KafkaAcknowledgedMessageError) -> Bool {
+        return lhs.error == rhs.error
+    }
 
-// MARK: - KafkaAcknowledgedMessageError + Equatable
-
-extension KafkaAcknowledgedMessageError: Equatable {}
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.error)
+    }
+}
