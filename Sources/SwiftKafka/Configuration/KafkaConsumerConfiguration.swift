@@ -15,7 +15,7 @@
 import Crdkafka
 import struct Foundation.UUID
 
-public struct KafkaConsumerConfiguration: Hashable, Equatable {
+public struct KafkaConsumerConfiguration: Hashable {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The backpressure strategy to be used for message consumption.
@@ -474,8 +474,8 @@ public struct KafkaConsumerConfiguration: Hashable, Equatable {
 
 extension KafkaSharedConfiguration {
     /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
-    public struct BackPressureStrategy: Hashable, Equatable {
-        enum _BackPressureStrategy: Hashable, Equatable {
+    public struct BackPressureStrategy: Hashable {
+        enum _BackPressureStrategy: Hashable {
             case watermark(low: Int, high: Int)
         }
 
@@ -498,8 +498,8 @@ extension KafkaSharedConfiguration {
     }
 
     /// A struct representing the different Kafka message consumption strategies.
-    public struct ConsumptionStrategy: Hashable, Equatable {
-        enum _ConsumptionStrategy: Hashable, Equatable {
+    public struct ConsumptionStrategy: Hashable {
+        enum _ConsumptionStrategy: Hashable {
             case partition(topic: String, partition: KafkaPartition, offset: Int)
             case group(groupID: String, topics: [String])
         }
@@ -535,7 +535,7 @@ extension KafkaSharedConfiguration {
     }
 
     /// Available actions to take when there is no initial offset in offset store / offset is out of range.
-    public struct AutoOffsetReset: Hashable, Equatable, CustomStringConvertible {
+    public struct AutoOffsetReset: Hashable, CustomStringConvertible {
         public let description: String
 
         /// Automatically reset the offset to the smallest offset.

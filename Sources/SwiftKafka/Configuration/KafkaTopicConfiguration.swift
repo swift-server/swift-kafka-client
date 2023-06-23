@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 /// Used to configure new topics created by the ``KafkaProducer``.
-public struct KafkaTopicConfiguration: Hashable, Equatable {
+public struct KafkaTopicConfiguration: Hashable {
     var dictionary: [String: String] = [:]
 
     /// This field indicates the number of acknowledgements the leader broker must receive from ISR brokers before responding to the request: 0=Broker does not send any response/ack to client, -1 or all=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
@@ -89,7 +89,7 @@ public struct KafkaTopicConfiguration: Hashable, Equatable {
 
 extension KafkaSharedConfiguration {
     /// Partitioner. Computes the partition that a message is stored in.
-    public struct Partitioner: Hashable, Equatable, CustomStringConvertible {
+    public struct Partitioner: Hashable, CustomStringConvertible {
         public let description: String
 
         /// Random distribution.
@@ -109,7 +109,7 @@ extension KafkaSharedConfiguration {
     }
 
     /// Process to compress and decompress data.
-    public struct CompressionCodec: Hashable, Equatable, CustomStringConvertible {
+    public struct CompressionCodec: Hashable, CustomStringConvertible {
         public let description: String
 
         /// No compression.

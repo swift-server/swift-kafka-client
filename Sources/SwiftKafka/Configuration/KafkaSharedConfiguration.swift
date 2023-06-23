@@ -15,7 +15,7 @@
 /// Collection of `enum` types used in the configuration structs this library provides.
 public enum KafkaSharedConfiguration {
     /// Available debug contexts to enable.
-    public struct DebugOption: Hashable, Equatable, CustomStringConvertible {
+    public struct DebugOption: Hashable, CustomStringConvertible {
         public let description: String
 
         public static let generic = DebugOption(description: "generic")
@@ -38,7 +38,7 @@ public enum KafkaSharedConfiguration {
     }
 
     /// Available IP address families.
-    public struct IPAddressFamily: Hashable, Equatable, CustomStringConvertible {
+    public struct IPAddressFamily: Hashable, CustomStringConvertible {
         public let description: String
 
         /// Use any IP address family.
@@ -50,7 +50,7 @@ public enum KafkaSharedConfiguration {
     }
 
     /// Protocol used to communicate with brokers.
-    public struct SecurityProtocol: Hashable, Equatable, CustomStringConvertible {
+    public struct SecurityProtocol: Hashable, CustomStringConvertible {
         public let description: String
 
         /// Send messages as plaintext (no security protocol used).
@@ -64,7 +64,7 @@ public enum KafkaSharedConfiguration {
     }
 
     /// Available SASL mechanisms that can be used for authentication.
-    public struct SASLMechanism: Hashable, Equatable, CustomStringConvertible {
+    public struct SASLMechanism: Hashable, CustomStringConvertible {
         public let description: String
 
         /// Use the GSSAPI mechanism.

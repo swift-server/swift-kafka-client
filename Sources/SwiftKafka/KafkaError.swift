@@ -242,6 +242,6 @@ extension KafkaError: Hashable {
     }
 
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(backing)
+        hasher.combine(self.backing)
     }
 }
