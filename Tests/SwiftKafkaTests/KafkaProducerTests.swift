@@ -150,7 +150,7 @@ final class KafkaProducerTests: XCTestCase {
                     value: "Hello, London!"
                 )
 
-                var messageIDs = Set<UInt>()
+                var messageIDs = Set<KafkaProducerMessageID>()
 
                 messageIDs.insert(try await producer.sendAsync(message1))
                 messageIDs.insert(try await producer.sendAsync(message2))
@@ -171,7 +171,7 @@ final class KafkaProducerTests: XCTestCase {
                 }
 
                 XCTAssertEqual(2, acknowledgedMessages.count)
-                XCTAssertEqual(acknowledgedMessages.map(\.id).sorted(), messageIDs.sorted())
+                XCTAssertEqual(Set(acknowledgedMessages.map(\.id)), messageIDs)
                 XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
                 XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
                 XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message1.key }))

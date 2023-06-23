@@ -17,11 +17,11 @@ import Crdkafka
 /// Error caused by the Kafka cluster when trying to process a message produced by ``KafkaProducer``.
 public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
     /// Identifier of the message that caused the error.
-    public var messageID: UInt
+    public var messageID: KafkaProducerMessageID
     /// The underlying ``KafkaError``.
     public let error: KafkaError
 
-    init(messageID: UInt, error: KafkaError) {
+    init(messageID: KafkaProducerMessageID, error: KafkaError) {
         self.messageID = messageID
         self.error = error
     }
@@ -31,7 +31,7 @@ public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
     }
 
     static func fromRDKafkaError(
-        messageID: UInt,
+        messageID: KafkaProducerMessageID,
         error: rd_kafka_resp_err_t,
         file: String = #fileID,
         line: UInt = #line
@@ -47,7 +47,7 @@ public struct KafkaAcknowledgedMessageError: Error, CustomStringConvertible {
     }
 
     static func fromMessage(
-        messageID: UInt,
+        messageID: KafkaProducerMessageID,
         message: String,
         file: String = #fileID,
         line: UInt = #line
