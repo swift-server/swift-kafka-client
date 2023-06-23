@@ -51,7 +51,7 @@ final class KafkaProducerTests: XCTestCase {
         self.config = nil
     }
 
-    func testSendAsync() async throws {
+    func testSend() async throws {
         let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
@@ -70,7 +70,7 @@ final class KafkaProducerTests: XCTestCase {
                     value: "Hello, World!"
                 )
 
-                let messageID = try await producer.sendAsync(message)
+                let messageID = try await producer.send(message)
 
                 for await messageResult in acks {
                     guard case .success(let acknowledgedMessage) = messageResult else {
@@ -90,7 +90,7 @@ final class KafkaProducerTests: XCTestCase {
         }
     }
 
-    func testSendAsyncEmptyMessage() async throws {
+    func testSendEmptyMessage() async throws {
         let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         await withThrowingTaskGroup(of: Void.self) { group in
@@ -108,7 +108,7 @@ final class KafkaProducerTests: XCTestCase {
                     value: ByteBuffer()
                 )
 
-                let messageID = try await producer.sendAsync(message)
+                let messageID = try await producer.send(message)
 
                 for await messageResult in acks {
                     guard case .success(let acknowledgedMessage) = messageResult else {
@@ -128,7 +128,7 @@ final class KafkaProducerTests: XCTestCase {
         }
     }
 
-    func testSendAsyncTwoTopics() async throws {
+    func testSendTwoTopics() async throws {
         let (producer, acks) = try await KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -152,8 +152,8 @@ final class KafkaProducerTests: XCTestCase {
 
                 var messageIDs = Set<KafkaProducerMessageID>()
 
-                messageIDs.insert(try await producer.sendAsync(message1))
-                messageIDs.insert(try await producer.sendAsync(message2))
+                messageIDs.insert(try await producer.send(message1))
+                messageIDs.insert(try await producer.send(message2))
 
                 var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
@@ -203,7 +203,7 @@ final class KafkaProducerTests: XCTestCase {
                 )
 
                 do {
-                    try await producer.sendAsync(message)
+                    try await producer.send(message)
                     XCTFail("Method should have thrown error")
                 } catch {}
 
