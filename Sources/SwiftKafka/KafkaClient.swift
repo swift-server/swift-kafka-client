@@ -15,8 +15,6 @@
 import Crdkafka
 import Logging
 
-// TODO: move to RD namespace + rename?
-
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
 final class KafkaClient {
@@ -98,23 +96,25 @@ final class KafkaClient {
         return message
     }
 
-    // TODO: subscribed topics pointer live inside of client?
-
     /// Subscribe to topic set using balanced consumer groups.
     /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
-    func subscribe(subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws {
-        let result = rd_kafka_subscribe(self.kafkaHandle, subscribedTopicsPointer)
-        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: result)
+    func subscribe(subscribedTopicsPointer: RDKafkaTopicPartitionList) throws {
+        try subscribedTopicsPointer.withListPointer { pointer in
+            let result = rd_kafka_subscribe(self.kafkaHandle, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
         }
     }
 
     /// Atomic assignment of partitions to consume.
     /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
-    func assign(subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws {
-        let result = rd_kafka_assign(self.kafkaHandle, subscribedTopicsPointer)
-        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: result)
+    func assign(subscribedTopicsPointer: RDKafkaTopicPartitionList) throws {
+        try subscribedTopicsPointer.withListPointer { pointer in
+            let result = rd_kafka_assign(self.kafkaHandle, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
         }
     }
 

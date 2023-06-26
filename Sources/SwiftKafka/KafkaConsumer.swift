@@ -43,7 +43,7 @@ extension ShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
         // Duplicate of _shutdownGracefully
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
-        case .shutdownGracefullyAndFinishSource(let client, let source, let subscribedTopicsPointer):
+        case .shutdownGracefullyAndFinishSource(let client, let source):
             source.finish()
 
             do {
@@ -57,8 +57,6 @@ extension ShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
                     }
                 }
             }
-
-            rd_kafka_topic_partition_list_destroy(subscribedTopicsPointer)
         case .none:
             return
         }
@@ -125,10 +123,6 @@ public final class KafkaConsumer {
 
         let client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: logger)
 
-        guard let subscribedTopicsPointer = rd_kafka_topic_partition_list_new(1) else {
-            throw KafkaError.client(reason: "Failed to allocate Topic+Partition list.")
-        }
-
         self.stateMachine = NIOLockedValueBox(StateMachine(logger: self.logger))
 
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
@@ -145,7 +139,7 @@ public final class KafkaConsumer {
             $0.initialize(
                 client: client,
                 source: sourceAndSequence.source,
-                subscribedTopicsPointer: subscribedTopicsPointer
+                subscribedTopicsPointer: RDKafkaTopicPartitionList()
             )
         }
 
@@ -174,10 +168,9 @@ public final class KafkaConsumer {
         switch action {
         case .setUpConnection(let client, let subscribedTopicsPointer):
             for topic in topics {
-                rd_kafka_topic_partition_list_add(
-                    subscribedTopicsPointer,
-                    topic,
-                    KafkaPartition.unassigned.rawValue
+                subscribedTopicsPointer.add(
+                    topic: topic,
+                    partition: KafkaPartition.unassigned
                 )
             }
             try client.subscribe(subscribedTopicsPointer: subscribedTopicsPointer)
@@ -197,14 +190,7 @@ public final class KafkaConsumer {
         let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
         switch action {
         case .setUpConnection(let client, let subscribedTopicsPointer):
-            guard let partitionPointer = rd_kafka_topic_partition_list_add(
-                subscribedTopicsPointer,
-                topic,
-                partition.rawValue
-            ) else {
-                fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
-            }
-            partitionPointer.pointee.offset = Int64(offset)
+            subscribedTopicsPointer.setOffset(topic: topic, partition: partition, offset: Int64(offset))
             try client.assign(subscribedTopicsPointer: subscribedTopicsPointer)
         }
     }
@@ -265,27 +251,25 @@ public final class KafkaConsumer {
                 throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
             }
 
-            let changesList = rd_kafka_topic_partition_list_new(1)
-            defer { rd_kafka_topic_partition_list_destroy(changesList) }
-            guard let partitionPointer = rd_kafka_topic_partition_list_add(
-                changesList,
-                message.topic,
-                message.partition.rawValue
-            ) else {
-                fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
-            }
-
             // The offset committed is always the offset of the next requested message.
             // Thus, we increase the offset of the current message by one before committing it.
             // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-            partitionPointer.pointee.offset = Int64(message.offset + 1)
+            let changesList = RDKafkaTopicPartitionList()
+            changesList.setOffset(
+                topic: message.topic,
+                partition: message.partition,
+                offset: Int64(message.offset + 1)
+            )
+
             let result = client.withKafkaHandlePointer { handle in
-                rd_kafka_commit(
-                    handle,
-                    changesList,
-                    0
-                ) // Blocks until commiting the offset is done
-                // -> Will be resolved by: https://github.com/swift-server/swift-kafka-gsoc/pull/68
+                changesList.withListPointer { listPointer in
+                    rd_kafka_commit(
+                        handle,
+                        listPointer,
+                        0
+                    ) // Blocks until commiting the offset is done
+                    // -> Will be resolved by: https://github.com/swift-server/swift-kafka-gsoc/pull/68
+                }
             }
             guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
                 throw KafkaError.rdKafkaError(wrapping: result)
@@ -300,11 +284,10 @@ public final class KafkaConsumer {
     private func shutdownGracefully() {
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
-        case .shutdownGracefullyAndFinishSource(let client, let source, let subscribedTopicsPointer):
+        case .shutdownGracefullyAndFinishSource(let client, let source):
             self._shutdownGracefullyAndFinishSource(
                 client: client,
                 source: source,
-                subscribedTopicsPointer: subscribedTopicsPointer,
                 logger: self.logger
             )
         case .none:
@@ -315,7 +298,6 @@ public final class KafkaConsumer {
     private func _shutdownGracefullyAndFinishSource(
         client: KafkaClient,
         source: Producer.Source,
-        subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>,
         logger: Logger
     ) {
         source.finish()
@@ -329,8 +311,6 @@ public final class KafkaConsumer {
                 logger.error("Caught unknown error: \(error)")
             }
         }
-
-        rd_kafka_topic_partition_list_destroy(subscribedTopicsPointer)
     }
 }
 
@@ -356,7 +336,7 @@ extension KafkaConsumer {
             case initializing(
                 client: KafkaClient,
                 source: Producer.Source,
-                subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
+                subscribedTopicsPointer: RDKafkaTopicPartitionList
             )
             /// The ``KafkaConsumer`` is consuming messages.
             ///
@@ -366,7 +346,7 @@ extension KafkaConsumer {
             case consuming(
                 client: KafkaClient,
                 source: Producer.Source,
-                subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
+                subscribedTopicsPointer: RDKafkaTopicPartitionList
             )
             /// The ``KafkaConsumer`` has been closed.
             case finished
@@ -380,7 +360,7 @@ extension KafkaConsumer {
         mutating func initialize(
             client: KafkaClient,
             source: Producer.Source,
-            subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
+            subscribedTopicsPointer: RDKafkaTopicPartitionList
         ) {
             guard case .uninitialized = self.state else {
                 fatalError("\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)")
@@ -428,7 +408,7 @@ extension KafkaConsumer {
             /// Set up the connection through ``subscribe()`` or ``assign()``.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
-            case setUpConnection(client: KafkaClient, subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>)
+            case setUpConnection(client: KafkaClient, subscribedTopicsPointer: RDKafkaTopicPartitionList)
         }
 
         /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
@@ -489,11 +469,9 @@ extension KafkaConsumer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
             case shutdownGracefullyAndFinishSource(
                 client: KafkaClient,
-                source: Producer.Source,
-                subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
+                source: Producer.Source
             )
         }
 
@@ -507,12 +485,11 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("subscribe() / assign() should have been invoked before \(#function)")
-            case .consuming(let client, let source, let subscribedTopicsPointer):
+            case .consuming(let client, let source, _):
                 self.state = .finished
                 return .shutdownGracefullyAndFinishSource(
                     client: client,
-                    source: source,
-                    subscribedTopicsPointer: subscribedTopicsPointer
+                    source: source
                 )
             case .finished:
                 return nil
