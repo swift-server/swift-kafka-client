@@ -235,7 +235,7 @@ public final class KafkaConsumer {
             case .pollForAndYieldMessage(let pollInterval, let client, let source, let logger):
                 let messageResult: Result<KafkaConsumerMessage, KafkaError>
                 do {
-                    guard let message = try await client.consumerPoll(timeout: 0) else {
+                    guard let message = try client.consumerPoll() else {
                         break
                     }
                     messageResult = .success(message)
