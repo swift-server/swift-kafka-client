@@ -20,7 +20,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
     /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
     /// The same identifier is returned by ``KafkaProducer/sendAsync(_:)`` and can be used to correlate
     /// a sent message and an acknowledged message.
-    public var id: UInt
+    public var id: KafkaProducerMessageID
     /// The topic that the message was sent to.
     public var topic: String
     /// The partition that the message was sent to.
@@ -34,7 +34,7 @@ public struct KafkaAcknowledgedMessage: Hashable {
 
     /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
-    init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: UInt) throws {
+    init(messagePointer: UnsafePointer<rd_kafka_message_t>, id: KafkaProducerMessageID) throws {
         self.id = id
 
         let rdKafkaMessage = messagePointer.pointee

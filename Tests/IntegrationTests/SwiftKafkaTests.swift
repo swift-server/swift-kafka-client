@@ -270,7 +270,7 @@ final class SwiftKafkaTests: XCTestCase {
         acknowledgements: KafkaMessageAcknowledgements,
         messages: [KafkaProducerMessage]
     ) async throws {
-        var messageIDs = Set<UInt>()
+        var messageIDs = Set<KafkaProducerMessageID>()
 
         for message in messages {
             messageIDs.insert(try await producer.sendAsync(message))
@@ -292,7 +292,7 @@ final class SwiftKafkaTests: XCTestCase {
         }
 
         XCTAssertEqual(messages.count, acknowledgedMessages.count)
-        XCTAssertEqual(acknowledgedMessages.map(\.id).sorted(), messageIDs.sorted())
+        XCTAssertEqual(Set(acknowledgedMessages.map(\.id)), messageIDs)
 
         for message in messages {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))

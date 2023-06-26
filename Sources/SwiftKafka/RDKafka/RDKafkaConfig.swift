@@ -115,7 +115,7 @@ struct RDKafkaConfig {
             return nil
         }
 
-        let messageID = UInt(bitPattern: messagePointer.pointee._private)
+        let messageID = KafkaProducerMessageID(rawValue: UInt(bitPattern: messagePointer.pointee._private))
 
         let messageResult: KafkaAcknowledgementResult
         do {
