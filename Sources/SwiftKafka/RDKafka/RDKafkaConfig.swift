@@ -68,13 +68,12 @@ struct RDKafkaConfig {
     /// Registers passed closures as callbacks and sets the application's opaque pointer that will be passed to callbacks
     /// - Parameter type: Kafka client type: `Consumer` or `Producer`
     /// - Parameter configPointer: An `OpaquePointer` pointing to the `rd_kafka_conf_t` object in memory.
-    /// - Parameter deliveryReport: A closure that is invoked upon message acknowledgement.
+    /// - Parameter deliveryReportCallback: A closure that is invoked upon message acknowledgement.
     /// - Parameter logger: Logger instance
     /// - Returns: A ``CapturedClosures`` object that must me retained by the caller as long as it exists.
     static func setCallbackClosures(
-        type: RDKafka.ClientType,
         configPointer: OpaquePointer,
-        deliveryReport: CapturedClosures.DeliveryReportClosure? = nil,
+        deliveryReportCallback: CapturedClosures.DeliveryReportClosure? = nil,
         logger: Logger
     ) -> CapturedClosures {
         let closures = CapturedClosures()
@@ -87,8 +86,8 @@ struct RDKafkaConfig {
         )
 
         // Set delivery report callback
-        if let deliveryReport, type == .producer {
-            Self.setDeliveryReportCallback(configPointer: configPointer, capturedClosures: closures, deliveryReport)
+        if let deliveryReportCallback {
+            Self.setDeliveryReportCallback(configPointer: configPointer, capturedClosures: closures, deliveryReportCallback)
         }
         // Set logging callback
         Self.setLoggingCallback(configPointer: configPointer, capturedClosures: closures, logger: logger)
@@ -103,9 +102,9 @@ struct RDKafkaConfig {
     private static func setDeliveryReportCallback(
         configPointer: OpaquePointer,
         capturedClosures: CapturedClosures,
-        _ deliveryReport: @escaping RDKafkaConfig.CapturedClosures.DeliveryReportClosure
+        _ deliveryReportCallback: @escaping RDKafkaConfig.CapturedClosures.DeliveryReportClosure
     ) {
-        capturedClosures.deliveryReportClosure = deliveryReport
+        capturedClosures.deliveryReportClosure = deliveryReportCallback
 
         // Create a C closure that calls the captured closure
         let callbackWrapper: (
@@ -116,10 +115,11 @@ struct RDKafkaConfig {
             }
             let closures = Unmanaged<CapturedClosures>.fromOpaque(opaquePointer).takeUnretainedValue()
 
-            if let actualCallback = closures.deliveryReportClosure {
-                let messageResult = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer)
-                actualCallback(messageResult)
+            guard let actualCallback = closures.deliveryReportClosure else {
+                fatalError("Delivery report callback is set, but user closure is not defined")
             }
+            let messageResult = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer)
+            actualCallback(messageResult)
         }
 
         rd_kafka_conf_set_dr_msg_cb(

@@ -105,7 +105,7 @@ public actor KafkaProducer {
             configDictionary: config.dictionary,
             // Having no callback will discard any incoming acknowledgement messages
             // Ref: rdkafka_broker.c:rd_kafka_dr_msgq
-            deliveryReport: nil,
+            deliveryReportCallback: nil,
             logger: logger
         )
 
@@ -143,7 +143,7 @@ public actor KafkaProducer {
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            deliveryReport: { [logger, streamContinuation] messageResult in
+            deliveryReportCallback: { [logger, streamContinuation] messageResult in
                 guard let messageResult else {
                     logger.error("Could not resolve acknowledged message")
                     return
