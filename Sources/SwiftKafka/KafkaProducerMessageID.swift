@@ -34,3 +34,11 @@ extension KafkaProducerMessageID: CustomStringConvertible {
 // MARK: - KafkaProducerMessageID + Hashable
 
 extension KafkaProducerMessageID: Hashable {}
+
+// MARK: - KafkaProducerMessageID + Comparable
+
+extension KafkaProducerMessageID: Comparable {
+    public static func < (lhs: KafkaProducerMessageID, rhs: KafkaProducerMessageID) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
