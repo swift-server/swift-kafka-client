@@ -14,6 +14,7 @@
 
 import Crdkafka
 import Dispatch
+import struct Foundation.UUID
 import Logging
 import NIOCore
 
@@ -86,13 +87,30 @@ public final class KafkaConsumer {
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     /// - Parameter config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
+    /// - Parameter consumptionStrategy: The strategy used for consuming messages.
+    /// See ``KafkaConsumer/ConsumptionStrategy`` for more information.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public init(
         config: KafkaConsumerConfiguration,
+        consumptionStrategy: ConsumptionStrategy,
         logger: Logger
     ) throws {
         self.config = config
+
+        // We do not expose the group.id configuraiton option to the user
+        // but rather set it ourselves as part of our much safer consumptionStrategy option.
+        switch consumptionStrategy._internal {
+        case .partition:
+            // Although an assignment is not related to a consumer group,
+            // librdkafka requires us to set a `group.id`.
+            // This is a known issue:
+            // https://github.com/edenhill/librdkafka/issues/3261
+            self.config.dictionary["group.id"] = UUID().uuidString
+        case .group(groupID: let groupID, topics: _):
+            self.config.dictionary["group.id"] = groupID
+        }
+
         self.logger = logger
         self.client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: self.logger)
 
@@ -143,7 +161,7 @@ public final class KafkaConsumer {
             wrappedSequence: messagesSourceAndSequence.sequence
         )
 
-        switch config.consumptionStrategy._internal {
+        switch consumptionStrategy._internal {
         case .partition(topic: let topic, partition: let partition, offset: let offset):
             try self.assign(topic: topic, partition: partition, offset: offset)
         case .group(groupID: _, topics: let topics):
@@ -356,6 +374,47 @@ public final class KafkaConsumer {
                 // Note: we do not support cancellation yet
                 // https://github.com/swift-server/swift-kafka-gsoc/issues/33
             }
+        }
+    }
+}
+
+// MARK: KafkaConsumer + ConsumptionStrategy
+
+extension KafkaConsumer {
+    /// A struct representing the different Kafka message consumption strategies.
+    public struct ConsumptionStrategy: Hashable {
+        enum _ConsumptionStrategy: Hashable {
+            case partition(topic: String, partition: KafkaPartition, offset: Int)
+            case group(groupID: String, topics: [String])
+        }
+
+        let _internal: _ConsumptionStrategy
+
+        private init(consumptionStrategy: _ConsumptionStrategy) {
+            self._internal = consumptionStrategy
+        }
+
+        /// A consumption strategy based on partition assignment.
+        /// The consumer reads from a specific partition of a topic at a given offset.
+        ///
+        /// - Parameter topic: The name of the Kafka topic.
+        /// - Parameter partition: The partition of the topic to consume from.
+        /// - Parameter offset: The offset to start consuming from.
+        public static func partition(
+            topic: String,
+            partition: KafkaPartition,
+            offset: Int = Int(RD_KAFKA_OFFSET_END)
+        ) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
+        }
+
+        /// A consumption strategy based on consumer group membership.
+        /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
+        ///
+        /// - Parameter groupID: The ID of the consumer group to join.
+        /// - Parameter topics: An array of topic names to consume from.
+        public static func group(groupID: String, topics: [String]) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
         }
     }
 }

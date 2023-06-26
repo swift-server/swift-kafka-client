@@ -46,7 +46,6 @@ final class SwiftKafkaTests: XCTestCase {
         )
 
         let basicConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(groupID: "no-group", topics: []),
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )
@@ -58,7 +57,6 @@ final class SwiftKafkaTests: XCTestCase {
 
     override func tearDownWithError() throws {
         let basicConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(groupID: "no-group", topics: []),
             bootstrapServers: [self.bootstrapServer],
             brokerAddressFamily: .v4
         )
@@ -95,7 +93,6 @@ final class SwiftKafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 let consumerConfig = KafkaConsumerConfiguration(
-                    consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
                     autoOffsetReset: .beginning, // Always read topics from beginning
                     bootstrapServers: [self.bootstrapServer],
                     brokerAddressFamily: .v4
@@ -103,6 +100,7 @@ final class SwiftKafkaTests: XCTestCase {
 
                 let consumer = try KafkaConsumer(
                     config: consumerConfig,
+                    consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
                     logger: .kafkaTest
                 )
 
@@ -152,11 +150,6 @@ final class SwiftKafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 let consumerConfiguration = KafkaConsumerConfiguration(
-                    consumptionStrategy: .partition(
-                        topic: self.uniqueTestTopic,
-                        partition: KafkaPartition(rawValue: 0),
-                        offset: 0
-                    ),
                     autoOffsetReset: .beginning, // Always read topics from beginning
                     bootstrapServers: [self.bootstrapServer],
                     brokerAddressFamily: .v4
@@ -164,6 +157,11 @@ final class SwiftKafkaTests: XCTestCase {
 
                 let consumer = try KafkaConsumer(
                     config: consumerConfiguration,
+                    consumptionStrategy: .partition(
+                        topic: self.uniqueTestTopic,
+                        partition: KafkaPartition(rawValue: 0),
+                        offset: 0
+                    ),
                     logger: .kafkaTest
                 )
 
@@ -213,7 +211,6 @@ final class SwiftKafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 let consumerConfig = KafkaConsumerConfiguration(
-                    consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
                     enableAutoCommit: false,
                     autoOffsetReset: .beginning, // Always read topics from beginning
                     bootstrapServers: [self.bootstrapServer],
@@ -222,6 +219,7 @@ final class SwiftKafkaTests: XCTestCase {
 
                 let consumer = try KafkaConsumer(
                     config: consumerConfig,
+                    consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
                     logger: .kafkaTest
                 )
 

@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import struct Foundation.UUID
 
 public struct KafkaConsumerConfiguration: Hashable, Equatable {
     // MARK: - SwiftKafka-specific Config properties
@@ -23,34 +22,6 @@ public struct KafkaConsumerConfiguration: Hashable, Equatable {
         low: 10,
         high: 50
     )
-
-    // This backs the consumptionStrategy computed property.
-    private var _consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy
-
-    /// The strategy used for consuming messages.
-    /// See ``KafkaSharedConfiguration/ConsumptionStrategy`` for more information.
-    public var consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy {
-        get { self._consumptionStrategy }
-        set {
-            self._consumptionStrategy = newValue
-
-            // We do not expose the group.id option to the user
-            // but rather set it ourselves as part of our much safer
-            // consumptionStrategy option.
-            switch newValue._internal {
-            case .partition:
-                // Although an assignment is not related to a consumer group,
-                // librdkafka requires us to set a `group.id`.
-                // This is a known issue:
-                // https://github.com/edenhill/librdkafka/issues/3261
-                self.dictionary["group.id"] = UUID().uuidString
-            case .group(groupID: let groupID, topics: _):
-                self.dictionary["group.id"] = groupID
-            }
-        }
-    }
-
-    // MARK: - librdkafka Config properties
 
     var dictionary: [String: String] = [:]
 
@@ -335,7 +306,6 @@ public struct KafkaConsumerConfiguration: Hashable, Equatable {
     }
 
     public init(
-        consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy,
         backPressureStrategy: KafkaSharedConfiguration.BackPressureStrategy = .watermark(low: 10, high: 50),
         sessionTimeoutMs: UInt = 45000,
         heartbeatIntervalMs: UInt = 3000,
@@ -381,8 +351,6 @@ public struct KafkaConsumerConfiguration: Hashable, Equatable {
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
-        self._consumptionStrategy = consumptionStrategy
-        self.consumptionStrategy = consumptionStrategy // used to invoke set { } method
         self.backPressureStrategy = backPressureStrategy
 
         self.sessionTimeoutMs = sessionTimeoutMs
@@ -494,43 +462,6 @@ extension KafkaSharedConfiguration {
         /// - Parameter high: The upper threshold for the buffer size (high watermark).
         public static func watermark(low: Int, high: Int) -> BackPressureStrategy {
             return .init(backPressureStrategy: .watermark(low: low, high: high))
-        }
-    }
-
-    /// A struct representing the different Kafka message consumption strategies.
-    public struct ConsumptionStrategy: Hashable, Equatable {
-        enum _ConsumptionStrategy: Hashable, Equatable {
-            case partition(topic: String, partition: KafkaPartition, offset: Int)
-            case group(groupID: String, topics: [String])
-        }
-
-        let _internal: _ConsumptionStrategy
-
-        private init(consumptionStrategy: _ConsumptionStrategy) {
-            self._internal = consumptionStrategy
-        }
-
-        /// A consumption strategy based on partition assignment.
-        /// The consumer reads from a specific partition of a topic at a given offset.
-        ///
-        /// - Parameter topic: The name of the Kafka topic.
-        /// - Parameter partition: The partition of the topic to consume from.
-        /// - Parameter offset: The offset to start consuming from.
-        public static func partition(
-            topic: String,
-            partition: KafkaPartition,
-            offset: Int = Int(RD_KAFKA_OFFSET_END)
-        ) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
-        }
-
-        /// A consumption strategy based on consumer group membership.
-        /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
-        ///
-        /// - Parameter groupID: The ID of the consumer group to join.
-        /// - Parameter topics: An array of topic names to consume from.
-        public static func group(groupID: String, topics: [String]) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
         }
     }
 

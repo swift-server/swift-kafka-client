@@ -48,15 +48,15 @@ After initializing the `KafkaConsumer` with a topic-partition pair to read from,
 
 ```swift
 let config = KafkaConsumerConfiguration(
-    consumptionStrategy: .partition(
-        topic: "topic-name",
-        partition: KafkaPartition(rawValue: 0)
-    ),
     bootstrapServers: ["localhost:9092"]
 )
 
 let consumer = try KafkaConsumer(
     config: config,
+    consumptionStrategy: .partition(
+        topic: "topic-name",
+        partition: KafkaPartition(rawValue: 0)
+    ),
     logger: .kafkaTest // Your logger here
 )
 
@@ -76,12 +76,12 @@ SwiftKafka also allows users to subscribe to an array of topics as part of a con
 
 ```swift
 let config = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"]),
     bootstrapServers: ["localhost:9092"]
 )
 
 let consumer = try KafkaConsumer(
     config: config,
+    consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"]),
     logger: .kafkaTest // Your logger here
 )
 
@@ -101,13 +101,13 @@ By default, the `KafkaConsumer` automatically commits message offsets after rece
 
 ```swift
 let config = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"]),
     enableAutoCommit: false,
     bootstrapServers: ["localhost:9092"]
 )
 
 let consumer = try KafkaConsumer(
     config: config,
+    consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"]),
     logger: .kafkaTest // Your logger here
 )
 
