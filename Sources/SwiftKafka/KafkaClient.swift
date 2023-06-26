@@ -15,6 +15,8 @@
 import Crdkafka
 import Logging
 
+// TODO: move to RD namespace + rename?
+
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
 final class KafkaClient {
@@ -56,6 +58,20 @@ final class KafkaClient {
         return rd_kafka_poll(self.kafkaHandle, timeout)
     }
 
+    /// Redirect the main ``KafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
+    /// queue (``KafkaClient/consumerPoll``).
+    ///
+    /// Events that would be triggered by ``KafkaClient/poll(timeout:)``
+    /// are now triggered by ``KafkaClient/consumerPoll``.
+    ///
+    /// - Warning: It is not allowed to call ``KafkaClient/poll(timeout:)`` after ``KafkaClient/pollSetConsumer``.
+    func pollSetConsumer() throws {
+        let result = rd_kafka_poll_set_consumer(self.kafkaHandle)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
+    }
+
     /// Request a new message from the Kafka cluster.
     ///
     /// - Important: This method should only be invoked from ``KafkaConsumer``.
@@ -80,6 +96,34 @@ final class KafkaClient {
 
         let message = try KafkaConsumerMessage(messagePointer: messagePointer)
         return message
+    }
+
+    // TODO: subscribed topics pointer live inside of client?
+
+    /// Subscribe to topic set using balanced consumer groups.
+    /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
+    func subscribe(subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws {
+        let result = rd_kafka_subscribe(self.kafkaHandle, subscribedTopicsPointer)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
+    }
+
+    /// Atomic assignment of partitions to consume.
+    /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
+    func assign(subscribedTopicsPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws {
+        let result = rd_kafka_assign(self.kafkaHandle, subscribedTopicsPointer)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
+    }
+
+    /// Close the consumer.
+    func consumerClose() throws {
+        let result = rd_kafka_consumer_close(self.kafkaHandle)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
     }
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
