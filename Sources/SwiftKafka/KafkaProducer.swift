@@ -374,7 +374,7 @@ extension KafkaProducer {
                 logger: Logger
             )
             /// The ``KafkaProducer`` has been shut down and cannot be used anymore.
-            case shutDown
+            case finished
         }
 
         /// The current state of the StateMachine.
@@ -417,7 +417,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, _, _, _):
                 return .poll(client: client)
-            case .shutDown:
+            case .finished:
                 return .killPollLoop
             }
         }
@@ -444,7 +444,7 @@ extension KafkaProducer {
                 } else {
                     return .createTopicHandle(client: client, topic: topic)
                 }
-            case .shutDown:
+            case .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to create topic handle on closed connection")
             }
         }
@@ -467,7 +467,7 @@ extension KafkaProducer {
                     topicHandles: topicHandles,
                     logger: logger
                 )
-            case .shutDown:
+            case .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to create topic handle on closed connection")
             }
         }
@@ -503,7 +503,7 @@ extension KafkaProducer {
                     client: client,
                     newMessageID: newMessageID
                 )
-            case .shutDown:
+            case .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
             }
         }
@@ -531,13 +531,13 @@ extension KafkaProducer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, let topicHandles, _):
-                self.state = .shutDown
+                self.state = .finished
                 return .shutdownGracefullyAndFinishSource(
                     client: client,
                     source: source,
                     topicHandles: topicHandles
                 )
-            case .shutDown:
+            case .finished:
                 return nil
             }
         }
