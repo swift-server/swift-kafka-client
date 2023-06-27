@@ -67,7 +67,7 @@ extension ShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct KafkaConsumerMessages: AsyncSequence {
-    public typealias Element = Result<KafkaConsumerMessage, KafkaError>
+    public typealias Element = KafkaConsumerMessage
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NoBackPressure, ShutdownOnTerminate>
     let wrappedSequence: WrappedSequence
 
@@ -90,12 +90,10 @@ public struct KafkaConsumerMessages: AsyncSequence {
 /// Receive messages from the Kafka cluster.
 public final class KafkaConsumer {
     typealias Producer = NIOAsyncSequenceProducer<
-        Result<KafkaConsumerMessage, KafkaError>,
+        KafkaConsumerMessage,
         NoBackPressure,
         ShutdownOnTerminate
     >
-    /// Time between two consecutive polls.
-    private var pollInterval: Duration
     /// The configuration object of the consumer client.
     private var config: KafkaConsumerConfiguration
     /// A logger.
@@ -113,11 +111,9 @@ public final class KafkaConsumer {
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public init(
-        pollInterval: Duration = .milliseconds(100), // TODO(felix): poll intervals through config in separate PR
         config: KafkaConsumerConfiguration,
         logger: Logger
     ) throws {
-        self.pollInterval = pollInterval
         self.config = config
         self.logger = logger
 
@@ -126,7 +122,7 @@ public final class KafkaConsumer {
         self.stateMachine = NIOLockedValueBox(StateMachine(logger: self.logger))
 
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: Result<KafkaConsumerMessage, KafkaError>.self,
+            elementType: KafkaConsumerMessage.self,
             backPressureStrategy: NoBackPressure(),
             delegate: ShutdownOnTerminate(stateMachine: self.stateMachine)
         )
@@ -200,26 +196,21 @@ public final class KafkaConsumer {
     ///
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run() async throws {
-        // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source):
-                let messageResult: Result<KafkaConsumerMessage, KafkaError>
                 do {
                     guard let message = try client.consumerPoll() else {
                         break
                     }
-                    messageResult = .success(message)
-                } catch let kafkaError as KafkaError {
-                    messageResult = .failure(kafkaError)
+                    // We do not support back pressure, we can ignore the yield result
+                    _ = source.yield(message)
                 } catch {
-                    self.logger.error("KafkaConsumer caught error: \(error)")
-                    break
+                    source.finish()
+                    throw error
                 }
-                // We support no back pressure, we can ignore the yield result
-                _ = source.yield(messageResult)
-                try await Task.sleep(for: self.pollInterval)
+                try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoop:
                 return
             }

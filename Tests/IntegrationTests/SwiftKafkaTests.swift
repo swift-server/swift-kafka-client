@@ -113,7 +113,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
                 for await messageResult in consumer.messages {
-                    guard case .success(let message) = messageResult else {
+                    guard case let message = messageResult else {
                         continue
                     }
                     consumedMessages.append(message)
@@ -179,7 +179,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
                 for await messageResult in consumer.messages {
-                    guard case .success(let message) = messageResult else {
+                    guard case let message = messageResult else {
                         continue
                     }
                     consumedMessages.append(message)
@@ -242,7 +242,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
                 for await messageResult in consumer.messages {
-                    guard case .success(let message) = messageResult else {
+                    guard case let message = messageResult else {
                         continue
                     }
                     consumedMessages.append(message)

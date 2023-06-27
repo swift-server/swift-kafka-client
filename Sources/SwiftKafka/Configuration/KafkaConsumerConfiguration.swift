@@ -18,6 +18,10 @@ import struct Foundation.UUID
 public struct KafkaConsumerConfiguration: Hashable {
     // MARK: - SwiftKafka-specific Config properties
 
+    /// The time between two consecutive polls.
+    /// Effectively controls the rate at which incoming events and messages are consumed.
+    public var pollInterval: Duration
+
     // This backs the consumptionStrategy computed property.
     private var _consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy
 
@@ -329,6 +333,7 @@ public struct KafkaConsumerConfiguration: Hashable {
     }
 
     public init(
+        pollInterval: Duration = .milliseconds(100),
         consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy,
         sessionTimeoutMs: UInt = 45000,
         heartbeatIntervalMs: UInt = 3000,
@@ -374,6 +379,7 @@ public struct KafkaConsumerConfiguration: Hashable {
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
+        self.pollInterval = pollInterval
         self._consumptionStrategy = consumptionStrategy
         self.consumptionStrategy = consumptionStrategy // used to invoke set { } method
 

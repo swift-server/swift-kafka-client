@@ -57,6 +57,8 @@ public actor KafkaProducer {
     /// Counter that is used to assign each message a unique ID.
     /// Every time a new message is sent to the Kafka cluster, the counter is increased by one.
     private var messageIDCounter: UInt = 0
+    /// The configuration object of the producer client.
+    private var config: KafkaProducerConfiguration
     /// The ``TopicConfiguration`` used for newly created topics.
     private let topicConfig: KafkaTopicConfiguration
     /// A logger.
@@ -69,16 +71,20 @@ public actor KafkaProducer {
 
     // Private initializer, use factory methods to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
+    ///
+    /// - Parameter client: The ``KafkaClient`` instance associated with the ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         client: KafkaClient,
+        config: KafkaProducerConfiguration,
         topicConfig: KafkaTopicConfiguration,
         logger: Logger
     ) async throws {
         self.client = client
+        self.config = config
         self.topicConfig = topicConfig
         self.topicHandles = [:]
         self.logger = logger
@@ -89,8 +95,8 @@ public actor KafkaProducer {
     ///
     /// This factory method creates a producer without message acknowledgements.
     ///
-    /// - Parameter configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter logger: A logger.
     /// - Returns: The newly created ``KafkaProducer``.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
@@ -110,6 +116,7 @@ public actor KafkaProducer {
 
         let producer = try await KafkaProducer(
             client: client,
+            config: config,
             topicConfig: topicConfig,
             logger: logger
         )
@@ -156,6 +163,7 @@ public actor KafkaProducer {
 
         let producer = try await KafkaProducer(
             client: client,
+            config: config,
             topicConfig: topicConfig,
             logger: logger
         )
@@ -203,13 +211,11 @@ public actor KafkaProducer {
 
     /// Start polling Kafka for acknowledged messages.
     ///
-    /// - Parameter pollInterval: The desired time interval between two consecutive polls.
     /// - Returns: An awaitable task representing the execution of the poll loop.
-    public func run(pollInterval: Duration = .milliseconds(100)) async throws {
-        // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
+    public func run() async throws {
         while self.state == .started {
             self.client.poll(timeout: 0)
-            try await Task.sleep(for: pollInterval)
+            try await Task.sleep(for: self.config.pollInterval)
         }
     }
 

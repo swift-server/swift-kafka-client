@@ -15,7 +15,7 @@
 import Crdkafka
 
 /// Swift wrapper type for `rd_kafka_topic_partition_list_t`.
-class RDKafkaTopicPartitionList {
+final class RDKafkaTopicPartitionList {
     private let _internal: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
 
     /// Create a new topic+partition list.

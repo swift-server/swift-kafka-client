@@ -13,6 +13,14 @@
 //===----------------------------------------------------------------------===//
 
 public struct KafkaProducerConfiguration: Hashable {
+    // MARK: - SwiftKafka-specific Config properties
+
+    /// The time between two consecutive polls.
+    /// Effectively controls the rate at which incoming events and acknowledgements are consumed.
+    public var pollInterval: Duration
+
+    // MARK: - librdkafka Config properties
+
     var dictionary: [String: String] = [:]
 
     // MARK: - Producer-specific Config Properties
@@ -296,6 +304,7 @@ public struct KafkaProducerConfiguration: Hashable {
     }
 
     public init(
+        pollInterval: Duration = .milliseconds(100),
         transactionalID: String = "",
         transactionalTimeoutMs: UInt = 60000,
         enableIdempotence: Bool = false,
@@ -340,6 +349,8 @@ public struct KafkaProducerConfiguration: Hashable {
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
+        self.pollInterval = pollInterval
+
         self.transactionalID = transactionalID
         self.transactionTimeoutMs = transactionalTimeoutMs
         self.enableIdempotence = enableIdempotence

@@ -69,13 +69,8 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await messageResult in consumer.messages {
-            switch messageResult {
-            case .success(let message):
-                // Do something with message
-            case .failure(let error):
-                // Handle error
-            }
+        for await message in consumer.messages {
+            // Do something with message
         }
     }
 }
@@ -105,13 +100,8 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await messageResult in consumer.messages {
-            switch messageResult {
-            case .success(let message):
-                // Do something with message
-            case .failure(let error):
-                // Handle error
-            }
+        for await message in consumer.messages {
+            // Do something with message
         }
     }
 }
@@ -142,14 +132,10 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await messageResult in consumer.messages {
-            switch messageResult {
-            case .success(let message):
-                // Do something with message
-                try await consumer.commitSync(message)
-            case .failure(let error):
-                // Handle error
-            }
+        for await message in consumer.messages {
+            // Do something with message
+            // ...
+            try await consumer.commitSync(message)
         }
     }
 }
