@@ -97,9 +97,9 @@ final class KafkaClient {
     }
 
     /// Subscribe to topic set using balanced consumer groups.
-    /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
-    func subscribe(subscribedTopicsPointer: RDKafkaTopicPartitionList) throws {
-        try subscribedTopicsPointer.withListPointer { pointer in
+    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
+    func subscribe(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
             let result = rd_kafka_subscribe(self.kafkaHandle, pointer)
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)
@@ -108,9 +108,9 @@ final class KafkaClient {
     }
 
     /// Atomic assignment of partitions to consume.
-    /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
-    func assign(subscribedTopicsPointer: RDKafkaTopicPartitionList) throws {
-        try subscribedTopicsPointer.withListPointer { pointer in
+    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
+    func assign(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
             let result = rd_kafka_assign(self.kafkaHandle, pointer)
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)

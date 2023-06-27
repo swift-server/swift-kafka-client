@@ -138,8 +138,7 @@ public final class KafkaConsumer {
         self.stateMachine.withLockedValue {
             $0.initialize(
                 client: client,
-                source: sourceAndSequence.source,
-                subscribedTopicsPointer: RDKafkaTopicPartitionList()
+                source: sourceAndSequence.source
             )
         }
 
@@ -166,14 +165,15 @@ public final class KafkaConsumer {
     private func subscribe(topics: [String]) throws {
         let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
         switch action {
-        case .setUpConnection(let client, let subscribedTopicsPointer):
+        case .setUpConnection(let client):
+            let subscription = RDKafkaTopicPartitionList()
             for topic in topics {
-                subscribedTopicsPointer.add(
+                subscription.add(
                     topic: topic,
                     partition: KafkaPartition.unassigned
                 )
             }
-            try client.subscribe(subscribedTopicsPointer: subscribedTopicsPointer)
+            try client.subscribe(topicPartitionList: subscription)
         }
     }
 
@@ -189,9 +189,10 @@ public final class KafkaConsumer {
     ) throws {
         let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
         switch action {
-        case .setUpConnection(let client, let subscribedTopicsPointer):
-            subscribedTopicsPointer.setOffset(topic: topic, partition: partition, offset: Int64(offset))
-            try client.assign(subscribedTopicsPointer: subscribedTopicsPointer)
+        case .setUpConnection(let client):
+            let assignment = RDKafkaTopicPartitionList()
+            assignment.setOffset(topic: topic, partition: partition, offset: Int64(offset))
+            try client.assign(topicPartitionList: assignment)
         }
     }
 
@@ -332,21 +333,17 @@ extension KafkaConsumer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
             case initializing(
                 client: KafkaClient,
-                source: Producer.Source,
-                subscribedTopicsPointer: RDKafkaTopicPartitionList
+                source: Producer.Source
             )
             /// The ``KafkaConsumer`` is consuming messages.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
             case consuming(
                 client: KafkaClient,
-                source: Producer.Source,
-                subscribedTopicsPointer: RDKafkaTopicPartitionList
+                source: Producer.Source
             )
             /// The ``KafkaConsumer`` has been closed.
             case finished
@@ -359,16 +356,14 @@ extension KafkaConsumer {
         /// not yet available when the normal initialization occurs.
         mutating func initialize(
             client: KafkaClient,
-            source: Producer.Source,
-            subscribedTopicsPointer: RDKafkaTopicPartitionList
+            source: Producer.Source
         ) {
             guard case .uninitialized = self.state else {
                 fatalError("\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)")
             }
             self.state = .initializing(
                 client: client,
-                source: source,
-                subscribedTopicsPointer: subscribedTopicsPointer
+                source: source
             )
         }
 
@@ -396,7 +391,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .consuming(let client, let source, _):
+            case .consuming(let client, let source):
                 return .pollForAndYieldMessage(client: client, source: source)
             case .finished:
                 return .terminatePollLoop
@@ -407,28 +402,22 @@ extension KafkaConsumer {
         enum SetUpConnectionAction {
             /// Set up the connection through ``subscribe()`` or ``assign()``.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
-            case setUpConnection(client: KafkaClient, subscribedTopicsPointer: RDKafkaTopicPartitionList)
+            case setUpConnection(client: KafkaClient)
         }
 
         /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
-        ///
-        /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-        /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-        /// - Parameter subscribedTopicsPointer: Pointer to a list of topics + partition pairs.
         ///
         /// - Returns: The action to be taken.
         mutating func setUpConnection() -> SetUpConnectionAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .initializing(let client, let source, let subscribedTopicsPointer):
+            case .initializing(let client, let source):
                 self.state = .consuming(
                     client: client,
-                    source: source,
-                    subscribedTopicsPointer: subscribedTopicsPointer
+                    source: source
                 )
-                return .setUpConnection(client: client, subscribedTopicsPointer: subscribedTopicsPointer)
+                return .setUpConnection(client: client)
             case .consuming, .finished:
                 fatalError("\(#function) should only be invoked upon initialization of KafkaConsumer")
             }
@@ -456,7 +445,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
-            case .consuming(let client, _, _):
+            case .consuming(let client, _):
                 return .commitSync(client: client)
             case .finished:
                 return .throwClosedError
@@ -485,7 +474,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("subscribe() / assign() should have been invoked before \(#function)")
-            case .consuming(let client, let source, _):
+            case .consuming(let client, let source):
                 self.state = .finished
                 return .shutdownGracefullyAndFinishSource(
                     client: client,
