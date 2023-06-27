@@ -201,15 +201,19 @@ public final class KafkaConsumer {
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source):
                 do {
-                    guard let message = try client.consumerPoll() else {
-                        break
+                    if let message = try client.consumerPoll() {
+                        // We do not support back pressure, we can ignore the yield result
+                        _ = source.yield(message)
                     }
-                    // We do not support back pressure, we can ignore the yield result
-                    _ = source.yield(message)
                 } catch {
                     source.finish()
                     throw error
                 }
+                try await Task.sleep(for: self.config.pollInterval)
+            case .pollUntilClosed(let client):
+                // Ignore poll result, we are closing down and just polling to commit
+                // outstanding consumer state
+                _ = try client.consumerPoll()
                 try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoop:
                 return
@@ -304,7 +308,9 @@ extension KafkaConsumer {
                 source: Producer.Source
             )
             /// The ``KafkaConsumer`` has been closed.
-            case finished
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case finished(client: KafkaClient)
         }
 
         /// The current state of the StateMachine.
@@ -335,6 +341,11 @@ extension KafkaConsumer {
                 client: KafkaClient,
                 source: Producer.Source
             )
+            /// The ``KafkaConsumer`` is in the process of closing down, but still needs to poll
+            /// to commit its state to the broker.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case pollUntilClosed(client: KafkaClient)
             /// Terminate the poll loop.
             case terminatePollLoop
         }
@@ -351,8 +362,12 @@ extension KafkaConsumer {
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
             case .consuming(let client, let source):
                 return .pollForAndYieldMessage(client: client, source: source)
-            case .finished:
-                return .terminatePollLoop
+            case .finished(let client):
+                if client.isConsumerClosed {
+                    return .terminatePollLoop
+                } else {
+                    return .pollUntilClosed(client: client)
+                }
             }
         }
 
@@ -433,7 +448,7 @@ extension KafkaConsumer {
             case .initializing:
                 fatalError("subscribe() / assign() should have been invoked before \(#function)")
             case .consuming(let client, let source):
-                self.state = .finished
+                self.state = .finished(client: client)
                 return .shutdownGracefullyAndFinishSource(
                     client: client,
                     source: source

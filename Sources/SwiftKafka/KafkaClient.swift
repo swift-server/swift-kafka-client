@@ -118,14 +118,6 @@ final class KafkaClient {
         }
     }
 
-    /// Close the consumer.
-    func consumerClose() throws {
-        let result = rd_kafka_consumer_close(self.kafkaHandle)
-        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: result)
-        }
-    }
-
     /// Wraps a Swift closure inside of a class to be able to pass it to `librdkafka` as an `OpaquePointer`.
     /// This is specifically used to pass a Swift closure as a commit callback for the ``KafkaConsumer``.
     final class CapturedCommitCallback {
@@ -203,6 +195,23 @@ final class KafkaClient {
                 )
             }
         }
+    }
+
+    /// Close the consumer asynchronously. This means revoking its assignemnt, committing offsets to broker and
+    /// leaving the consumer group (if applicable).
+    ///
+    /// Make sure to run poll loop until ``KafkaClient/consumerIsClosed`` returns `true`.
+    func consumerClose() throws {
+        let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle)
+        let result = rd_kafka_consumer_close_queue(self.kafkaHandle, consumerQueue)
+        let kafkaError = rd_kafka_error_code(result)
+        if kafkaError != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: kafkaError)
+        }
+    }
+
+    var isConsumerClosed: Bool {
+        rd_kafka_consumer_closed(self.kafkaHandle) == 1
     }
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
