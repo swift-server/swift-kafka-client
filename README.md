@@ -6,7 +6,7 @@ SwiftKafka is a Swift Package in development that provides a convenient way to c
 
 ### Producer API
 
-The `sendAsync(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
+The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
 
 ```swift
 let config = KafkaProducerConfiguration(bootstrapServers: ["localhost:9092"])
@@ -25,7 +25,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving acknowledgements
     group.addTask {
-        let messageID = try await producer.sendAsync(
+        let messageID = try await producer.send(
             KafkaProducerMessage(
                 topic: "topic-name",
                 value: "Hello, World!"

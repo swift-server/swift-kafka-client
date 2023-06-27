@@ -18,7 +18,7 @@ import NIOCore
 /// A message produced by the client and acknowledged by the Kafka cluster.
 public struct KafkaAcknowledgedMessage: Hashable {
     /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
-    /// The same identifier is returned by ``KafkaProducer/sendAsync(_:)`` and can be used to correlate
+    /// The same identifier is returned by ``KafkaProducer/send(_:)`` and can be used to correlate
     /// a sent message and an acknowledged message.
     public var id: KafkaProducerMessageID
     /// The topic that the message was sent to.
