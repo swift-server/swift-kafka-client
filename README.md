@@ -2,6 +2,25 @@
 
 SwiftKafka is a Swift Package in development that provides a convenient way to communicate with [Apache Kafka](https://kafka.apache.org) servers. The main goal was to create an API that leverages [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). Under the hood, this package uses the [`librdkafka`](https://github.com/confluentinc/librdkafka) C library.
 
+## Adding SwiftKafka as a Dependency
+
+To use the `SwiftKafka` library in a SwiftPM project,
+add the following line to the dependencies in your `Package.swift` file:
+
+```swift
+.package(url: "https://github.com/swift-server/swift-kafka-gsoc", branch: "main")
+```
+
+Include `"SwiftKafka"` as a dependency for your executable target:
+
+```swift
+.target(name: "<target>", dependencies: [
+    .product(name: "SwiftKafka", package: "swift-kafka-gsoc"),
+]),
+```
+
+Finally, add `import SwiftKafka` to your source code.
+
 ## Usage
 
 ### Producer API
