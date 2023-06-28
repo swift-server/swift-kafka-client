@@ -44,7 +44,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving acknowledgements
     group.addTask {
-        let messageID = try await producer.send(
+        let messageID = try producer.send(
             KafkaProducerMessage(
                 topic: "topic-name",
                 value: "Hello, World!"
