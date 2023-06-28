@@ -258,7 +258,7 @@ public final class KafkaProducer {
             case .poll(let client):
                 client.poll(timeout: 0)
                 try await Task.sleep(for: self.config.pollInterval)
-            case .killPollLoop:
+            case .terminatePollLoop:
                 return
             }
         }
@@ -400,8 +400,8 @@ extension KafkaProducer {
         enum PollLoopAction {
             /// Poll client for new consumer messages.
             case poll(client: KafkaClient)
-            /// Kill the poll loop.
-            case killPollLoop
+            /// Terminate the poll loop.
+            case terminatePollLoop
         }
 
         /// Returns the next action to be taken when wanting to poll.
@@ -415,7 +415,7 @@ extension KafkaProducer {
             case .started(let client, _, _, _):
                 return .poll(client: client)
             case .finished:
-                return .killPollLoop
+                return .terminatePollLoop
             }
         }
 
