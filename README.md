@@ -79,12 +79,18 @@ let consumer = try KafkaConsumer(
     logger: .kafkaTest // Your logger here
 )
 
-for await messageResult in consumer.messages {
-    switch messageResult {
-    case .success(let message):
-        // Do something with message
-    case .failure(let error):
-        // Handle error
+await withThrowingTaskGroup(of: Void.self) { group in
+
+    // Run Task
+    group.addTask {
+        try await consumer.run()
+    }
+
+    // Task receiving messages
+    group.addTask {
+        for await message in consumer.messages {
+            // Do something with message
+        }
     }
 }
 ```
@@ -104,12 +110,18 @@ let consumer = try KafkaConsumer(
     logger: .kafkaTest // Your logger here
 )
 
-for await messageResult in consumer.messages {
-    switch messageResult {
-    case .success(let message):
-        // Do something with message
-    case .failure(let error):
-        // Handle error
+await withThrowingTaskGroup(of: Void.self) { group in
+
+    // Run Task
+    group.addTask {
+        try await consumer.run()
+    }
+
+    // Task receiving messages
+    group.addTask {
+        for await message in consumer.messages {
+            // Do something with message
+        }
     }
 }
 ```
@@ -130,13 +142,20 @@ let consumer = try KafkaConsumer(
     logger: .kafkaTest // Your logger here
 )
 
-for await messageResult in consumer.messages {
-    switch messageResult {
-    case .success(let message):
-        // Do something with message
-        try await consumer.commitSync(message)
-    case .failure(let error):
-        // Handle error
+await withThrowingTaskGroup(of: Void.self) { group in
+
+    // Run Task
+    group.addTask {
+        try await consumer.run()
+    }
+
+    // Task receiving messages
+    group.addTask {
+        for await message in consumer.messages {
+            // Do something with message
+            // ...
+            try await consumer.commitSync(message)
+        }
     }
 }
 ```

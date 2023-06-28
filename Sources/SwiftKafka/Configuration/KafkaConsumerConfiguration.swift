@@ -18,11 +18,9 @@ import struct Foundation.UUID
 public struct KafkaConsumerConfiguration: Hashable {
     // MARK: - SwiftKafka-specific Config properties
 
-    /// The backpressure strategy to be used for message consumption.
-    public var backPressureStrategy: KafkaSharedConfiguration.BackPressureStrategy = .watermark(
-        low: 10,
-        high: 50
-    )
+    /// The time between two consecutive polls.
+    /// Effectively controls the rate at which incoming events and messages are consumed.
+    public var pollInterval: Duration
 
     // This backs the consumptionStrategy computed property.
     private var _consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy
@@ -335,8 +333,8 @@ public struct KafkaConsumerConfiguration: Hashable {
     }
 
     public init(
+        pollInterval: Duration = .milliseconds(100),
         consumptionStrategy: KafkaSharedConfiguration.ConsumptionStrategy,
-        backPressureStrategy: KafkaSharedConfiguration.BackPressureStrategy = .watermark(low: 10, high: 50),
         sessionTimeoutMs: UInt = 45000,
         heartbeatIntervalMs: UInt = 3000,
         maxPollInvervalMs: UInt = 300_000,
@@ -381,9 +379,9 @@ public struct KafkaConsumerConfiguration: Hashable {
         saslUsername: String? = nil,
         saslPassword: String? = nil
     ) {
+        self.pollInterval = pollInterval
         self._consumptionStrategy = consumptionStrategy
         self.consumptionStrategy = consumptionStrategy // used to invoke set { } method
-        self.backPressureStrategy = backPressureStrategy
 
         self.sessionTimeoutMs = sessionTimeoutMs
         self.heartbeatIntervalMs = heartbeatIntervalMs
@@ -473,30 +471,6 @@ public struct KafkaConsumerConfiguration: Hashable {
 // MARK: - KafkaSharedConfiguration + Consumer Additions
 
 extension KafkaSharedConfiguration {
-    /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
-    public struct BackPressureStrategy: Hashable {
-        enum _BackPressureStrategy: Hashable {
-            case watermark(low: Int, high: Int)
-        }
-
-        let _internal: _BackPressureStrategy
-
-        private init(backPressureStrategy: _BackPressureStrategy) {
-            self._internal = backPressureStrategy
-        }
-
-        /// A back pressure strategy based on high and low watermarks.
-        ///
-        /// The consumer maintains a buffer size between a low watermark and a high watermark
-        /// to control the flow of incoming messages.
-        ///
-        /// - Parameter low: The lower threshold for the buffer size (low watermark).
-        /// - Parameter high: The upper threshold for the buffer size (high watermark).
-        public static func watermark(low: Int, high: Int) -> BackPressureStrategy {
-            return .init(backPressureStrategy: .watermark(low: low, high: high))
-        }
-    }
-
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Hashable {
         enum _ConsumptionStrategy: Hashable {

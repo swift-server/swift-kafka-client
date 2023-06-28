@@ -56,6 +56,76 @@ final class KafkaClient {
         return rd_kafka_poll(self.kafkaHandle, timeout)
     }
 
+    /// Redirect the main ``KafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
+    /// queue (``KafkaClient/consumerPoll``).
+    ///
+    /// Events that would be triggered by ``KafkaClient/poll(timeout:)``
+    /// are now triggered by ``KafkaClient/consumerPoll``.
+    ///
+    /// - Warning: It is not allowed to call ``KafkaClient/poll(timeout:)`` after ``KafkaClient/pollSetConsumer``.
+    func pollSetConsumer() throws {
+        let result = rd_kafka_poll_set_consumer(self.kafkaHandle)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
+    }
+
+    /// Request a new message from the Kafka cluster.
+    ///
+    /// - Important: This method should only be invoked from ``KafkaConsumer``.
+    ///
+    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
+    func consumerPoll() throws -> KafkaConsumerMessage? {
+        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, 0) else {
+            // No error, there might be no more messages
+            return nil
+        }
+
+        defer {
+            // Destroy message otherwise poll() will block forever
+            rd_kafka_message_destroy(messagePointer)
+        }
+
+        // Reached the end of the topic+partition queue on the broker
+        if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
+            return nil
+        }
+
+        let message = try KafkaConsumerMessage(messagePointer: messagePointer)
+        return message
+    }
+
+    /// Subscribe to topic set using balanced consumer groups.
+    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
+    func subscribe(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_subscribe(self.kafkaHandle, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+        }
+    }
+
+    /// Atomic assignment of partitions to consume.
+    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
+    func assign(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_assign(self.kafkaHandle, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+        }
+    }
+
+    /// Close the consumer.
+    func consumerClose() throws {
+        let result = rd_kafka_consumer_close(self.kafkaHandle)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
+    }
+
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure will use the Kafka handle pointer.
