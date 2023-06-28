@@ -1,4 +1,6 @@
-# Usage: docker-compose -f docker/docker-compose.yaml run swift-kafka-gsoc
+# this file is not designed to be run directly
+# instead, use the docker-compose.<os>.<swift> files
+# eg docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.2204.57.yaml run test
 version: "3.9"
 services:
 
@@ -20,9 +22,6 @@ services:
       dockerfile: docker/Dockerfile
     environment:
       KAFKA_HOST: kafka
-
-  # Swift on Server CI
-  # e.g. docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.2204.57.yaml run test
 
   runtime-setup:
     image: swift-kafka-gsoc:default
