@@ -120,7 +120,7 @@ public final class KafkaProducer {
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) throws -> KafkaProducer {
-        let stateMachine = NIOLockedValueBox(StateMachine())
+        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         let client = try RDKafka.createClient(
             type: .producer,
@@ -139,8 +139,7 @@ public final class KafkaProducer {
         stateMachine.withLockedValue {
             $0.initialize(
                 client: client,
-                source: nil,
-                logger: logger
+                source: nil
             )
         }
 
@@ -164,7 +163,7 @@ public final class KafkaProducer {
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) throws -> (KafkaProducer, KafkaMessageAcknowledgements) {
-        let stateMachine = NIOLockedValueBox(StateMachine())
+        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>.self,
@@ -196,8 +195,7 @@ public final class KafkaProducer {
         stateMachine.withLockedValue {
             $0.initialize(
                 client: client,
-                source: source,
-                logger: logger
+                source: source
             )
         }
 
@@ -353,6 +351,9 @@ public final class KafkaProducer {
 extension KafkaProducer {
     /// State machine representing the state of the ``KafkaProducer``.
     struct StateMachine {
+        /// A logger.
+        let logger: Logger
+
         /// The state of the ``StateMachine``.
         enum State {
             /// The state machine has been initialized with init() but is not yet Initialized
@@ -364,13 +365,11 @@ extension KafkaProducer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             /// - Parameter topicHandles: Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
-            /// - Parameter logger: A logger.
             case started(
                 client: KafkaClient,
                 messageIDCounter: UInt,
                 source: Producer.Source?,
-                topicHandles: [String: OpaquePointer],
-                logger: Logger
+                topicHandles: [String: OpaquePointer]
             )
             /// The ``KafkaProducer`` has been shut down and cannot be used anymore.
             case finished
@@ -383,8 +382,7 @@ extension KafkaProducer {
         /// when the normal initialization occurs.
         mutating func initialize(
             client: KafkaClient,
-            source: Producer.Source?,
-            logger: Logger
+            source: Producer.Source?
         ) {
             guard case .uninitialized = self.state else {
                 fatalError("\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)")
@@ -393,8 +391,7 @@ extension KafkaProducer {
                 client: client,
                 messageIDCounter: 0,
                 source: source,
-                topicHandles: [:],
-                logger: logger
+                topicHandles: [:]
             )
         }
 
@@ -414,7 +411,7 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, _, _, _):
+            case .started(let client, _, _, _):
                 return .poll(client: client)
             case .finished:
                 return .killPollLoop
@@ -437,7 +434,7 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, _, let topicHandles, _):
+            case .started(let client, _, _, let topicHandles):
                 if let handle = topicHandles[topic] {
                     return .handleExists(handle: handle)
                 } else {
@@ -456,15 +453,14 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, let messageIDCounter, let source, let topicHandles, let logger):
+            case .started(let client, let messageIDCounter, let source, let topicHandles):
                 var topicHandles = topicHandles
                 topicHandles[topic] = handle
                 self.state = .started(
                     client: client,
                     messageIDCounter: messageIDCounter,
                     source: source,
-                    topicHandles: topicHandles,
-                    logger: logger
+                    topicHandles: topicHandles
                 )
             case .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to create topic handle on closed connection")
@@ -489,14 +485,13 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, let messageIDCounter, let source, let topicHandles, let logger):
+            case .started(let client, let messageIDCounter, let source, let topicHandles):
                 let newMessageID = messageIDCounter + 1
                 self.state = .started(
                     client: client,
                     messageIDCounter: newMessageID,
                     source: source,
-                    topicHandles: topicHandles,
-                    logger: logger
+                    topicHandles: topicHandles
                 )
                 return .send(
                     client: client,
@@ -529,7 +524,7 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, let source, let topicHandles, _):
+            case .started(let client, _, let source, let topicHandles):
                 self.state = .finished
                 return .shutdownGracefullyAndFinishSource(
                     client: client,
