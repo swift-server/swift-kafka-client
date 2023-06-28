@@ -25,6 +25,40 @@ Finally, add `import SwiftKafka` to your source code.
 
 ### Producer API
 
+After creating the `KafkaProducer`, messages can be sent to a `topic` using the `send(_:)` method.
+
+```swift
+let config = KafkaProducerConfiguration(bootstrapServers: ["localhost:9092"])
+
+let producer = try KafkaProducer.makeProducer(
+    config: config,
+    logger: .kafkaTest // Your logger here
+)
+
+await withThrowingTaskGroup(of: Void.self) { group in
+
+    // Run Task
+    group.addTask {
+        try await producer.run()
+    }
+
+    // Task sending messages
+    group.addTask {
+        try producer.send(
+            KafkaProducerMessage(
+                topic: "topic-name",
+                value: "Hello, World!"
+            )
+        )
+
+        // Required
+        await producer.shutdownGracefully()
+    }
+}
+```
+
+#### Acknowledgements
+
 The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
 
 ```swift
@@ -42,7 +76,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
         try await producer.run()
     }
 
-    // Task receiving acknowledgements
+    // Task sending messages and receiving acknowledgements
     group.addTask {
         let messageID = try producer.send(
             KafkaProducerMessage(
@@ -55,8 +89,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
             // Check if acknowledgement belongs to the sent message
         }
 
-        // Required
-        await producer.shutdownGracefully()
+        // The producer shuts down automatically after consuming the acknowledgements
     }
 }
 ```
