@@ -151,5 +151,5 @@ It has source files that are excluded in `Package.swift`.
 We provide a Docker environment for this package. This will automatically start a local Kafka server and run the package tests.
 
 ```bash
-docker-compose -f docker/docker-compose.yaml run swift-kafka-gsoc
+docker-compose -f docker/docker-compose.yaml run test
 ```
