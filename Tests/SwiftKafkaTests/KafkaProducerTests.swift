@@ -208,7 +208,7 @@ final class KafkaProducerTests: XCTestCase {
                 } catch {}
 
                 // This subscribes to the acknowledgements stream and immediately terminates the stream.
-                // Required to kill the run task.
+                // Required to terminate the run task.
                 var iterator: KafkaMessageAcknowledgements.AsyncIterator? = acks.makeAsyncIterator()
                 _ = iterator
                 iterator = nil

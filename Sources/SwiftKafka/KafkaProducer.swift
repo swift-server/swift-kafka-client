@@ -17,21 +17,15 @@ import Logging
 import NIOConcurrencyHelpers
 import NIOCore
 
-/// `NIOAsyncSequenceProducerBackPressureStrategy` that always returns true.
-struct NoBackPressure: NIOAsyncSequenceProducerBackPressureStrategy {
-    func didYield(bufferDepth: Int) -> Bool { true }
-    func didConsume(bufferDepth: Int) -> Bool { true }
-}
-
-// MARK: - ShutDownOnTerminate
+// MARK: - KafkaProducerShutdownOnTerminate
 
 /// `NIOAsyncSequenceProducerDelegate` that terminates the shuts the producer down when
 /// `didTerminate()` is invoked.
-struct ShutdownOnTerminate: @unchecked Sendable { // We can do that because our stored propery is protected by a lock
+internal struct KafkaProducerShutdownOnTerminate: @unchecked Sendable { // We can do that because our stored propery is protected by a lock
     let stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>
 }
 
-extension ShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
+extension KafkaProducerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
         // No back pressure
         return
@@ -55,10 +49,13 @@ extension ShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
+// MARK: - KafkaMessageAcknowledgements
+
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct KafkaMessageAcknowledgements: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, NoBackPressure, ShutdownOnTerminate>
+    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerShutdownOnTerminate>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
@@ -82,29 +79,32 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
 public final class KafkaProducer {
     typealias Producer = NIOAsyncSequenceProducer<
         Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>,
-        NoBackPressure,
-        ShutdownOnTerminate
+        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
+        KafkaProducerShutdownOnTerminate
     >
 
     /// State of the ``KafkaProducer``.
     private let stateMachine: NIOLockedValueBox<StateMachine>
 
+    /// The configuration object of the producer client.
+    private let config: KafkaProducerConfiguration
     /// Topic configuration that is used when a new topic has to be created by the producer.
     private let topicConfig: KafkaTopicConfiguration
 
     // Private initializer, use factory methods to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
     ///
-    /// - Parameter client: The ``KafkaClient`` instance associated with the ``KafkaProducer``.
+    /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.///
     /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
-    /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
+        config: KafkaProducerConfiguration,
         topicConfig: KafkaTopicConfiguration
     ) throws {
         self.stateMachine = stateMachine
+        self.config = config
         self.topicConfig = topicConfig
     }
 
@@ -135,6 +135,7 @@ public final class KafkaProducer {
 
         let producer = try KafkaProducer(
             stateMachine: stateMachine,
+            config: config,
             topicConfig: topicConfig
         )
 
@@ -169,8 +170,8 @@ public final class KafkaProducer {
 
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>.self,
-            backPressureStrategy: NoBackPressure(),
-            delegate: ShutdownOnTerminate(stateMachine: stateMachine)
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            delegate: KafkaProducerShutdownOnTerminate(stateMachine: stateMachine)
         )
         let source = sourceAndSequence.source
 
@@ -191,6 +192,7 @@ public final class KafkaProducer {
 
         let producer = try KafkaProducer(
             stateMachine: stateMachine,
+            config: config,
             topicConfig: topicConfig
         )
 
@@ -405,7 +407,7 @@ extension KafkaProducer {
         }
 
         /// Returns the next action to be taken when wanting to poll.
-        /// - Returns: The next action to be taken, either polling or killing the poll loop.
+        /// - Returns: The next action to be taken, either polling or terminating the poll loop.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
         func nextPollLoopAction() -> PollLoopAction {
