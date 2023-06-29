@@ -12,8 +12,12 @@ needs to be listed here.
 ### Contributors
 
 - Felix Schlegel <fefefe152@gmail.com>
+- Felix Schlegel <schlegel@apple.com>
+- Franz Busch <f.busch@apple.com>
 - FranzBusch <f.busch@apple.com>
 - SHILPEE GUPTA <78029920+shilpeegupta14@users.noreply.github.com>
+- Yim Lee <yim_lee@apple.com>
+- mr-swifter <103502437+mr-swifter@users.noreply.github.com>
 
 **Updating this list**
 
