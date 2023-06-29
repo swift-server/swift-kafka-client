@@ -24,13 +24,13 @@ final class KafkaClient {
     /// Handle for the C library's Kafka instance.
     private let kafkaHandle: OpaquePointer
     /// References the opaque object passed to the config to ensure ARC retains it as long as the client exists.
-    private let opaque: RDKafkaConfig.CapturedClosure?
+    private let opaque: RDKafkaConfig.CapturedClosures
     /// A logger.
     private let logger: Logger
 
     init(
         kafkaHandle: OpaquePointer,
-        opaque: RDKafkaConfig.CapturedClosure?,
+        opaque: RDKafkaConfig.CapturedClosures,
         logger: Logger
     ) {
         self.kafkaHandle = kafkaHandle
