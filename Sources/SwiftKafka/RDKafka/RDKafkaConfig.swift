@@ -26,7 +26,7 @@ struct RDKafkaConfig {
         typealias LoggingClosure = (Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void
         var loggingClosure: LoggingClosure?
 
-        init() { }
+        init() {}
     }
 
     /// Create a new `rd_kafka_conf_t` object in memory and initialize it with the given configuration properties.
@@ -140,7 +140,7 @@ struct RDKafkaConfig {
         let loggingClosure: RDKafkaConfig.CapturedClosures.LoggingClosure = { level, fac, buf in
             // Mapping according to https://en.wikipedia.org/wiki/Syslog
             switch level {
-            case 0 ... 2: /* Emergency, Alert, Critical */
+            case 0...2: /* Emergency, Alert, Critical */
                 logger.critical(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
             case 3: /* Error */
                 logger.error(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
