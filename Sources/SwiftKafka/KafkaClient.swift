@@ -251,8 +251,17 @@ final class KafkaClient {
         }
     }
 
+    /// Returns `true` if the underlying `librdkafka` consumer is closed.
     var isConsumerClosed: Bool {
         rd_kafka_consumer_closed(self.kafkaHandle) == 1
+    }
+
+    /// Returns the current out queue length.
+    ///
+    /// This means the number of producer messages that wait to be sent + the number of any
+    /// callbacks that are waiting to be executed by invoking `rd_kafka_poll`.
+    var outgoingQueueSize: Int32 {
+        return rd_kafka_outq_len(self.kafkaHandle)
     }
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.

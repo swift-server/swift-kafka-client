@@ -101,7 +101,7 @@ final class SwiftKafkaTests: XCTestCase {
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                await producer.shutdownGracefully()
+                producer.shutdownGracefully()
             }
 
             // Consumer Run Task
@@ -167,7 +167,7 @@ final class SwiftKafkaTests: XCTestCase {
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                await producer.shutdownGracefully()
+                producer.shutdownGracefully()
             }
 
             // Consumer Run Task
@@ -230,7 +230,7 @@ final class SwiftKafkaTests: XCTestCase {
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                await producer.shutdownGracefully()
+                producer.shutdownGracefully()
             }
 
             // Consumer Run Task

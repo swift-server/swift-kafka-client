@@ -32,19 +32,7 @@ extension KafkaProducerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 
     func didTerminate() {
-        let action = self.stateMachine.withLockedValue { $0.finish() }
-        switch action {
-        case .shutdownGracefullyAndFinishSource(let client, let source):
-            Task {
-                await KafkaProducer._shutDownGracefully(
-                    client: client,
-                    source: source,
-                    timeout: 10000
-                )
-            }
-        case .none:
-            return
-        }
+        self.stateMachine.withLockedValue { $0.finish() }
     }
 }
 
@@ -72,7 +60,7 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
 }
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
+/// Please make sure to explicitly call ``shutdownGracefully()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public final class KafkaProducer {
@@ -210,49 +198,23 @@ public final class KafkaProducer {
     ///
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
     /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
-    /// - Parameter timeout: Maximum amount of milliseconds this method waits for any outstanding messages to be sent.
-    public func shutdownGracefully(timeout: Int32 = 10000) async {
-        let action = self.stateMachine.withLockedValue { $0.finish() }
-        switch action {
-        case .shutdownGracefullyAndFinishSource(let client, let source):
-            await KafkaProducer._shutDownGracefully(
-                client: client,
-                source: source,
-                timeout: timeout
-            )
-        case .none:
-            return
-        }
-    }
-
-    // Static so we perform this without needing a reference to `KafkaProducer`
-    static func _shutDownGracefully(
-        client: KafkaClient,
-        source: Producer.Source?,
-        timeout: Int32
-    ) async {
-        source?.finish()
-
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            // Wait `timeout` seconds for outstanding messages to be sent and callbacks to be called
-            client.withKafkaHandlePointer { handle in
-                rd_kafka_flush(handle, timeout)
-                continuation.resume()
-            }
-        }
+    public func shutdownGracefully() {
+        self.stateMachine.withLockedValue { $0.finish() }
     }
 
     /// Start polling Kafka for acknowledged messages.
     ///
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run() async throws {
-        // TODO(felix): make pollInterval part of config -> easier to adapt to Service protocol (service-lifecycle)
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .poll(let client):
                 client.poll(timeout: 0)
                 try await Task.sleep(for: self.config.pollInterval)
+            case .terminatePollLoopAndFinishSource(let source):
+                source?.finish()
+                return
             case .terminatePollLoop:
                 return
             }
@@ -307,6 +269,15 @@ extension KafkaProducer {
                 source: Producer.Source?,
                 topicHandles: RDKafkaTopicHandles
             )
+            /// ``KafkaProducer/shutdownGracefully()`` was invoked so we are flushing
+            /// any messages that wait to be sent and serve any remaining queued callbacks.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case flushing(
+                client: KafkaClient,
+                source: Producer.Source?
+            )
             /// The ``KafkaProducer`` has been shut down and cannot be used anymore.
             case finished
         }
@@ -335,6 +306,10 @@ extension KafkaProducer {
         enum PollLoopAction {
             /// Poll client for new consumer messages.
             case poll(client: KafkaClient)
+            /// Terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
+            ///
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case terminatePollLoopAndFinishSource(source: Producer.Source?)
             /// Terminate the poll loop.
             case terminatePollLoop
         }
@@ -343,12 +318,19 @@ extension KafkaProducer {
         /// - Returns: The next action to be taken, either polling or terminating the poll loop.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        func nextPollLoopAction() -> PollLoopAction {
+        mutating func nextPollLoopAction() -> PollLoopAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, _, _):
                 return .poll(client: client)
+            case .flushing(let client, let source):
+                if client.outgoingQueueSize > 0 {
+                    return .poll(client: client)
+                } else {
+                    self.state = .finished
+                    return .terminatePollLoopAndFinishSource(source: source)
+                }
             case .finished:
                 return .terminatePollLoop
             }
@@ -386,39 +368,22 @@ extension KafkaProducer {
                     newMessageID: newMessageID,
                     topicHandles: topicHandles
                 )
-            case .finished:
+            case .flushing, .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
             }
         }
 
-        /// Action to be taken when wanting to do close the producer.
-        enum FinishAction {
-            /// Shut down the ``KafkaProducer`` and finish the given `source` object.
-            ///
-            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case shutdownGracefullyAndFinishSource(
-                client: KafkaClient,
-                source: Producer.Source?
-            )
-        }
-
         /// Get action to be taken when wanting to do close the producer.
-        /// - Returns: The action to be taken,  or `nil` if there is no action to be taken.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        mutating func finish() -> FinishAction? {
+        mutating func finish() {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
-                self.state = .finished
-                return .shutdownGracefullyAndFinishSource(
-                    client: client,
-                    source: source
-                )
-            case .finished:
-                return nil
+                self.state = .flushing(client: client, source: source)
+            case .flushing, .finished:
+                break
             }
         }
     }

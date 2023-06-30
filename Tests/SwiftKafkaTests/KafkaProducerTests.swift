@@ -85,7 +85,7 @@ final class KafkaProducerTests: XCTestCase {
                     break
                 }
 
-                await producer.shutdownGracefully()
+                producer.shutdownGracefully()
             }
         }
     }
@@ -123,7 +123,7 @@ final class KafkaProducerTests: XCTestCase {
                     break
                 }
 
-                await producer.shutdownGracefully()
+                producer.shutdownGracefully()
             }
         }
     }
@@ -179,14 +179,51 @@ final class KafkaProducerTests: XCTestCase {
                 XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
                 XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
 
-                await producer.shutdownGracefully()
+                producer.shutdownGracefully()
+            }
+        }
+    }
+
+    func testFlushQueuedProducerMessages() async throws {
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+
+        let message = KafkaProducerMessage(
+            topic: "test-topic",
+            key: "key",
+            value: "Hello, World!"
+        )
+        let messageID = try producer.send(message)
+
+        // We have not invoked `producer.run()` yet, which means that our message and its
+        // delivery report callback have been enqueued onto the `librdkafka` `outq`.
+        // By invoking `shutdownGracefully()` now our `KafkaProducer` should enter the
+        // `flushing` state.
+        producer.shutdownGracefully()
+
+        await withThrowingTaskGroup(of: Void.self) { group in
+            // Now that we are in the `flushing` state, start the run loop.
+            group.addTask {
+                try await producer.run()
+            }
+
+            // Since we are flushing, we should receive our messageAcknowledgement despite
+            // having invoked `shutdownGracefully()` before.
+            group.addTask {
+                var iterator = acks.makeAsyncIterator()
+                let acknowledgement = await iterator.next()!
+                switch acknowledgement {
+                case .success(let acknowledgedMessage):
+                    XCTAssertEqual(messageID, acknowledgedMessage.id)
+                case .failure(let error):
+                    XCTFail("Unexpected acknowledgement error: \(error)")
+                }
             }
         }
     }
 
     func testProducerNotUsableAfterShutdown() async throws {
         let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
-        await producer.shutdownGracefully()
+        producer.shutdownGracefully()
 
         await withThrowingTaskGroup(of: Void.self) { group in
 
@@ -224,7 +261,7 @@ final class KafkaProducerTests: XCTestCase {
 
         weak var producerCopy = producer
 
-        await producer?.shutdownGracefully()
+        producer?.shutdownGracefully()
         producer = nil
         // Make sure to terminate the AsyncSequence
         acks = nil
