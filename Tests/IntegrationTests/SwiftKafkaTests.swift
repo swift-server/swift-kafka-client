@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import ServiceLifecycle
 @testable import SwiftKafka
 import XCTest
 
@@ -74,7 +75,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producerService, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
@@ -83,36 +84,36 @@ final class SwiftKafkaTests: XCTestCase {
             brokerAddressFamily: .v4
         )
 
-        let consumer = try KafkaConsumer(
+        let consumerService = try KafkaConsumer(
             config: consumerConfig,
             logger: .kafkaTest
         )
 
-        await withThrowingTaskGroup(of: Void.self) { group in
-            // Producer Run Task
+        let serviceGroup = ServiceGroup(
+            services: [producerService, consumerService],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
             group.addTask {
-                try await producer.run()
+                try await serviceGroup.run()
             }
 
             // Producer Task
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
-                    producer: producer,
+                    producer: producerService,
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                producer.triggerGracefulShutdown()
-            }
-
-            // Consumer Run Task
-            group.addTask {
-                try await consumer.run()
             }
 
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer.messages {
+                for await messageResult in consumerService.messages {
                     guard case let message = messageResult else {
                         continue
                     }
@@ -131,12 +132,18 @@ final class SwiftKafkaTests: XCTestCase {
                     XCTAssertEqual(testMessages[index].value, consumedMessage.value)
                 }
             }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producerService, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .partition(
@@ -149,36 +156,36 @@ final class SwiftKafkaTests: XCTestCase {
             brokerAddressFamily: .v4
         )
 
-        let consumer = try KafkaConsumer(
+        let consumerService = try KafkaConsumer(
             config: consumerConfig,
             logger: .kafkaTest
         )
 
-        await withThrowingTaskGroup(of: Void.self) { group in
-            // Producer Run Task
+        let serviceGroup = ServiceGroup(
+            services: [producerService, consumerService],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
             group.addTask {
-                try await producer.run()
+                try await serviceGroup.run()
             }
 
             // Producer Task
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
-                    producer: producer,
+                    producer: producerService,
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                producer.triggerGracefulShutdown()
-            }
-
-            // Consumer Run Task
-            group.addTask {
-                try await consumer.run()
             }
 
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer.messages {
+                for await messageResult in consumerService.messages {
                     guard case let message = messageResult else {
                         continue
                     }
@@ -197,12 +204,18 @@ final class SwiftKafkaTests: XCTestCase {
                     XCTAssertEqual(testMessages[index].value, consumedMessage.value)
                 }
             }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 
     func testProduceAndConsumeWithCommitSync() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producerService, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
@@ -212,41 +225,41 @@ final class SwiftKafkaTests: XCTestCase {
             brokerAddressFamily: .v4
         )
 
-        let consumer = try KafkaConsumer(
+        let consumerService = try KafkaConsumer(
             config: consumerConfig,
             logger: .kafkaTest
         )
 
-        await withThrowingTaskGroup(of: Void.self) { group in
-            // Producer Run Task
+        let serviceGroup = ServiceGroup(
+            services: [producerService, consumerService],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Consumer Run Task
             group.addTask {
-                try await producer.run()
+                try await serviceGroup.run()
             }
 
             // Producer Task
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
-                    producer: producer,
+                    producer: producerService,
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                producer.triggerGracefulShutdown()
-            }
-
-            // Consumer Run Task
-            group.addTask {
-                try await consumer.run()
             }
 
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer.messages {
+                for await messageResult in consumerService.messages {
                     guard case let message = messageResult else {
                         continue
                     }
                     consumedMessages.append(message)
-                    try await consumer.commitSync(message)
+                    try await consumerService.commitSync(message)
 
                     if consumedMessages.count >= testMessages.count {
                         break
@@ -261,10 +274,16 @@ final class SwiftKafkaTests: XCTestCase {
                         XCTFail("No messages consumed")
                         return
                     }
-                    try await consumer.commitSync(consumedMessage)
+                    try await consumerService.commitSync(consumedMessage)
                     XCTFail("Invoking commitSync on closed consumer should have failed")
                 } catch {}
             }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 

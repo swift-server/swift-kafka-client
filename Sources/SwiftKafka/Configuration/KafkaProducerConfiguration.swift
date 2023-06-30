@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct KafkaProducerConfiguration: Hashable {
+public struct KafkaProducerConfiguration {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The time between two consecutive polls.
@@ -427,3 +427,11 @@ public struct KafkaProducerConfiguration: Hashable {
         return KafkaSharedConfiguration.SASLMechanism(description: value)
     }
 }
+
+// MARK: - KafkaProducerConfiguration + Hashable
+
+extension KafkaProducerConfiguration: Hashable {}
+
+// MARK: - KafkaProducerConfiguration + Sendable
+
+extension KafkaProducerConfiguration: Sendable {}

@@ -16,12 +16,13 @@ import Crdkafka
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
+import ServiceLifecycle
 
 // MARK: - KafkaConsumerShutDownOnTerminate
 
 /// `NIOAsyncSequenceProducerDelegate` that terminates the shuts the consumer down when
 /// `didTerminate()` is invoked.
-internal struct KafkaConsumerShutdownOnTerminate: @unchecked Sendable { // We can do that because our stored propery is protected by a lock
+internal struct KafkaConsumerShutdownOnTerminate: Sendable {
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
 }
 
@@ -58,7 +59,7 @@ extension KafkaConsumerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
 // MARK: - KafkaConsumerMessages
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
-public struct KafkaConsumerMessages: AsyncSequence {
+public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public typealias Element = KafkaConsumerMessage
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerShutdownOnTerminate>
@@ -81,14 +82,14 @@ public struct KafkaConsumerMessages: AsyncSequence {
 // MARK: - KafkaConsumer
 
 /// Receive messages from the Kafka cluster.
-public final class KafkaConsumer {
+public final class KafkaConsumer: Sendable, Service { // We can do that because our stored propery is protected by a lock
     typealias Producer = NIOAsyncSequenceProducer<
         KafkaConsumerMessage,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaConsumerShutdownOnTerminate
     >
     /// The configuration object of the consumer client.
-    private var config: KafkaConsumerConfiguration
+    private let config: KafkaConsumerConfiguration
     /// A logger.
     private let logger: Logger
     /// State of the `KafkaConsumer`.
@@ -143,10 +144,6 @@ public final class KafkaConsumer {
         }
     }
 
-    deinit {
-        self.triggerGracefulShutdown()
-    }
-
     /// Subscribe to the given list of `topics`.
     /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
     /// - Parameter topics: An array of topic names to subscribe to.
@@ -189,6 +186,14 @@ public final class KafkaConsumer {
     ///
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run() async throws {
+        try await withGracefulShutdownHandler {
+            try await self._run()
+        } onGracefulShutdown: {
+            self.triggerGracefulShutdown()
+        }
+    }
+
+    private func _run() async throws {
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
@@ -275,12 +280,12 @@ public final class KafkaConsumer {
 
 extension KafkaConsumer {
     /// State machine representing the state of the ``KafkaConsumer``.
-    struct StateMachine {
+    struct StateMachine: Sendable {
         /// A logger.
         let logger: Logger
 
         /// The state of the ``StateMachine``.
-        enum State {
+        enum State: @unchecked Sendable { // TODO: remove @unchecked when https://github.com/apple/swift-nio/pull/2459 is available
             /// The state machine has been initialized with init() but is not yet Initialized
             /// using `func initialize()` (required).
             case uninitialized

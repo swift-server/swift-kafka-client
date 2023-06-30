@@ -19,14 +19,20 @@ import Logging
 struct RDKafkaConfig {
     typealias KafkaAcknowledgementResult = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     /// Wraps a Swift closure inside of a class to be able to pass it to `librdkafka` as an `OpaquePointer`.
-    final class CapturedClosures {
-        typealias DeliveryReportClosure = (KafkaAcknowledgementResult?) -> Void
-        var deliveryReportClosure: DeliveryReportClosure?
+    final class CapturedClosures: Sendable {
+        typealias DeliveryReportClosure = @Sendable (KafkaAcknowledgementResult?) -> Void
+        let deliveryReportClosure: DeliveryReportClosure?
 
-        typealias LoggingClosure = (Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void
-        var loggingClosure: LoggingClosure?
+        typealias LoggingClosure = @Sendable (Int32, UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void
+        let loggingClosure: LoggingClosure
 
-        init() {}
+        init(
+            deliveryReportClosure: DeliveryReportClosure?,
+            loggingClosure: @escaping LoggingClosure
+        ) {
+            self.deliveryReportClosure = deliveryReportClosure
+            self.loggingClosure = loggingClosure
+        }
     }
 
     /// Create a new `rd_kafka_conf_t` object in memory and initialize it with the given configuration properties.
@@ -76,7 +82,27 @@ struct RDKafkaConfig {
         deliveryReportCallback: CapturedClosures.DeliveryReportClosure? = nil,
         logger: Logger
     ) -> CapturedClosures {
-        let closures = CapturedClosures()
+        let loggingClosure: RDKafkaConfig.CapturedClosures.LoggingClosure = { level, facility, buffer in
+            // Mapping according to https://en.wikipedia.org/wiki/Syslog
+            switch level {
+            case 0...2: /* Emergency, Alert, Critical */
+                logger.critical(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: facility))
+            case 3: /* Error */
+                logger.error(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: facility))
+            case 4: /* Warning */
+                logger.warning(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: facility))
+            case 5: /* Notice */
+                logger.notice(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: facility))
+            case 6: /* Informational */
+                logger.info(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: facility))
+            default: /* Debug */
+                logger.debug(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: facility))
+            }
+        }
+        let closures = CapturedClosures(
+            deliveryReportClosure: deliveryReportCallback,
+            loggingClosure: loggingClosure
+        )
 
         // Pass the captured closure to the C closure as an opaque object.
         // Unretained pass because the reference that librdkafka holds to the captured closures
@@ -92,7 +118,7 @@ struct RDKafkaConfig {
             Self.setDeliveryReportCallback(configPointer: configPointer, capturedClosures: closures, deliveryReportCallback)
         }
         // Set logging callback
-        Self.setLoggingCallback(configPointer: configPointer, capturedClosures: closures, logger: logger)
+        Self.setLoggingCallback(configPointer: configPointer, capturedClosures: closures)
 
         return closures
     }
@@ -106,8 +132,6 @@ struct RDKafkaConfig {
         capturedClosures: CapturedClosures,
         _ deliveryReportCallback: @escaping RDKafkaConfig.CapturedClosures.DeliveryReportClosure
     ) {
-        capturedClosures.deliveryReportClosure = deliveryReportCallback
-
         // Create a C closure that calls the captured closure
         let callbackWrapper: (
             @convention(c) (OpaquePointer?, UnsafePointer<rd_kafka_message_t>?, UnsafeMutableRawPointer?) -> Void
@@ -136,32 +160,12 @@ struct RDKafkaConfig {
     /// - Parameter logger: Logger instance
     private static func setLoggingCallback(
         configPointer: OpaquePointer,
-        capturedClosures: CapturedClosures,
-        logger: Logger
+        capturedClosures: CapturedClosures
     ) {
-        let loggingClosure: RDKafkaConfig.CapturedClosures.LoggingClosure = { level, fac, buf in
-            // Mapping according to https://en.wikipedia.org/wiki/Syslog
-            switch level {
-            case 0...2: /* Emergency, Alert, Critical */
-                logger.critical(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
-            case 3: /* Error */
-                logger.error(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
-            case 4: /* Warning */
-                logger.warning(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
-            case 5: /* Notice */
-                logger.notice(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
-            case 6: /* Informational */
-                logger.info(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
-            default: /* Debug */
-                logger.debug(Logger.Message(stringLiteral: String(cString: buf)), source: String(cString: fac))
-            }
-        }
-        capturedClosures.loggingClosure = loggingClosure
-
         let loggingWrapper: (
             @convention(c) (OpaquePointer?, Int32, UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> Void
-        ) = { rkKafkaT, level, fac, buf in
-            guard let fac, let buf else {
+        ) = { rkKafkaT, level, facility, buffer in
+            guard let facility, let buffer else {
                 return
             }
 
@@ -170,10 +174,8 @@ struct RDKafkaConfig {
             }
             let opaque = Unmanaged<CapturedClosures>.fromOpaque(opaquePointer).takeUnretainedValue()
 
-            guard let closure = opaque.loggingClosure else {
-                fatalError("Could not resolve logger instance")
-            }
-            closure(level, fac, buf)
+            let closure = opaque.loggingClosure
+            closure(level, facility, buffer)
         }
 
         rd_kafka_conf_set_log_cb(
@@ -181,6 +183,8 @@ struct RDKafkaConfig {
             loggingWrapper
         )
     }
+
+    // MARK: - Helpers
 
     /// Convert an unsafe`rd_kafka_message_t` object to a safe ``KafkaAcknowledgementResult``.
     /// - Parameter messagePointer: An `UnsafePointer` pointing to the `rd_kafka_message_t` object in memory.

@@ -13,23 +13,26 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
+import NIOConcurrencyHelpers
 
 /// Swift class that matches topic names with their respective `rd_kafka_topic_t` handles.
-internal class RDKafkaTopicHandles {
-    private var _internal: [String: OpaquePointer]
+internal final class RDKafkaTopicHandles: Sendable {
+    private let _internal: NIOLockedValueBox<[String: OpaquePointer]>
 
     // Note: we retain the client to ensure it does not get
     // deinitialized before rd_kafka_topic_destroy() is invoked (required)
     private let client: KafkaClient
 
     init(client: KafkaClient) {
-        self._internal = [:]
+        self._internal = NIOLockedValueBox([:])
         self.client = client
     }
 
     deinit {
-        for (_, topicHandle) in self._internal {
-            rd_kafka_topic_destroy(topicHandle)
+        self._internal.withLockedValue { dict in
+            for (_, topicHandle) in dict {
+                rd_kafka_topic_destroy(topicHandle)
+            }
         }
     }
 
@@ -54,26 +57,28 @@ internal class RDKafkaTopicHandles {
         topic: String,
         topicConfig: KafkaTopicConfiguration
     ) throws -> OpaquePointer {
-        if let handle = self._internal[topic] {
-            return handle
-        } else {
-            let rdTopicConf = try RDKafkaTopicConfig.createFrom(topicConfig: topicConfig)
-            let newHandle = self.client.withKafkaHandlePointer { kafkaHandle in
-                rd_kafka_topic_new(
-                    kafkaHandle,
-                    topic,
-                    rdTopicConf
-                )
-                // rd_kafka_topic_new deallocates topic config object
-            }
+        try self._internal.withLockedValue { dict in
+            if let handle = dict[topic] {
+                return handle
+            } else {
+                let rdTopicConf = try RDKafkaTopicConfig.createFrom(topicConfig: topicConfig)
+                let newHandle = self.client.withKafkaHandlePointer { kafkaHandle in
+                    rd_kafka_topic_new(
+                        kafkaHandle,
+                        topic,
+                        rdTopicConf
+                    )
+                    // rd_kafka_topic_new deallocates topic config object
+                }
 
-            guard let newHandle else {
-                // newHandle is nil, so we can retrieve error through rd_kafka_last_error()
-                let error = KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
-                throw error
+                guard let newHandle else {
+                    // newHandle is nil, so we can retrieve error through rd_kafka_last_error()
+                    let error = KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
+                    throw error
+                }
+                dict[topic] = newHandle
+                return newHandle
             }
-            self._internal[topic] = newHandle
-            return newHandle
         }
     }
 }

@@ -23,6 +23,10 @@ Finally, add `import SwiftKafka` to your source code.
 
 ## Usage
 
+`SwiftKafka` should be used within a [`Swift Service Lifecycle`](https://github.com/swift-server/swift-service-lifecycle) 
+[`ServiceGroup`](https://swiftpackageindex.com/swift-server/swift-service-lifecycle/main/documentation/servicelifecycle/servicegroup) for proper startup and shutdown handling.
+Both the `KafkaProducer` and the `KafkaConsumer` implement the [`Service`](https://swiftpackageindex.com/swift-server/swift-service-lifecycle/main/documentation/servicelifecycle/service) protocol.
+
 ### Producer API
 
 The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
@@ -30,21 +34,26 @@ The `send(_:)` method of `KafkaProducer` returns a message-id that can later be 
 ```swift
 let config = KafkaProducerConfiguration(bootstrapServers: ["localhost:9092"])
 
-let (producer, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
+let (producerService, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
-    logger: .kafkaTest // Your logger here
+    logger: logger
 )
 
 await withThrowingTaskGroup(of: Void.self) { group in
 
     // Run Task
     group.addTask {
-        try await producer.run()
+        let serviceGroup = ServiceGroup(
+            services: [producerService],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: logger
+        )
+        try await serviceGroup.run()
     }
 
     // Task receiving acknowledgements
     group.addTask {
-        let messageID = try producer.send(
+        let messageID = try producerService.send(
             KafkaProducerMessage(
                 topic: "topic-name",
                 value: "Hello, World!"
@@ -54,9 +63,6 @@ await withThrowingTaskGroup(of: Void.self) { group in
         for await acknowledgement in acknowledgements {
             // Check if acknowledgement belongs to the sent message
         }
-
-        // Required
-        producer.triggerGracefulShutdown()
     }
 }
 ```
@@ -74,21 +80,26 @@ let config = KafkaConsumerConfiguration(
     bootstrapServers: ["localhost:9092"]
 )
 
-let consumer = try KafkaConsumer(
+let consumerService = try KafkaConsumer(
     config: config,
-    logger: .kafkaTest // Your logger here
+    logger: logger
 )
 
 await withThrowingTaskGroup(of: Void.self) { group in
 
     // Run Task
     group.addTask {
-        try await consumer.run()
+        let serviceGroup = ServiceGroup(
+            services: [consumerService],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: logger
+        )
+        try await serviceGroup.run()
     }
 
     // Task receiving messages
     group.addTask {
-        for await message in consumer.messages {
+        for await message in consumerService.messages {
             // Do something with message
         }
     }
@@ -105,21 +116,26 @@ let config = KafkaConsumerConfiguration(
     bootstrapServers: ["localhost:9092"]
 )
 
-let consumer = try KafkaConsumer(
+let consumerService = try KafkaConsumer(
     config: config,
-    logger: .kafkaTest // Your logger here
+    logger: logger
 )
 
 await withThrowingTaskGroup(of: Void.self) { group in
 
     // Run Task
     group.addTask {
-        try await consumer.run()
+        let serviceGroup = ServiceGroup(
+            services: [consumerService],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: logger
+        )
+        try await serviceGroup.run()
     }
 
     // Task receiving messages
     group.addTask {
-        for await message in consumer.messages {
+        for await message in consumerService.messages {
             // Do something with message
         }
     }
@@ -137,24 +153,29 @@ let config = KafkaConsumerConfiguration(
     bootstrapServers: ["localhost:9092"]
 )
 
-let consumer = try KafkaConsumer(
+let consumerService = try KafkaConsumer(
     config: config,
-    logger: .kafkaTest // Your logger here
+    logger: logger
 )
 
 await withThrowingTaskGroup(of: Void.self) { group in
 
     // Run Task
     group.addTask {
-        try await consumer.run()
+        let serviceGroup = ServiceGroup(
+            services: [consumerService],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: logger
+        )
+        try await serviceGroup.run()
     }
 
     // Task receiving messages
     group.addTask {
-        for await message in consumer.messages {
+        for await message in consumerService.messages {
             // Do something with message
             // ...
-            try await consumer.commitSync(message)
+            try await consumerService.commitSync(message)
         }
     }
 }
