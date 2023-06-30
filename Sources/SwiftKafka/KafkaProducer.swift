@@ -60,7 +60,7 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
 }
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``shutdownGracefully()`` when the ``KafkaProducer`` is not used anymore.
+/// Please make sure to explicitly call ``triggerGracefulShutdown()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public final class KafkaProducer {
@@ -198,7 +198,7 @@ public final class KafkaProducer {
     ///
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
     /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
-    public func shutdownGracefully() {
+    public func triggerGracefulShutdown() { // TODO(felix): make internal once we adapt swift-service-lifecycle
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
@@ -269,7 +269,7 @@ extension KafkaProducer {
                 source: Producer.Source?,
                 topicHandles: RDKafkaTopicHandles
             )
-            /// ``KafkaProducer/shutdownGracefully()`` was invoked so we are flushing
+            /// ``KafkaProducer/triggerGracefulShutdown()`` was invoked so we are flushing
             /// any messages that wait to be sent and serve any remaining queued callbacks.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
@@ -368,7 +368,9 @@ extension KafkaProducer {
                     newMessageID: newMessageID,
                     topicHandles: topicHandles
                 )
-            case .flushing, .finished:
+            case .flushing:
+                throw KafkaError.connectionClosed(reason: "Producer in the process of flushing and shutting down")
+            case .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
             }
         }

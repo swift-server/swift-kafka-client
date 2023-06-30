@@ -56,7 +56,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
         }
 
         // Required
-        producer.shutdownGracefully()
+        producer.triggerGracefulShutdown()
     }
 }
 ```
