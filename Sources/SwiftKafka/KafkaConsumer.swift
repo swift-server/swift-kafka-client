@@ -40,10 +40,10 @@ extension ShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 
     func didTerminate() {
-        // Duplicate of _shutdownGracefully
+        // Duplicate of _triggerGracefulShutdown
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
-        case .shutdownGracefullyAndFinishSource(let client, let source):
+        case .triggerGracefulShutdownAndFinishSource(let client, let source):
             source.finish()
 
             do {
@@ -151,7 +151,7 @@ public final class KafkaConsumer {
     }
 
     deinit {
-        self.shutdownGracefully()
+        self.triggerGracefulShutdown()
     }
 
     /// Subscribe to the given list of `topics`.
@@ -201,15 +201,19 @@ public final class KafkaConsumer {
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source):
                 do {
-                    guard let message = try client.consumerPoll() else {
-                        break
+                    if let message = try client.consumerPoll() {
+                        // We do not support back pressure, we can ignore the yield result
+                        _ = source.yield(message)
                     }
-                    // We do not support back pressure, we can ignore the yield result
-                    _ = source.yield(message)
                 } catch {
                     source.finish()
                     throw error
                 }
+                try await Task.sleep(for: self.config.pollInterval)
+            case .pollUntilClosed(let client):
+                // Ignore poll result, we are closing down and just polling to commit
+                // outstanding consumer state
+                _ = try client.consumerPoll()
                 try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoop:
                 return
@@ -222,18 +226,8 @@ public final class KafkaConsumer {
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
+    /// - Important: This method does not support `Task` cancellation.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            do {
-                try self._commitSync(message) // Blocks until commiting the offset is done
-                continuation.resume()
-            } catch {
-                continuation.resume(throwing: error)
-            }
-        }
-    }
-
-    private func _commitSync(_ message: KafkaConsumerMessage) throws {
         let action = self.stateMachine.withLockedValue { $0.commitSync() }
         switch action {
         case .throwClosedError:
@@ -243,29 +237,7 @@ public final class KafkaConsumer {
                 throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
             }
 
-            // The offset committed is always the offset of the next requested message.
-            // Thus, we increase the offset of the current message by one before committing it.
-            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-            let changesList = RDKafkaTopicPartitionList()
-            changesList.setOffset(
-                topic: message.topic,
-                partition: message.partition,
-                offset: Int64(message.offset + 1)
-            )
-
-            let result = client.withKafkaHandlePointer { handle in
-                changesList.withListPointer { listPointer in
-                    rd_kafka_commit(
-                        handle,
-                        listPointer,
-                        0
-                    ) // Blocks until commiting the offset is done
-                    // -> Will be resolved by: https://github.com/swift-server/swift-kafka-gsoc/pull/68
-                }
-            }
-            guard result == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                throw KafkaError.rdKafkaError(wrapping: result)
-            }
+            try await client.commitSync(message)
         }
     }
 
@@ -273,11 +245,11 @@ public final class KafkaConsumer {
     ///
     /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
     /// will already shut down when consumption of the ``KafkaConsumerMessages`` has ended.
-    private func shutdownGracefully() {
+    private func triggerGracefulShutdown() {
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
-        case .shutdownGracefullyAndFinishSource(let client, let source):
-            self._shutdownGracefullyAndFinishSource(
+        case .triggerGracefulShutdownAndFinishSource(let client, let source):
+            self._triggerGracefulShutdownAndFinishSource(
                 client: client,
                 source: source,
                 logger: self.logger
@@ -287,7 +259,7 @@ public final class KafkaConsumer {
         }
     }
 
-    private func _shutdownGracefullyAndFinishSource(
+    private func _triggerGracefulShutdownAndFinishSource(
         client: KafkaClient,
         source: Producer.Source,
         logger: Logger
@@ -336,7 +308,12 @@ extension KafkaConsumer {
                 client: KafkaClient,
                 source: Producer.Source
             )
-            /// The ``KafkaConsumer`` has been closed.
+            /// The ``KafkaConsumer/triggerGracefulShutdown()`` has been invoked.
+            /// We are now in the process of commiting our last state to the broker.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case finishing(client: KafkaClient)
+            /// The ``KafkaConsumer`` is closed.
             case finished
         }
 
@@ -368,6 +345,11 @@ extension KafkaConsumer {
                 client: KafkaClient,
                 source: Producer.Source
             )
+            /// The ``KafkaConsumer`` is in the process of closing down, but still needs to poll
+            /// to commit its state to the broker.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case pollUntilClosed(client: KafkaClient)
             /// Terminate the poll loop.
             case terminatePollLoop
         }
@@ -376,7 +358,7 @@ extension KafkaConsumer {
         /// - Returns: The next action to be taken when wanting to poll, or `nil` if there is no action to be taken.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        func nextPollLoopAction() -> PollLoopAction {
+        mutating func nextPollLoopAction() -> PollLoopAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
@@ -384,6 +366,13 @@ extension KafkaConsumer {
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
             case .consuming(let client, let source):
                 return .pollForAndYieldMessage(client: client, source: source)
+            case .finishing(let client):
+                if client.isConsumerClosed {
+                    self.state = .finished
+                    return .terminatePollLoop
+                } else {
+                    return .pollUntilClosed(client: client)
+                }
             case .finished:
                 return .terminatePollLoop
             }
@@ -409,7 +398,7 @@ extension KafkaConsumer {
                     source: source
                 )
                 return .setUpConnection(client: client)
-            case .consuming, .finished:
+            case .consuming, .finishing, .finished:
                 fatalError("\(#function) should only be invoked upon initialization of KafkaConsumer")
             }
         }
@@ -438,7 +427,7 @@ extension KafkaConsumer {
                 fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
             case .consuming(let client, _):
                 return .commitSync(client: client)
-            case .finished:
+            case .finishing, .finished:
                 return .throwClosedError
             }
         }
@@ -449,7 +438,7 @@ extension KafkaConsumer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case shutdownGracefullyAndFinishSource(
+            case triggerGracefulShutdownAndFinishSource(
                 client: KafkaClient,
                 source: Producer.Source
             )
@@ -466,12 +455,12 @@ extension KafkaConsumer {
             case .initializing:
                 fatalError("subscribe() / assign() should have been invoked before \(#function)")
             case .consuming(let client, let source):
-                self.state = .finished
-                return .shutdownGracefullyAndFinishSource(
+                self.state = .finishing(client: client)
+                return .triggerGracefulShutdownAndFinishSource(
                     client: client,
                     source: source
                 )
-            case .finished:
+            case .finishing, .finished:
                 return nil
             }
         }

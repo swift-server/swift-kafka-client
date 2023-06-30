@@ -78,7 +78,9 @@ struct RDKafkaConfig {
     ) -> CapturedClosures {
         let closures = CapturedClosures()
 
-        // Pass the the reference to Opaque as an opaque object
+        // Pass the captured closure to the C closure as an opaque object.
+        // Unretained pass because the reference that librdkafka holds to the captured closures
+        // should not be counted in ARC as this can lead to memory leaks.
         let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(closures).toOpaque()
         rd_kafka_conf_set_opaque(
             configPointer,
