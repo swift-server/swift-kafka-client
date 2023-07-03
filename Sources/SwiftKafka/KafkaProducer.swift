@@ -14,16 +14,40 @@
 
 import Crdkafka
 import Logging
+import NIOConcurrencyHelpers
+import NIOCore
+
+// MARK: - KafkaProducerShutdownOnTerminate
+
+/// `NIOAsyncSequenceProducerDelegate` that terminates the shuts the producer down when
+/// `didTerminate()` is invoked.
+internal struct KafkaProducerShutdownOnTerminate: @unchecked Sendable { // We can do that because our stored propery is protected by a lock
+    let stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>
+}
+
+extension KafkaProducerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
+    func produceMore() {
+        // No back pressure
+        return
+    }
+
+    func didTerminate() {
+        self.stateMachine.withLockedValue { $0.finish() }
+    }
+}
+
+// MARK: - KafkaMessageAcknowledgements
 
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct KafkaMessageAcknowledgements: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
-    typealias WrappedSequence = AsyncStream<Element>
+    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerShutdownOnTerminate>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
     public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
-        var wrappedIterator: AsyncStream<Element>.AsyncIterator
+        var wrappedIterator: WrappedSequence.AsyncIterator
 
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
@@ -36,59 +60,39 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
 }
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``shutdownGracefully(timeout:)`` when the ``KafkaProducer`` is not used anymore.
+/// Please make sure to explicitly call ``triggerGracefulShutdown()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
-public actor KafkaProducer {
-    /// States that the ``KafkaProducer`` can have.
-    private enum State {
-        /// The ``KafkaProducer`` has started and is ready to use.
-        case started
-        /// ``KafkaProducer/shutdownGracefully()`` has been invoked and the ``KafkaProducer``
-        /// is in the process of receiving all outstanding acknowlegements and shutting down.
-        case shuttingDown
-        /// The ``KafkaProducer`` has been shut down and cannot be used anymore.
-        case shutDown
-    }
+public final class KafkaProducer {
+    typealias Producer = NIOAsyncSequenceProducer<
+        Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>,
+        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
+        KafkaProducerShutdownOnTerminate
+    >
 
     /// State of the ``KafkaProducer``.
-    private var state: State
+    private let stateMachine: NIOLockedValueBox<StateMachine>
 
-    /// Counter that is used to assign each message a unique ID.
-    /// Every time a new message is sent to the Kafka cluster, the counter is increased by one.
-    private var messageIDCounter: UInt = 0
     /// The configuration object of the producer client.
-    private var config: KafkaProducerConfiguration
-    /// The ``TopicConfiguration`` used for newly created topics.
+    private let config: KafkaProducerConfiguration
+    /// Topic configuration that is used when a new topic has to be created by the producer.
     private let topicConfig: KafkaTopicConfiguration
-    /// A logger.
-    private let logger: Logger
-    /// Dictionary containing all topic names with their respective `rd_kafka_topic_t` pointer.
-    private var topicHandles: [String: OpaquePointer]
-
-    /// Used for handling the connection to the Kafka cluster.
-    private let client: KafkaClient
 
     // Private initializer, use factory methods to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
     ///
-    /// - Parameter client: The ``KafkaClient`` instance associated with the ``KafkaProducer``.
+    /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.///
     /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
-    /// - Parameter logger: A logger.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
-        client: KafkaClient,
+        stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
         config: KafkaProducerConfiguration,
-        topicConfig: KafkaTopicConfiguration,
-        logger: Logger
-    ) async throws {
-        self.client = client
+        topicConfig: KafkaTopicConfiguration
+    ) throws {
+        self.stateMachine = stateMachine
         self.config = config
         self.topicConfig = topicConfig
-        self.topicHandles = [:]
-        self.logger = logger
-        self.state = .started
     }
 
     /// Initialize a new ``KafkaProducer``.
@@ -104,7 +108,9 @@ public actor KafkaProducer {
         config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
-    ) async throws -> KafkaProducer {
+    ) throws -> KafkaProducer {
+        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
+
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
@@ -114,12 +120,18 @@ public actor KafkaProducer {
             logger: logger
         )
 
-        let producer = try await KafkaProducer(
-            client: client,
+        let producer = try KafkaProducer(
+            stateMachine: stateMachine,
             config: config,
-            topicConfig: topicConfig,
-            logger: logger
+            topicConfig: topicConfig
         )
+
+        stateMachine.withLockedValue {
+            $0.initialize(
+                client: client,
+                source: nil
+            )
+        }
 
         return producer
     }
@@ -140,41 +152,45 @@ public actor KafkaProducer {
         config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
-    ) async throws -> (KafkaProducer, KafkaMessageAcknowledgements) {
-        var streamContinuation: AsyncStream<Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>>.Continuation?
-        let stream = AsyncStream { continuation in
-            streamContinuation = continuation
-        }
+    ) throws -> (KafkaProducer, KafkaMessageAcknowledgements) {
+        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
+
+        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+            elementType: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>.self,
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            delegate: KafkaProducerShutdownOnTerminate(stateMachine: stateMachine)
+        )
+        let source = sourceAndSequence.source
 
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            deliveryReportCallback: { [logger, streamContinuation] messageResult in
+            deliveryReportCallback: { [logger, source] messageResult in
                 guard let messageResult else {
                     logger.error("Could not resolve acknowledged message")
                     return
                 }
 
                 // Ignore YieldResult as we don't support back pressure in KafkaProducer
-                streamContinuation?.yield(messageResult)
+                _ = source.yield(messageResult)
             },
             logger: logger
         )
 
-        let producer = try await KafkaProducer(
-            client: client,
+        let producer = try KafkaProducer(
+            stateMachine: stateMachine,
             config: config,
-            topicConfig: topicConfig,
-            logger: logger
+            topicConfig: topicConfig
         )
 
-        streamContinuation?.onTermination = { [producer] _ in
-            Task {
-                await producer.shutdownGracefully()
-            }
+        stateMachine.withLockedValue {
+            $0.initialize(
+                client: client,
+                source: source
+            )
         }
 
-        let acknowlegementsSequence = KafkaMessageAcknowledgements(wrappedSequence: stream)
+        let acknowlegementsSequence = KafkaMessageAcknowledgements(wrappedSequence: sourceAndSequence.sequence)
         return (producer, acknowlegementsSequence)
     }
 
@@ -182,40 +198,26 @@ public actor KafkaProducer {
     ///
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
     /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
-    /// - Parameter timeout: Maximum amount of milliseconds this method waits for any outstanding messages to be sent.
-    public func shutdownGracefully(timeout: Int32 = 10000) async {
-        switch self.state {
-        case .started:
-            self.state = .shuttingDown
-            await self._shutdownGracefully(timeout: timeout)
-        case .shuttingDown, .shutDown:
-            return
-        }
-    }
-
-    private func _shutdownGracefully(timeout: Int32) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            // Wait `timeout` seconds for outstanding messages to be sent and callbacks to be called
-            self.client.withKafkaHandlePointer { handle in
-                rd_kafka_flush(handle, timeout)
-                continuation.resume()
-            }
-        }
-
-        for (_, topicHandle) in self.topicHandles {
-            rd_kafka_topic_destroy(topicHandle)
-        }
-
-        self.state = .shutDown
+    public func triggerGracefulShutdown() { // TODO(felix): make internal once we adapt swift-service-lifecycle
+        self.stateMachine.withLockedValue { $0.finish() }
     }
 
     /// Start polling Kafka for acknowledged messages.
     ///
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run() async throws {
-        while self.state == .started {
-            self.client.poll(timeout: 0)
-            try await Task.sleep(for: self.config.pollInterval)
+        while !Task.isCancelled {
+            let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
+            switch nextAction {
+            case .poll(let client):
+                client.poll(timeout: 0)
+                try await Task.sleep(for: self.config.pollInterval)
+            case .terminatePollLoopAndFinishSource(let source):
+                source?.finish()
+                return
+            case .terminatePollLoop:
+                return
+            }
         }
     }
 
@@ -228,68 +230,163 @@ public actor KafkaProducer {
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
     public func send(_ message: KafkaProducerMessage) throws -> KafkaProducerMessageID {
-        switch self.state {
-        case .started:
-            return try self._send(message)
-        case .shuttingDown, .shutDown:
-            throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
+        let action = try self.stateMachine.withLockedValue { try $0.send() }
+        switch action {
+        case .send(let client, let newMessageID, let topicHandles):
+            try client.produce(
+                message: message,
+                newMessageID: newMessageID,
+                topicConfig: self.topicConfig,
+                topicHandles: topicHandles
+            )
+            return KafkaProducerMessageID(rawValue: newMessageID)
         }
     }
+}
 
-    private func _send(_ message: KafkaProducerMessage) throws -> KafkaProducerMessageID {
-        let topicHandle = try self.createTopicHandleIfNeeded(topic: message.topic)
+// MARK: - KafkaProducer + StateMachine
 
-        let keyBytes: [UInt8]?
-        if var key = message.key {
-            keyBytes = key.readBytes(length: key.readableBytes)
-        } else {
-            keyBytes = nil
+extension KafkaProducer {
+    /// State machine representing the state of the ``KafkaProducer``.
+    struct StateMachine {
+        /// A logger.
+        let logger: Logger
+
+        /// The state of the ``StateMachine``.
+        enum State {
+            /// The state machine has been initialized with init() but is not yet Initialized
+            /// using `func initialize()` (required).
+            case uninitialized
+            /// The ``KafkaProducer`` has started and is ready to use.
+            ///
+            /// - Parameter messageIDCounter:Used to incrementally assign unique IDs to messages.
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
+            case started(
+                client: KafkaClient,
+                messageIDCounter: UInt,
+                source: Producer.Source?,
+                topicHandles: RDKafkaTopicHandles
+            )
+            /// ``KafkaProducer/triggerGracefulShutdown()`` was invoked so we are flushing
+            /// any messages that wait to be sent and serve any remaining queued callbacks.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case flushing(
+                client: KafkaClient,
+                source: Producer.Source?
+            )
+            /// The ``KafkaProducer`` has been shut down and cannot be used anymore.
+            case finished
         }
 
-        self.messageIDCounter += 1
+        /// The current state of the StateMachine.
+        var state: State = .uninitialized
 
-        let responseCode = message.value.withUnsafeReadableBytes { valueBuffer in
-
-            // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
-            // Returns 0 on success, error code otherwise.
-            return rd_kafka_produce(
-                topicHandle,
-                message.partition.rawValue,
-                RD_KAFKA_MSG_F_COPY,
-                UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                valueBuffer.count,
-                keyBytes,
-                keyBytes?.count ?? 0,
-                UnsafeMutableRawPointer(bitPattern: self.messageIDCounter)
+        /// Delayed initialization of `StateMachine` as the `source` is not yet available
+        /// when the normal initialization occurs.
+        mutating func initialize(
+            client: KafkaClient,
+            source: Producer.Source?
+        ) {
+            guard case .uninitialized = self.state else {
+                fatalError("\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)")
+            }
+            self.state = .started(
+                client: client,
+                messageIDCounter: 0,
+                source: source,
+                topicHandles: RDKafkaTopicHandles(client: client)
             )
         }
 
-        guard responseCode == 0 else {
-            throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
+        /// Action to be taken when wanting to poll.
+        enum PollLoopAction {
+            /// Poll client for new consumer messages.
+            case poll(client: KafkaClient)
+            /// Terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
+            ///
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case terminatePollLoopAndFinishSource(source: Producer.Source?)
+            /// Terminate the poll loop.
+            case terminatePollLoop
         }
 
-        return KafkaProducerMessageID(rawValue: self.messageIDCounter)
-    }
+        /// Returns the next action to be taken when wanting to poll.
+        /// - Returns: The next action to be taken, either polling or terminating the poll loop.
+        ///
+        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        mutating func nextPollLoopAction() -> PollLoopAction {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .started(let client, _, _, _):
+                return .poll(client: client)
+            case .flushing(let client, let source):
+                if client.outgoingQueueSize > 0 {
+                    return .poll(client: client)
+                } else {
+                    self.state = .finished
+                    return .terminatePollLoopAndFinishSource(source: source)
+                }
+            case .finished:
+                return .terminatePollLoop
+            }
+        }
 
-    /// Check `topicHandles` for a handle matching the topic name and create a new handle if needed.
-    /// - Parameter topic: The name of the topic that is addressed.
-    private func createTopicHandleIfNeeded(topic: String) throws -> OpaquePointer? {
-        if let handle = self.topicHandles[topic] {
-            return handle
-        } else {
-            let newHandle = try self.client.withKafkaHandlePointer { handle in
-                let rdTopicConf = try RDKafkaTopicConfig.createFrom(topicConfig: self.topicConfig)
-                return rd_kafka_topic_new(
-                    handle,
-                    topic,
-                    rdTopicConf
+        /// Action to be taken when wanting to send a message.
+        enum SendAction {
+            /// Send the message.
+            ///
+            /// - Important: `newMessageID` is the new message ID assigned to the message to be sent.
+            case send(
+                client: KafkaClient,
+                newMessageID: UInt,
+                topicHandles: RDKafkaTopicHandles
+            )
+        }
+
+        /// Get action to be taken when wanting to send a message.
+        ///
+        /// - Returns: The action to be taken.
+        mutating func send() throws -> SendAction {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .started(let client, let messageIDCounter, let source, let topicHandles):
+                let newMessageID = messageIDCounter + 1
+                self.state = .started(
+                    client: client,
+                    messageIDCounter: newMessageID,
+                    source: source,
+                    topicHandles: topicHandles
                 )
-                // rd_kafka_topic_new deallocates topic config object
+                return .send(
+                    client: client,
+                    newMessageID: newMessageID,
+                    topicHandles: topicHandles
+                )
+            case .flushing:
+                throw KafkaError.connectionClosed(reason: "Producer in the process of flushing and shutting down")
+            case .finished:
+                throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
             }
-            if newHandle != nil {
-                self.topicHandles[topic] = newHandle
+        }
+
+        /// Get action to be taken when wanting to do close the producer.
+        ///
+        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        mutating func finish() {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .started(let client, _, let source, _):
+                self.state = .flushing(client: client, source: source)
+            case .flushing, .finished:
+                break
             }
-            return newHandle
         }
     }
 }

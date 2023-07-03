@@ -42,6 +42,47 @@ final class KafkaClient {
         rd_kafka_destroy(kafkaHandle)
     }
 
+    /// Produce a message to the Kafka cluster.
+    ///
+    /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
+    /// - Parameter newMessageID: ID that was assigned to the `message`.
+    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
+    func produce(
+        message: KafkaProducerMessage,
+        newMessageID: UInt,
+        topicConfig: KafkaTopicConfiguration,
+        topicHandles: RDKafkaTopicHandles
+    ) throws {
+        let keyBytes: [UInt8]?
+        if var key = message.key {
+            keyBytes = key.readBytes(length: key.readableBytes)
+        } else {
+            keyBytes = nil
+        }
+
+        let responseCode = try message.value.withUnsafeReadableBytes { valueBuffer in
+            return try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfig: topicConfig) { topicHandle in
+                // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
+                // Returns 0 on success, error code otherwise.
+                return rd_kafka_produce(
+                    topicHandle,
+                    message.partition.rawValue,
+                    RD_KAFKA_MSG_F_COPY,
+                    UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
+                    valueBuffer.count,
+                    keyBytes,
+                    keyBytes?.count ?? 0,
+                    UnsafeMutableRawPointer(bitPattern: newMessageID)
+                )
+            }
+        }
+
+        guard responseCode == 0 else {
+            throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
+        }
+    }
+
     /// Polls the Kafka client for events.
     ///
     /// Events will cause application-provided callbacks to be called.
@@ -210,8 +251,17 @@ final class KafkaClient {
         }
     }
 
+    /// Returns `true` if the underlying `librdkafka` consumer is closed.
     var isConsumerClosed: Bool {
         rd_kafka_consumer_closed(self.kafkaHandle) == 1
+    }
+
+    /// Returns the current out queue length.
+    ///
+    /// This means the number of producer messages that wait to be sent + the number of any
+    /// callbacks that are waiting to be executed by invoking `rd_kafka_poll`.
+    var outgoingQueueSize: Int32 {
+        return rd_kafka_outq_len(self.kafkaHandle)
     }
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.

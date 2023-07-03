@@ -30,7 +30,7 @@ The `send(_:)` method of `KafkaProducer` returns a message-id that can later be 
 ```swift
 let config = KafkaProducerConfiguration(bootstrapServers: ["localhost:9092"])
 
-let (producer, acknowledgements) = try await KafkaProducer.makeProducerWithAcknowledgements(
+let (producer, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
     logger: .kafkaTest // Your logger here
 )
@@ -44,7 +44,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving acknowledgements
     group.addTask {
-        let messageID = try await producer.send(
+        let messageID = try producer.send(
             KafkaProducerMessage(
                 topic: "topic-name",
                 value: "Hello, World!"
@@ -56,7 +56,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
         }
 
         // Required
-        await producer.shutdownGracefully()
+        producer.triggerGracefulShutdown()
     }
 }
 ```
