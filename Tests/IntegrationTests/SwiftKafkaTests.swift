@@ -267,16 +267,6 @@ final class SwiftKafkaTests: XCTestCase {
                 }
 
                 XCTAssertEqual(testMessages.count, consumedMessages.count)
-
-                // Additionally test that commit does not work on closed consumer
-                do {
-                    guard let consumedMessage = consumedMessages.first else {
-                        XCTFail("No messages consumed")
-                        return
-                    }
-                    try await consumerService.commitSync(consumedMessage)
-                    XCTFail("Invoking commitSync on closed consumer should have failed")
-                } catch {}
             }
 
             // Wait for Producer Task and Consumer Task to complete

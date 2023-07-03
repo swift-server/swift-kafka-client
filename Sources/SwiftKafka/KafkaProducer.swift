@@ -18,33 +18,13 @@ import NIOConcurrencyHelpers
 import NIOCore
 import ServiceLifecycle
 
-// MARK: - KafkaProducerShutdownOnTerminate
-
-/// `NIOAsyncSequenceProducerDelegate` that terminates the shuts the producer down when
-/// `didTerminate()` is invoked.
-internal struct KafkaProducerShutdownOnTerminate: Sendable {
-    let stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>
-}
-
-extension KafkaProducerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
-    func produceMore() {
-        // No back pressure
-        return
-    }
-
-    func didTerminate() {
-//        self.stateMachine.withLockedValue { $0.finish() } // TODO: remove shutdownOnTerminate entirely, document in gh -> shutting down service early is unexpected error -> make sure to still poll but ignore results?
-        // TODO: also update documentation accordingly
-    }
-}
-
 // MARK: - KafkaMessageAcknowledgements
 
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct KafkaMessageAcknowledgements: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerShutdownOnTerminate>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, NoDelegate>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
@@ -61,6 +41,8 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
     }
 }
 
+// MARK: - KafkaProducer
+
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``triggerGracefulShutdown()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
@@ -69,7 +51,7 @@ public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
         Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        KafkaProducerShutdownOnTerminate
+        NoDelegate
     >
 
     /// State of the ``KafkaProducer``.
@@ -160,7 +142,7 @@ public final class KafkaProducer: Service, Sendable {
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: KafkaProducerShutdownOnTerminate(stateMachine: stateMachine)
+            delegate: NoDelegate()
         )
         let source = sourceAndSequence.source
 

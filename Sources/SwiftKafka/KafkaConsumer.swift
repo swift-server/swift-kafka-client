@@ -18,51 +18,13 @@ import NIOConcurrencyHelpers
 import NIOCore
 import ServiceLifecycle
 
-// MARK: - KafkaConsumerShutDownOnTerminate
-
-/// `NIOAsyncSequenceProducerDelegate` that terminates the shuts the consumer down when
-/// `didTerminate()` is invoked.
-internal struct KafkaConsumerShutdownOnTerminate: Sendable {
-    let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
-}
-
-extension KafkaConsumerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
-    func produceMore() {
-        // No back pressure
-        return
-    }
-
-    func didTerminate() {
-        // Duplicate of _triggerGracefulShutdown
-        let action = self.stateMachine.withLockedValue { $0.finish() }
-        switch action {
-        case .triggerGracefulShutdownAndFinishSource(let client, let source):
-            source.finish()
-
-            do {
-                try client.consumerClose()
-            } catch {
-                self.stateMachine.withLockedValue {
-                    if let error = error as? KafkaError {
-                        $0.logger.error("Closing KafkaConsumer failed: \(error.description)")
-                    } else {
-                        $0.logger.error("Caught unknown error: \(error)")
-                    }
-                }
-            }
-        case .none:
-            return
-        }
-    }
-}
-
 // MARK: - KafkaConsumerMessages
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public typealias Element = KafkaConsumerMessage
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerShutdownOnTerminate>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, NoDelegate>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
@@ -86,7 +48,7 @@ public final class KafkaConsumer: Sendable, Service { // We can do that because 
     typealias Producer = NIOAsyncSequenceProducer<
         KafkaConsumerMessage,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        KafkaConsumerShutdownOnTerminate
+        NoDelegate
     >
     /// The configuration object of the consumer client.
     private let config: KafkaConsumerConfiguration
@@ -118,7 +80,7 @@ public final class KafkaConsumer: Sendable, Service { // We can do that because 
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerMessage.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: KafkaConsumerShutdownOnTerminate(stateMachine: self.stateMachine)
+            delegate: NoDelegate()
         )
 
         self.messages = KafkaConsumerMessages(
