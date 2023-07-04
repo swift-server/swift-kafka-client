@@ -34,7 +34,7 @@ The `send(_:)` method of `KafkaProducer` returns a message-id that can later be 
 ```swift
 let config = KafkaProducerConfiguration(bootstrapServers: ["localhost:9092"])
 
-let (producerService, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
+let (producer, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
     logger: logger
 )
@@ -44,7 +44,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     // Run Task
     group.addTask {
         let serviceGroup = ServiceGroup(
-            services: [producerService],
+            services: [producer],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: logger
         )
@@ -53,7 +53,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving acknowledgements
     group.addTask {
-        let messageID = try producerService.send(
+        let messageID = try producer.send(
             KafkaProducerMessage(
                 topic: "topic-name",
                 value: "Hello, World!"
@@ -80,7 +80,7 @@ let config = KafkaConsumerConfiguration(
     bootstrapServers: ["localhost:9092"]
 )
 
-let consumerService = try KafkaConsumer(
+let consumer = try KafkaConsumer(
     config: config,
     logger: logger
 )
@@ -90,7 +90,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     // Run Task
     group.addTask {
         let serviceGroup = ServiceGroup(
-            services: [consumerService],
+            services: [consumer],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: logger
         )
@@ -99,7 +99,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await message in consumerService.messages {
+        for await message in consumer.messages {
             // Do something with message
         }
     }
@@ -116,7 +116,7 @@ let config = KafkaConsumerConfiguration(
     bootstrapServers: ["localhost:9092"]
 )
 
-let consumerService = try KafkaConsumer(
+let consumer = try KafkaConsumer(
     config: config,
     logger: logger
 )
@@ -126,7 +126,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     // Run Task
     group.addTask {
         let serviceGroup = ServiceGroup(
-            services: [consumerService],
+            services: [consumer],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: logger
         )
@@ -135,7 +135,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await message in consumerService.messages {
+        for await message in consumer.messages {
             // Do something with message
         }
     }
@@ -153,7 +153,7 @@ let config = KafkaConsumerConfiguration(
     bootstrapServers: ["localhost:9092"]
 )
 
-let consumerService = try KafkaConsumer(
+let consumer = try KafkaConsumer(
     config: config,
     logger: logger
 )
@@ -163,7 +163,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     // Run Task
     group.addTask {
         let serviceGroup = ServiceGroup(
-            services: [consumerService],
+            services: [consumer],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: logger
         )
@@ -172,10 +172,10 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await message in consumerService.messages {
+        for await message in consumer.messages {
             // Do something with message
             // ...
-            try await consumerService.commitSync(message)
+            try await consumer.commitSync(message)
         }
     }
 }

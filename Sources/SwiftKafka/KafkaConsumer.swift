@@ -44,7 +44,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 // MARK: - KafkaConsumer
 
 /// Receive messages from the Kafka cluster.
-public final class KafkaConsumer: Sendable, Service { // We can do that because our stored propery is protected by a lock
+public final class KafkaConsumer: Sendable, Service {
     typealias Producer = NIOAsyncSequenceProducer<
         KafkaConsumerMessage,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,

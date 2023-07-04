@@ -53,10 +53,10 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSend() async throws {
-        let (producerService, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
-            services: [producerService],
+            services: [producer],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: .kafkaTest
         )
@@ -76,7 +76,7 @@ final class KafkaProducerTests: XCTestCase {
                     value: "Hello, World!"
                 )
 
-                let messageID = try producerService.send(message)
+                let messageID = try producer.send(message)
 
                 for await messageResult in acks {
                     guard case .success(let acknowledgedMessage) = messageResult else {
@@ -100,10 +100,10 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendEmptyMessage() async throws {
-        let (producerService, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
-            services: [producerService],
+            services: [producer],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: .kafkaTest
         )
@@ -122,7 +122,7 @@ final class KafkaProducerTests: XCTestCase {
                     value: ByteBuffer()
                 )
 
-                let messageID = try producerService.send(message)
+                let messageID = try producer.send(message)
 
                 for await messageResult in acks {
                     guard case .success(let acknowledgedMessage) = messageResult else {
@@ -146,10 +146,10 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendTwoTopics() async throws {
-        let (producerService, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
-            services: [producerService],
+            services: [producer],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: .kafkaTest
         )
@@ -175,8 +175,8 @@ final class KafkaProducerTests: XCTestCase {
 
                 var messageIDs = Set<KafkaProducerMessageID>()
 
-                messageIDs.insert(try producerService.send(message1))
-                messageIDs.insert(try producerService.send(message2))
+                messageIDs.insert(try producer.send(message1))
+                messageIDs.insert(try producer.send(message2))
 
                 var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
@@ -211,17 +211,17 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testNoMemoryLeakAfterShutdown() async throws {
-        var producerService: KafkaProducer?
+        var producer: KafkaProducer?
         var acks: KafkaMessageAcknowledgements?
-        (producerService, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
         _ = acks
 
-        weak var producerServiceCopy = producerService
+        weak var producerCopy = producer
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Initialize serviceGroup here so it gets dereferenced when this closure is complete
             let serviceGroup = ServiceGroup(
-                services: [producerService!],
+                services: [producer!],
                 configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
                 logger: .kafkaTest
             )
@@ -234,10 +234,10 @@ final class KafkaProducerTests: XCTestCase {
             await serviceGroup.triggerGracefulShutdown()
         }
 
-        producerService = nil
+        producer = nil
         // Make sure to terminate the AsyncSequence
         acks = nil
 
-        XCTAssertNil(producerServiceCopy)
+        XCTAssertNil(producerCopy)
     }
 }
