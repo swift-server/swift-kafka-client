@@ -17,7 +17,7 @@ import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
-final class KafkaClient {
+final class KafkaClient: Sendable {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 

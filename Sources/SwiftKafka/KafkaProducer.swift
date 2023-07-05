@@ -16,25 +16,7 @@ import Crdkafka
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
-
-// MARK: - KafkaProducerShutdownOnTerminate
-
-/// `NIOAsyncSequenceProducerDelegate` that terminates the shuts the producer down when
-/// `didTerminate()` is invoked.
-internal struct KafkaProducerShutdownOnTerminate: @unchecked Sendable { // We can do that because our stored propery is protected by a lock
-    let stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>
-}
-
-extension KafkaProducerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
-    func produceMore() {
-        // No back pressure
-        return
-    }
-
-    func didTerminate() {
-        self.stateMachine.withLockedValue { $0.finish() }
-    }
-}
+import ServiceLifecycle
 
 // MARK: - KafkaMessageAcknowledgements
 
@@ -42,7 +24,7 @@ extension KafkaProducerShutdownOnTerminate: NIOAsyncSequenceProducerDelegate {
 public struct KafkaMessageAcknowledgements: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerShutdownOnTerminate>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, NoDelegate>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
@@ -59,15 +41,17 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
     }
 }
 
+// MARK: - KafkaProducer
+
 /// Send messages to the Kafka cluster.
 /// Please make sure to explicitly call ``triggerGracefulShutdown()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
-public final class KafkaProducer {
+public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
         Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        KafkaProducerShutdownOnTerminate
+        NoDelegate
     >
 
     /// State of the ``KafkaProducer``.
@@ -158,7 +142,7 @@ public final class KafkaProducer {
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: KafkaProducerShutdownOnTerminate(stateMachine: stateMachine)
+            delegate: NoDelegate()
         )
         let source = sourceAndSequence.source
 
@@ -194,18 +178,18 @@ public final class KafkaProducer {
         return (producer, acknowlegementsSequence)
     }
 
-    /// Method to shutdown the ``KafkaProducer``.
-    ///
-    /// This method flushes any buffered messages and waits until a callback is received for all of them.
-    /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
-    public func triggerGracefulShutdown() { // TODO(felix): make internal once we adapt swift-service-lifecycle
-        self.stateMachine.withLockedValue { $0.finish() }
-    }
-
     /// Start polling Kafka for acknowledged messages.
     ///
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run() async throws {
+        try await withGracefulShutdownHandler {
+            try await self._run()
+        } onGracefulShutdown: {
+            self.triggerGracefulShutdown()
+        }
+    }
+
+    private func _run() async throws {
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
@@ -219,6 +203,14 @@ public final class KafkaProducer {
                 return
             }
         }
+    }
+
+    /// Method to shutdown the ``KafkaProducer``.
+    ///
+    /// This method flushes any buffered messages and waits until a callback is received for all of them.
+    /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
+    private func triggerGracefulShutdown() {
+        self.stateMachine.withLockedValue { $0.finish() }
     }
 
     /// Send messages to the Kafka cluster asynchronously. This method is non-blocking.
@@ -248,12 +240,12 @@ public final class KafkaProducer {
 
 extension KafkaProducer {
     /// State machine representing the state of the ``KafkaProducer``.
-    struct StateMachine {
+    struct StateMachine: Sendable {
         /// A logger.
         let logger: Logger
 
         /// The state of the ``StateMachine``.
-        enum State {
+        enum State: @unchecked Sendable { // TODO: remove @unchecked when https://github.com/apple/swift-nio/pull/2459 is available
             /// The state machine has been initialized with init() but is not yet Initialized
             /// using `func initialize()` (required).
             case uninitialized

@@ -15,7 +15,7 @@
 import Crdkafka
 import struct Foundation.UUID
 
-public struct KafkaConsumerConfiguration: Hashable {
+public struct KafkaConsumerConfiguration {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The time between two consecutive polls.
@@ -468,12 +468,20 @@ public struct KafkaConsumerConfiguration: Hashable {
     }
 }
 
+// MARK: - KafkaConsumerConfiguration + Hashable
+
+extension KafkaConsumerConfiguration: Hashable {}
+
+// MARK: - KafkaConsumerConfiguration + Sendable
+
+extension KafkaConsumerConfiguration: Sendable {}
+
 // MARK: - KafkaSharedConfiguration + Consumer Additions
 
 extension KafkaSharedConfiguration {
     /// A struct representing the different Kafka message consumption strategies.
-    public struct ConsumptionStrategy: Hashable {
-        enum _ConsumptionStrategy: Hashable {
+    public struct ConsumptionStrategy: Sendable, Hashable {
+        enum _ConsumptionStrategy: Sendable, Hashable {
             case partition(topic: String, partition: KafkaPartition, offset: Int)
             case group(groupID: String, topics: [String])
         }

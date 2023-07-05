@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import ServiceLifecycle
 @testable import SwiftKafka
 import XCTest
 
@@ -88,10 +89,16 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        await withThrowingTaskGroup(of: Void.self) { group in
-            // Producer Run Task
+        let serviceGroup = ServiceGroup(
+            services: [producer, consumer],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
             group.addTask {
-                try await producer.run()
+                try await serviceGroup.run()
             }
 
             // Producer Task
@@ -101,12 +108,6 @@ final class SwiftKafkaTests: XCTestCase {
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                producer.triggerGracefulShutdown()
-            }
-
-            // Consumer Run Task
-            group.addTask {
-                try await consumer.run()
             }
 
             // Consumer Task
@@ -131,6 +132,12 @@ final class SwiftKafkaTests: XCTestCase {
                     XCTAssertEqual(testMessages[index].value, consumedMessage.value)
                 }
             }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 
@@ -154,10 +161,16 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        await withThrowingTaskGroup(of: Void.self) { group in
-            // Producer Run Task
+        let serviceGroup = ServiceGroup(
+            services: [producer, consumer],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
             group.addTask {
-                try await producer.run()
+                try await serviceGroup.run()
             }
 
             // Producer Task
@@ -167,12 +180,6 @@ final class SwiftKafkaTests: XCTestCase {
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                producer.triggerGracefulShutdown()
-            }
-
-            // Consumer Run Task
-            group.addTask {
-                try await consumer.run()
             }
 
             // Consumer Task
@@ -197,6 +204,12 @@ final class SwiftKafkaTests: XCTestCase {
                     XCTAssertEqual(testMessages[index].value, consumedMessage.value)
                 }
             }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 
@@ -217,10 +230,16 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        await withThrowingTaskGroup(of: Void.self) { group in
-            // Producer Run Task
+        let serviceGroup = ServiceGroup(
+            services: [producer, consumer],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Consumer Run Task
             group.addTask {
-                try await producer.run()
+                try await serviceGroup.run()
             }
 
             // Producer Task
@@ -230,12 +249,6 @@ final class SwiftKafkaTests: XCTestCase {
                     acknowledgements: acks,
                     messages: testMessages
                 )
-                producer.triggerGracefulShutdown()
-            }
-
-            // Consumer Run Task
-            group.addTask {
-                try await consumer.run()
             }
 
             // Consumer Task
@@ -254,17 +267,13 @@ final class SwiftKafkaTests: XCTestCase {
                 }
 
                 XCTAssertEqual(testMessages.count, consumedMessages.count)
-
-                // Additionally test that commit does not work on closed consumer
-                do {
-                    guard let consumedMessage = consumedMessages.first else {
-                        XCTFail("No messages consumed")
-                        return
-                    }
-                    try await consumer.commitSync(consumedMessage)
-                    XCTFail("Invoking commitSync on closed consumer should have failed")
-                } catch {}
             }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 

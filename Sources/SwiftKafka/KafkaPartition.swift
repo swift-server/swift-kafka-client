@@ -15,7 +15,7 @@
 import Crdkafka
 
 /// Type for representing the number of a Kafka Partition.
-public struct KafkaPartition: RawRepresentable, Hashable {
+public struct KafkaPartition: RawRepresentable {
     public var rawValue: Int32
 
     public init(rawValue: Int32) {
@@ -24,3 +24,11 @@ public struct KafkaPartition: RawRepresentable, Hashable {
 
     public static let unassigned = KafkaPartition(rawValue: RD_KAFKA_PARTITION_UA)
 }
+
+// MARK: KafkaPartition + Hashable
+
+extension KafkaPartition: Hashable {}
+
+// MARK: KafkaPartition + Sendable
+
+extension KafkaPartition: Sendable {}
