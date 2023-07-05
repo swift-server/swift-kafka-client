@@ -23,19 +23,22 @@ final class KafkaClient: Sendable {
 
     /// Handle for the C library's Kafka instance.
     private let kafkaHandle: OpaquePointer
-    /// References the opaque object passed to the config to ensure ARC retains it as long as the client exists.
-    private let opaque: RDKafkaConfig.CapturedClosures
     /// A logger.
     private let logger: Logger
 
+    /// `librdkafka`'s main `rd_kafka_queue_t`.
+    private let mainQueue: OpaquePointer
+
     init(
         kafkaHandle: OpaquePointer,
-        opaque: RDKafkaConfig.CapturedClosures,
         logger: Logger
     ) {
         self.kafkaHandle = kafkaHandle
-        self.opaque = opaque
         self.logger = logger
+
+        self.mainQueue = rd_kafka_queue_get_main(self.kafkaHandle)
+
+        rd_kafka_set_log_queue(self.kafkaHandle, self.mainQueue)
     }
 
     deinit {
@@ -83,18 +86,64 @@ final class KafkaClient: Sendable {
         }
     }
 
-    /// Polls the Kafka client for events.
+    /// Swift wrapper for events from `librdkafka`'s event queue.
+    enum RDKafkaEvent {
+        case deliveryReport(results: [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>])
+    }
+
+    /// Poll the event `rd_kafka_queue_t` for new events.
     ///
-    /// Events will cause application-provided callbacks to be called.
-    ///
-    /// - Parameter timeout: Specifies the maximum amount of time
-    /// (in milliseconds) that the call will block waiting for events.
-    /// For non-blocking calls, provide 0 as `timeout`.
-    /// To wait indefinitely for an event, provide -1.
-    /// - Returns: The number of events served.
-    @discardableResult
-    func poll(timeout: Int32) -> Int32 {
-        return rd_kafka_poll(self.kafkaHandle, timeout)
+    /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
+    func eventPoll(maxEvents: Int = 1000) -> [RDKafkaEvent] {
+        var events = [RDKafkaEvent]()
+
+        getEventsLoop: for _ in 0..<maxEvents {
+            let event = rd_kafka_queue_poll(self.mainQueue, 0)
+            let eventType = rd_kafka_event_type(event)
+
+            switch eventType {
+            case RD_KAFKA_EVENT_DR:
+                var deliveryReportResults = [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>]()
+                while let messagePointer = rd_kafka_event_message_next(event) {
+                    guard let message = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer) else {
+                        continue
+                    }
+                    deliveryReportResults.append(message)
+                }
+                events.append(.deliveryReport(results: deliveryReportResults))
+            case RD_KAFKA_EVENT_LOG:
+                var faculty: UnsafePointer<CChar>?
+                var buffer: UnsafePointer<CChar>?
+                var level: Int32 = 0
+                if rd_kafka_event_log(event, &faculty, &buffer, &level) == 0 {
+                    if let faculty, let buffer {
+                        // Mapping according to https://en.wikipedia.org/wiki/Syslog
+                        switch level {
+                        case 0...2: /* Emergency, Alert, Critical */
+                            self.logger.critical(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
+                        case 3: /* Error */
+                            self.logger.error(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
+                        case 4: /* Warning */
+                            self.logger.warning(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
+                        case 5: /* Notice */
+                            self.logger.notice(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
+                        case 6: /* Informational */
+                            self.logger.info(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
+                        default: /* Debug */
+                            self.logger.debug(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
+                        }
+                    }
+                }
+            case RD_KAFKA_EVENT_NONE:
+                break getEventsLoop
+            default:
+                break // Ignored Event
+            }
+
+            rd_kafka_event_destroy(event)
+        }
+
+        return events
     }
 
     /// Redirect the main ``KafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
@@ -270,5 +319,31 @@ final class KafkaClient: Sendable {
     @discardableResult
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
         return try body(self.kafkaHandle)
+    }
+
+    /// Convert an unsafe`rd_kafka_message_t` object to a safe ``KafkaAcknowledgementResult``.
+    /// - Parameter messagePointer: An `UnsafePointer` pointing to the `rd_kafka_message_t` object in memory.
+    /// - Returns: A ``KafkaAcknowledgementResult``.
+    private static func convertMessageToAcknowledgementResult(
+        messagePointer: UnsafePointer<rd_kafka_message_t>?
+    ) -> Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>? {
+        guard let messagePointer else {
+            return nil
+        }
+
+        let messageID = KafkaProducerMessageID(rawValue: UInt(bitPattern: messagePointer.pointee._private))
+
+        let messageResult: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+        do {
+            let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer, id: messageID)
+            messageResult = .success(message)
+        } catch {
+            guard let error = error as? KafkaAcknowledgedMessageError else {
+                fatalError("Caught error that is not of type \(KafkaAcknowledgedMessageError.self)")
+            }
+            messageResult = .failure(error)
+        }
+
+        return messageResult
     }
 }
