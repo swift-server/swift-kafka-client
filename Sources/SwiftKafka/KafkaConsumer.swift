@@ -247,7 +247,7 @@ extension KafkaConsumer {
         let logger: Logger
 
         /// The state of the ``StateMachine``.
-        enum State: @unchecked Sendable { // TODO: remove @unchecked when https://github.com/apple/swift-nio/pull/2459 is available
+        enum State: Sendable {
             /// The state machine has been initialized with init() but is not yet Initialized
             /// using `func initialize()` (required).
             case uninitialized
