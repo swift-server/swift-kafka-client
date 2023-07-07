@@ -16,7 +16,7 @@ import Crdkafka
 import NIOCore
 
 /// A message produced by the client and acknowledged by the Kafka cluster.
-public struct KafkaAcknowledgedMessage: Hashable {
+public struct KafkaAcknowledgedMessage {
     /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
     /// The same identifier is returned by ``KafkaProducer/send(_:)`` and can be used to correlate
     /// a sent message and an acknowledged message.
@@ -66,3 +66,11 @@ public struct KafkaAcknowledgedMessage: Hashable {
         self.offset = Int(rdKafkaMessage.offset)
     }
 }
+
+// MARK: KafkaAcknowledgedMessage + Hashable
+
+extension KafkaAcknowledgedMessage: Hashable {}
+
+// MARK: KafkaAcknowledgedMessage + Sendable
+
+extension KafkaAcknowledgedMessage: Sendable {}

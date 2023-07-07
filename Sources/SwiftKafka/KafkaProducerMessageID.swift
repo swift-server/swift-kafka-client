@@ -42,3 +42,7 @@ extension KafkaProducerMessageID: Comparable {
         lhs.rawValue < rhs.rawValue
     }
 }
+
+// MARK: - KafkaProducerMessageID + Sendable
+
+extension KafkaProducerMessageID: Sendable {}
