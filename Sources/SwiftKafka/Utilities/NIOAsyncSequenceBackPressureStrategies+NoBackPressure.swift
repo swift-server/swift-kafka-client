@@ -21,9 +21,3 @@ extension NIOAsyncSequenceProducerBackPressureStrategies {
         func didConsume(bufferDepth: Int) -> Bool { true }
     }
 }
-
-/// `NIOAsyncSequenceProducerDelegate` that does nothing.
-internal struct NoDelegate: NIOAsyncSequenceProducerDelegate {
-    func produceMore() {}
-    func didTerminate() {}
-}

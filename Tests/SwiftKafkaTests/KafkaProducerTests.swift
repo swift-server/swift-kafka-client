@@ -223,12 +223,6 @@ final class KafkaProducerTests: XCTestCase {
 
         let producer = try KafkaProducer.makeProducer(config: config, logger: mockLogger)
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
-
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
             group.addTask {
@@ -253,6 +247,56 @@ final class KafkaProducerTests: XCTestCase {
         XCTAssertEqual(expectedMessage, receivedEvent.message.description)
         XCTAssertEqual(expectedLevel, receivedEvent.level)
         XCTAssertEqual(expectedSource, receivedEvent.source)
+    }
+
+    func testSendFailsAfterTerminatingAcknowledgementSequence() async throws {
+        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+
+        let serviceGroup = ServiceGroup(
+            services: [producer],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Test Task
+            group.addTask {
+                let message1 = KafkaProducerMessage(
+                    topic: "test-topic1",
+                    key: "key1",
+                    value: "Hello, Cupertino!"
+                )
+                let message2 = KafkaProducerMessage(
+                    topic: "test-topic2",
+                    key: "key2",
+                    value: "Hello, San Diego!"
+                )
+
+                try producer.send(message1)
+
+                // Terminate the acknowledgements sequence by deallocating its AsyncIterator
+                var iter: KafkaMessageAcknowledgements.AsyncIterator? = acks.makeAsyncIterator()
+                _ = iter
+                iter = nil
+
+                // Sending a new message should fail after the acknowledgements sequence
+                // has been terminated
+                XCTAssertThrowsError(try producer.send(message2)) { error in
+                    let error = error as! KafkaError
+                    XCTAssertEqual(KafkaError.ErrorCode.connectionClosed, error.code)
+                }
+            }
+
+            // Wait for test task to complete
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
     }
 
     func testNoMemoryLeakAfterShutdown() async throws {
