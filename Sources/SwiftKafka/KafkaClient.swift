@@ -278,6 +278,30 @@ final class KafkaClient: Sendable {
     }
 
     /// Non-blocking commit of a the `message`'s offset to Kafka.
+    /// Will immediately return regardless of the commit being successful or not.
+    ///
+    /// - Parameter message: Last received message that shall be marked as read.
+    func commit(_ message: KafkaConsumerMessage) throws {
+        // The offset committed is always the offset of the next requested message.
+        // Thus, we increase the offset of the current message by one before committing it.
+        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+        let changesList = RDKafkaTopicPartitionList()
+        changesList.setOffset(
+            topic: message.topic,
+            partition: message.partition,
+            offset: Int64(message.offset + 1)
+        )
+
+        changesList.withListPointer { listPointer in
+            rd_kafka_commit(
+                self.kafkaHandle,
+                listPointer,
+                1 // Enable `async` to make operation non-blocking
+            )
+        }
+    }
+
+    /// Non-blocking **awaitable** commit of a the `message`'s offset to Kafka.
     ///
     /// - Parameter message: Last received message that shall be marked as read.
     func commitSync(_ message: KafkaConsumerMessage) async throws {
