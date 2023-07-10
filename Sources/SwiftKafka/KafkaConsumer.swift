@@ -76,7 +76,7 @@ public final class KafkaConsumer: Sendable, Service {
         let client = try RDKafka.createClient(
             type: .consumer,
             configDictionary: config.dictionary,
-            events: [.log],
+            events: [.log, .fetch, .offsetCommit],
             logger: logger
         )
 
@@ -165,20 +165,27 @@ public final class KafkaConsumer: Sendable, Service {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source):
-                do {
-                    if let message = try client.consumerPoll() {
-                        // We do not support back pressure, we can ignore the yield result
-                        _ = source.yield(message)
+                let events = client.eventPoll()
+                for event in events {
+                    switch event {
+                    case .consumerMessages(let result):
+                        switch result {
+                        case .success(let message):
+                            // We do not support back pressure, we can ignore the yield result
+                            _ = source.yield(message)
+                        case .failure(let error):
+                            source.finish()
+                            throw error
+                        }
+                    default:
+                        break // Ignore
                     }
-                } catch {
-                    source.finish()
-                    throw error
                 }
                 try await Task.sleep(for: self.config.pollInterval)
             case .pollUntilClosed(let client):
                 // Ignore poll result, we are closing down and just polling to commit
                 // outstanding consumer state
-                _ = try client.consumerPoll()
+                let _ = client.eventPoll()
                 try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoop:
                 return
