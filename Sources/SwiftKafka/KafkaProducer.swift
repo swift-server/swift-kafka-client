@@ -98,6 +98,7 @@ public final class KafkaProducer: Service, Sendable {
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
+            events: RD_KAFKA_EVENT_LOG, // No RD_KAFKA_EVENT_DR here!
             logger: logger
         )
 
@@ -146,6 +147,7 @@ public final class KafkaProducer: Service, Sendable {
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
+            events: RD_KAFKA_EVENT_LOG | RD_KAFKA_EVENT_DR,
             logger: logger
         )
 

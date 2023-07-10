@@ -27,19 +27,14 @@ struct RDKafka {
     static func createClient(
         type: ClientType,
         configDictionary: [String: String],
+        events: Int32,
         logger: Logger
     ) throws -> KafkaClient {
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
 
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
-
-        switch type {
-        case .producer:
-            RDKafkaConfig.setEvents(configPointer: rdConfig, events: RD_KAFKA_EVENT_DR | RD_KAFKA_EVENT_LOG)
-        case .consumer:
-            RDKafkaConfig.setEvents(configPointer: rdConfig, events: RD_KAFKA_EVENT_LOG)
-        }
+        RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorChars.deallocate() }

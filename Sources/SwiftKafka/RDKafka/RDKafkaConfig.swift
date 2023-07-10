@@ -55,7 +55,7 @@ struct RDKafkaConfig {
 
     /// Enable event sourcing.
     ///
-    /// - Parameter events: a bitmask of `RD_KAFKA_EVENT_*` of events to enable
+    /// - Parameter events: a bitmask of `RD_KAFKA_EVENT_*` events to enable
     /// for consumption by `rd_kafka_queue_poll()`.
     static func setEvents(configPointer: OpaquePointer, events: Int32) {
         rd_kafka_conf_set_events(configPointer, events)
