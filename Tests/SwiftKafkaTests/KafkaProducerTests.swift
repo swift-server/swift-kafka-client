@@ -208,6 +208,12 @@ final class KafkaProducerTests: XCTestCase {
 
         let producer = try KafkaProducer.makeProducer(config: config, logger: mockLogger)
 
+        let serviceGroup = ServiceGroup(
+            services: [producer],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
             group.addTask {
