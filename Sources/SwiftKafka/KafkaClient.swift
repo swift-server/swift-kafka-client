@@ -87,63 +87,100 @@ final class KafkaClient: Sendable {
     }
 
     /// Swift wrapper for events from `librdkafka`'s event queue.
-    enum RDKafkaEvent {
+    enum KafkaEvent {
         case deliveryReport(results: [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>])
     }
 
     /// Poll the event `rd_kafka_queue_t` for new events.
     ///
     /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
-    func eventPoll(maxEvents: Int = 1000) -> [RDKafkaEvent] {
-        var events = [RDKafkaEvent]()
+    func eventPoll(maxEvents: Int = 100) -> [KafkaEvent] {
+        var events = [KafkaEvent]()
+        events.reserveCapacity(maxEvents)
 
-        getEventsLoop: for _ in 0..<maxEvents {
+        for _ in 0..<maxEvents {
             let event = rd_kafka_queue_poll(self.mainQueue, 0)
-            let eventType = rd_kafka_event_type(event)
+            defer { rd_kafka_event_destroy(event) }
+
+            let rdEventType = rd_kafka_event_type(event)
+            guard let eventType = RDKafkaEvent(rawValue: rdEventType) else {
+                fatalError("Unsupported event type: \(rdEventType)")
+            }
 
             switch eventType {
-            case RD_KAFKA_EVENT_DR:
-                var deliveryReportResults = [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>]()
-                while let messagePointer = rd_kafka_event_message_next(event) {
-                    guard let message = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer) else {
-                        continue
-                    }
-                    deliveryReportResults.append(message)
-                }
-                events.append(.deliveryReport(results: deliveryReportResults))
-            case RD_KAFKA_EVENT_LOG:
-                var faculty: UnsafePointer<CChar>?
-                var buffer: UnsafePointer<CChar>?
-                var level: Int32 = 0
-                if rd_kafka_event_log(event, &faculty, &buffer, &level) == 0 {
-                    if let faculty, let buffer {
-                        // Mapping according to https://en.wikipedia.org/wiki/Syslog
-                        switch level {
-                        case 0...2: /* Emergency, Alert, Critical */
-                            self.logger.critical(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
-                        case 3: /* Error */
-                            self.logger.error(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
-                        case 4: /* Warning */
-                            self.logger.warning(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
-                        case 5: /* Notice */
-                            self.logger.notice(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
-                        case 6: /* Informational */
-                            self.logger.info(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
-                        default: /* Debug */
-                            self.logger.debug(Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty))
-                        }
-                    }
-                }
-            case RD_KAFKA_EVENT_NONE:
-                break getEventsLoop
+            case .deliveryReport:
+                let forwardEvent = self.handleDeliveryReportEvent(event)
+                events.append(forwardEvent) // Return KafkaEvent.deliveryReport as part of this method
+            case .log:
+                self.handleLogEvent(event)
+            case .none:
+                // Finished reading events, return early
+                return events
             default:
                 break // Ignored Event
             }
-
-            rd_kafka_event_destroy(event)
         }
 
         return events
+    }
+
+    /// Handle event of type `RDKafkaEvent.deliveryReport`.
+    ///
+    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
+    /// - Returns: `KafkaEvent` to be returned as part of ``KafkaClient.eventPoll()`.
+    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> KafkaEvent {
+        let deliveryReportCount = rd_kafka_event_message_count(event)
+        var deliveryReportResults = [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>]()
+        deliveryReportResults.reserveCapacity(deliveryReportCount)
+
+        while let messagePointer = rd_kafka_event_message_next(event) {
+            guard let message = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer) else {
+                continue
+            }
+            deliveryReportResults.append(message)
+        }
+
+        return .deliveryReport(results: deliveryReportResults)
+    }
+
+    /// Handle event of type `RDKafkaEvent.log`.
+    ///
+    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
+    private func handleLogEvent(_ event: OpaquePointer?) {
+        var faculty: UnsafePointer<CChar>?
+        var buffer: UnsafePointer<CChar>?
+        var level: Int32 = 0
+        if rd_kafka_event_log(event, &faculty, &buffer, &level) == 0 {
+            if let faculty, let buffer {
+                // Mapping according to https://en.wikipedia.org/wiki/Syslog
+                switch level {
+                case 0...2: /* Emergency, Alert, Critical */
+                    self.logger.critical(
+                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                    )
+                case 3: /* Error */
+                    self.logger.error(
+                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                    )
+                case 4: /* Warning */
+                    self.logger.warning(
+                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                    )
+                case 5: /* Notice */
+                    self.logger.notice(
+                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                    )
+                case 6: /* Informational */
+                    self.logger.info(
+                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                    )
+                default: /* Debug */
+                    self.logger.debug(
+                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                    )
+                }
+            }
+        }
     }
 
     /// Redirect the main ``KafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s

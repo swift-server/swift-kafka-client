@@ -27,7 +27,7 @@ struct RDKafka {
     static func createClient(
         type: ClientType,
         configDictionary: [String: String],
-        events: Int32,
+        events: [RDKafkaEvent],
         logger: Logger
     ) throws -> KafkaClient {
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER

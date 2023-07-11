@@ -56,7 +56,7 @@ final class SwiftKafkaTests: XCTestCase {
         let client = try RDKafka.createClient(
             type: .consumer,
             configDictionary: basicConfig.dictionary,
-            events: 0,
+            events: [],
             logger: .kafkaTest
         )
         self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
@@ -73,7 +73,7 @@ final class SwiftKafkaTests: XCTestCase {
         let client = try RDKafka.createClient(
             type: .consumer,
             configDictionary: basicConfig.dictionary,
-            events: 0,
+            events: [],
             logger: .kafkaTest
         )
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)

@@ -76,7 +76,7 @@ public final class KafkaConsumer: Sendable, Service {
         let client = try RDKafka.createClient(
             type: .consumer,
             configDictionary: config.dictionary,
-            events: RD_KAFKA_EVENT_LOG,
+            events: [.log],
             logger: logger
         )
 
