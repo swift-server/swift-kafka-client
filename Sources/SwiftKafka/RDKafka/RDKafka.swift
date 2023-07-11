@@ -27,23 +27,14 @@ struct RDKafka {
     static func createClient(
         type: ClientType,
         configDictionary: [String: String],
-        deliveryReportCallback: RDKafkaConfig.CapturedClosures.DeliveryReportClosure? = nil,
+        events: [RDKafkaEvent],
         logger: Logger
     ) throws -> KafkaClient {
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
 
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
-
-        // Check that delivery report callback can be only set for producer
-        guard deliveryReportCallback == nil || type == .producer else {
-            fatalError("Delivery report callback can't be defined for consumer client")
-        }
-
-        let opaque = RDKafkaConfig.setCallbackClosures(
-            configPointer: rdConfig,
-            deliveryReportCallback: deliveryReportCallback,
-            logger: logger
-        )
+        try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
+        RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
         defer { errorChars.deallocate() }
@@ -61,6 +52,6 @@ struct RDKafka {
             throw KafkaError.client(reason: errorString)
         }
 
-        return KafkaClient(kafkaHandle: handle, opaque: opaque, logger: logger)
+        return KafkaClient(kafkaHandle: handle, logger: logger)
     }
 }

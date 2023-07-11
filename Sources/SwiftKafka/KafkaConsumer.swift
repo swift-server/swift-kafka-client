@@ -73,7 +73,12 @@ public final class KafkaConsumer: Sendable, Service {
         self.config = config
         self.logger = logger
 
-        let client = try RDKafka.createClient(type: .consumer, configDictionary: config.dictionary, logger: logger)
+        let client = try RDKafka.createClient(
+            type: .consumer,
+            configDictionary: config.dictionary,
+            events: [.log],
+            logger: logger
+        )
 
         self.stateMachine = NIOLockedValueBox(StateMachine(logger: self.logger))
 

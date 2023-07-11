@@ -98,9 +98,7 @@ public final class KafkaProducer: Service, Sendable {
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            // Having no callback will discard any incoming acknowledgement messages
-            // Ref: rdkafka_broker.c:rd_kafka_dr_msgq
-            deliveryReportCallback: nil,
+            events: [.log], // No .deliveryReport here!
             logger: logger
         )
 
@@ -149,15 +147,7 @@ public final class KafkaProducer: Service, Sendable {
         let client = try RDKafka.createClient(
             type: .producer,
             configDictionary: config.dictionary,
-            deliveryReportCallback: { [logger, source] messageResult in
-                guard let messageResult else {
-                    logger.error("Could not resolve acknowledged message")
-                    return
-                }
-
-                // Ignore YieldResult as we don't support back pressure in KafkaProducer
-                _ = source.yield(messageResult)
-            },
+            events: [.log, .deliveryReport],
             logger: logger
         )
 
@@ -193,8 +183,15 @@ public final class KafkaProducer: Service, Sendable {
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
-            case .poll(let client):
-                client.poll(timeout: 0)
+            case .poll(let client, let source):
+                let events = client.eventPoll()
+                for event in events {
+                    switch event {
+                    case .deliveryReport(let results):
+                        // Ignore YieldResult as we don't support back pressure in KafkaProducer
+                        results.forEach { _ = source?.yield($0) }
+                    }
+                }
                 try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoopAndFinishSource(let source):
                 source?.finish()
@@ -297,7 +294,10 @@ extension KafkaProducer {
         /// Action to be taken when wanting to poll.
         enum PollLoopAction {
             /// Poll client for new consumer messages.
-            case poll(client: KafkaClient)
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case poll(client: KafkaClient, source: Producer.Source?)
             /// Terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
             ///
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
@@ -314,11 +314,11 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, _, _):
-                return .poll(client: client)
+            case .started(let client, _, let source, _):
+                return .poll(client: client, source: source)
             case .flushing(let client, let source):
                 if client.outgoingQueueSize > 0 {
-                    return .poll(client: client)
+                    return .poll(client: client, source: source)
                 } else {
                     self.state = .finished
                     return .terminatePollLoopAndFinishSource(source: source)
