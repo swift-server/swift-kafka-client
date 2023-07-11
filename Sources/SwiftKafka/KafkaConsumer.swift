@@ -22,7 +22,7 @@ import ServiceLifecycle
 
 /// `NIOAsyncSequenceProducerDelegate` that terminates the closes the producer when
 /// `didTerminate()` is invoked.
-internal struct KafkaConsumerCloseOnTerminate: @unchecked Sendable { // We can do that because our stored propery is protected by a lock
+internal struct KafkaConsumerCloseOnTerminate: Sendable {
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
 }
 
