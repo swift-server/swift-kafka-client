@@ -18,6 +18,14 @@ import NIOConcurrencyHelpers
 import NIOCore
 import ServiceLifecycle
 
+// MARK: - NoDelegate
+
+// `NIOAsyncSequenceProducerDelegate` that does nothing.
+internal struct NoDelegate: NIOAsyncSequenceProducerDelegate {
+    func produceMore() {}
+    func didTerminate() {}
+}
+
 // MARK: - KafkaConsumerMessages
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).

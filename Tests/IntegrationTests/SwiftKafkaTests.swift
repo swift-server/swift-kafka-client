@@ -85,7 +85,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
@@ -115,7 +115,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    acknowledgements: acks,
+                    acknowledgements: acknowledgments,
                     messages: testMessages
                 )
             }
@@ -153,7 +153,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .partition(
@@ -187,7 +187,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    acknowledgements: acks,
+                    acknowledgements: acknowledgments,
                     messages: testMessages
                 )
             }
@@ -225,7 +225,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithCommitSync() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
         let consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
@@ -256,7 +256,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    acknowledgements: acks,
+                    acknowledgements: acknowledgments,
                     messages: testMessages
                 )
             }

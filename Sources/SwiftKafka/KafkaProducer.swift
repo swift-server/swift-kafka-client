@@ -18,13 +18,37 @@ import NIOConcurrencyHelpers
 import NIOCore
 import ServiceLifecycle
 
+// MARK: - KafkaProducerCloseOnTerminate
+
+/// `NIOAsyncSequenceProducerDelegate` that terminates the closes the producer when
+/// `didTerminate()` is invoked.
+internal struct KafkaProducerCloseOnTerminate: Sendable {
+    let stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>
+}
+
+extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
+    func produceMore() {
+        return // No back pressure
+    }
+
+    func didTerminate() {
+        let action = self.stateMachine.withLockedValue { $0.stopConsuming() }
+        switch action {
+        case .finishSource(let source):
+            source?.finish()
+        case .none:
+            break
+        }
+    }
+}
+
 // MARK: - KafkaMessageAcknowledgements
 
 /// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
 public struct KafkaMessageAcknowledgements: AsyncSequence {
     public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, NoDelegate>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
@@ -51,7 +75,7 @@ public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
         Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        NoDelegate
+        KafkaProducerCloseOnTerminate
     >
 
     /// State of the ``KafkaProducer``.
@@ -122,7 +146,8 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// Use the asynchronous sequence to consume message acknowledgements.
     ///
-    /// - Important: When the asynchronous sequence is deinited the producer will be shutdown.
+    /// - Important: When the asynchronous sequence is deinited the producer will be shutdown and disallow sending more messages.
+    /// Additionally, make sure to consume the asynchronous sequence otherwise the acknowledgements will be buffered in memory indefinitely.
     ///
     /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
@@ -140,7 +165,7 @@ public final class KafkaProducer: Service, Sendable {
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: NoDelegate()
+            delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
         let source = sourceAndSequence.source
 
@@ -183,7 +208,10 @@ public final class KafkaProducer: Service, Sendable {
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
-            case .poll(let client, let source):
+            case .pollWithoutYield(let client):
+                // Drop any incoming acknowledgments
+                let _ = client.eventPoll()
+            case .pollAndYield(let client, let source):
                 let events = client.eventPoll()
                 for event in events {
                     switch event {
@@ -258,6 +286,11 @@ extension KafkaProducer {
                 source: Producer.Source?,
                 topicHandles: RDKafkaTopicHandles
             )
+            /// Producer is still running but the acknowledgement asynchronous sequence was terminated.
+            /// All incoming acknowledgements will be dropped.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case consumptionStopped(client: KafkaClient)
             /// ``KafkaProducer/triggerGracefulShutdown()`` was invoked so we are flushing
             /// any messages that wait to be sent and serve any remaining queued callbacks.
             ///
@@ -293,11 +326,15 @@ extension KafkaProducer {
 
         /// Action to be taken when wanting to poll.
         enum PollLoopAction {
-            /// Poll client for new consumer messages.
+            /// Poll client.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case pollWithoutYield(client: KafkaClient)
+            /// Poll client and yield acknowledgments if any received.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case poll(client: KafkaClient, source: Producer.Source?)
+            case pollAndYield(client: KafkaClient, source: Producer.Source?)
             /// Terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
             ///
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
@@ -315,10 +352,12 @@ extension KafkaProducer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
-                return .poll(client: client, source: source)
+                return .pollAndYield(client: client, source: source)
+            case .consumptionStopped(let client):
+                return .pollWithoutYield(client: client)
             case .flushing(let client, let source):
                 if client.outgoingQueueSize > 0 {
-                    return .poll(client: client, source: source)
+                    return .pollAndYield(client: client, source: source)
                 } else {
                     self.state = .finished
                     return .terminatePollLoopAndFinishSource(source: source)
@@ -360,11 +399,42 @@ extension KafkaProducer {
                     newMessageID: newMessageID,
                     topicHandles: topicHandles
                 )
+            case .consumptionStopped:
+                throw KafkaError.connectionClosed(reason: "Sequence consuming acknowledgements was abruptly terminated, producer closed")
             case .flushing:
                 throw KafkaError.connectionClosed(reason: "Producer in the process of flushing and shutting down")
             case .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
             }
+        }
+
+        /// Action to take after invoking ``KafkaProducer/StateMachine/stopConsuming()``.
+        enum StopConsumingAction {
+            /// Finish the given `NIOAsyncSequenceProducerSource`.
+            ///
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case finishSource(source: Producer.Source?)
+        }
+
+        /// The acknowledgements asynchronous sequence was terminated.
+        /// All incoming acknowledgements will be dropped.
+        mutating func stopConsuming() -> StopConsumingAction? {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .consumptionStopped:
+                fatalError("stopConsuming() must not be invoked more than once")
+            case .started(let client, _, let source, _):
+                self.state = .consumptionStopped(client: client)
+                return .finishSource(source: source)
+            case .flushing(let client, let source):
+                // Setting source to nil to prevent incoming acknowledgements from buffering in `source`
+                self.state = .flushing(client: client, source: nil)
+                return .finishSource(source: source)
+            case .finished:
+                break
+            }
+            return nil
         }
 
         /// Get action to be taken when wanting to do close the producer.
@@ -376,6 +446,8 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
                 self.state = .flushing(client: client, source: source)
+            case .consumptionStopped(let client):
+                self.state = .flushing(client: client, source: nil)
             case .flushing, .finished:
                 break
             }
