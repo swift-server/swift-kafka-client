@@ -55,7 +55,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSend() async throws {
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -69,40 +69,35 @@ final class KafkaProducerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            // Test Task
-            group.addTask {
-                let expectedTopic = "test-topic"
-                let message = KafkaProducerMessage(
-                    topic: expectedTopic,
-                    key: "key",
-                    value: "Hello, World!"
-                )
+            let expectedTopic = "test-topic"
+            let message = KafkaProducerMessage(
+                topic: expectedTopic,
+                key: "key",
+                value: "Hello, World!"
+            )
 
-                let messageID = try producer.send(message)
+            let messageID = try producer.send(message)
 
-                for await messageResult in acks {
-                    guard case .success(let acknowledgedMessage) = messageResult else {
-                        XCTFail()
-                        return
-                    }
-
-                    XCTAssertEqual(messageID, acknowledgedMessage.id)
-                    XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
-                    XCTAssertEqual(message.key, acknowledgedMessage.key)
-                    XCTAssertEqual(message.value, acknowledgedMessage.value)
-                    break
+            for await messageResult in acknowledgments {
+                guard case .success(let acknowledgedMessage) = messageResult else {
+                    XCTFail()
+                    return
                 }
+
+                XCTAssertEqual(messageID, acknowledgedMessage.id)
+                XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
+                XCTAssertEqual(message.key, acknowledgedMessage.key)
+                XCTAssertEqual(message.value, acknowledgedMessage.value)
+                break
             }
 
-            // Wait for test task to complete
-            try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
     }
 
     func testSendEmptyMessage() async throws {
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -116,39 +111,34 @@ final class KafkaProducerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            // Test Task
-            group.addTask {
-                let expectedTopic = "test-topic"
-                let message = KafkaProducerMessage(
-                    topic: expectedTopic,
-                    value: ByteBuffer()
-                )
+            let expectedTopic = "test-topic"
+            let message = KafkaProducerMessage(
+                topic: expectedTopic,
+                value: ByteBuffer()
+            )
 
-                let messageID = try producer.send(message)
+            let messageID = try producer.send(message)
 
-                for await messageResult in acks {
-                    guard case .success(let acknowledgedMessage) = messageResult else {
-                        XCTFail()
-                        return
-                    }
-
-                    XCTAssertEqual(messageID, acknowledgedMessage.id)
-                    XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
-                    XCTAssertEqual(message.key, acknowledgedMessage.key)
-                    XCTAssertEqual(message.value, acknowledgedMessage.value)
-                    break
+            for await messageResult in acknowledgments {
+                guard case .success(let acknowledgedMessage) = messageResult else {
+                    XCTFail()
+                    return
                 }
+
+                XCTAssertEqual(messageID, acknowledgedMessage.id)
+                XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
+                XCTAssertEqual(message.key, acknowledgedMessage.key)
+                XCTAssertEqual(message.value, acknowledgedMessage.value)
+                break
             }
 
-            // Wait for test task to complete
-            try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
     }
 
     func testSendTwoTopics() async throws {
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -162,51 +152,46 @@ final class KafkaProducerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            // Test Task
-            group.addTask {
-                let message1 = KafkaProducerMessage(
-                    topic: "test-topic1",
-                    key: "key1",
-                    value: "Hello, Munich!"
-                )
-                let message2 = KafkaProducerMessage(
-                    topic: "test-topic2",
-                    key: "key2",
-                    value: "Hello, London!"
-                )
+            let message1 = KafkaProducerMessage(
+                topic: "test-topic1",
+                key: "key1",
+                value: "Hello, Munich!"
+            )
+            let message2 = KafkaProducerMessage(
+                topic: "test-topic2",
+                key: "key2",
+                value: "Hello, London!"
+            )
 
-                var messageIDs = Set<KafkaProducerMessageID>()
+            var messageIDs = Set<KafkaProducerMessageID>()
 
-                messageIDs.insert(try producer.send(message1))
-                messageIDs.insert(try producer.send(message2))
+            messageIDs.insert(try producer.send(message1))
+            messageIDs.insert(try producer.send(message2))
 
-                var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+            var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
-                for await messageResult in acks {
-                    guard case .success(let acknowledgedMessage) = messageResult else {
-                        XCTFail()
-                        return
-                    }
-
-                    acknowledgedMessages.insert(acknowledgedMessage)
-
-                    if acknowledgedMessages.count >= 2 {
-                        break
-                    }
+            for await messageResult in acknowledgments {
+                guard case .success(let acknowledgedMessage) = messageResult else {
+                    XCTFail()
+                    return
                 }
 
-                XCTAssertEqual(2, acknowledgedMessages.count)
-                XCTAssertEqual(Set(acknowledgedMessages.map(\.id)), messageIDs)
-                XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
-                XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
-                XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message1.key }))
-                XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message2.key }))
-                XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
-                XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
+                acknowledgedMessages.insert(acknowledgedMessage)
+
+                if acknowledgedMessages.count >= 2 {
+                    break
+                }
             }
 
-            // Wait for test task to complete
-            try await group.next()
+            XCTAssertEqual(2, acknowledgedMessages.count)
+            XCTAssertEqual(Set(acknowledgedMessages.map(\.id)), messageIDs)
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message1.key }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message2.key }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
+
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
@@ -250,7 +235,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendFailsAfterTerminatingAcknowledgementSequence() async throws {
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -264,36 +249,31 @@ final class KafkaProducerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            // Test Task
-            group.addTask {
-                let message1 = KafkaProducerMessage(
-                    topic: "test-topic1",
-                    key: "key1",
-                    value: "Hello, Cupertino!"
-                )
-                let message2 = KafkaProducerMessage(
-                    topic: "test-topic2",
-                    key: "key2",
-                    value: "Hello, San Diego!"
-                )
+            let message1 = KafkaProducerMessage(
+                topic: "test-topic1",
+                key: "key1",
+                value: "Hello, Cupertino!"
+            )
+            let message2 = KafkaProducerMessage(
+                topic: "test-topic2",
+                key: "key2",
+                value: "Hello, San Diego!"
+            )
 
-                try producer.send(message1)
+            try producer.send(message1)
 
-                // Terminate the acknowledgements sequence by deallocating its AsyncIterator
-                var iter: KafkaMessageAcknowledgements.AsyncIterator? = acks.makeAsyncIterator()
-                _ = iter
-                iter = nil
+            // Terminate the acknowledgements sequence by deallocating its AsyncIterator
+            var iterator: KafkaMessageAcknowledgements.AsyncIterator? = acknowledgments.makeAsyncIterator()
+            _ = iterator
+            iterator = nil
 
-                // Sending a new message should fail after the acknowledgements sequence
-                // has been terminated
-                XCTAssertThrowsError(try producer.send(message2)) { error in
-                    let error = error as! KafkaError
-                    XCTAssertEqual(KafkaError.ErrorCode.connectionClosed, error.code)
-                }
+            // Sending a new message should fail after the acknowledgements sequence
+            // has been terminated
+            XCTAssertThrowsError(try producer.send(message2)) { error in
+                let error = error as! KafkaError
+                XCTAssertEqual(KafkaError.ErrorCode.connectionClosed, error.code)
             }
 
-            // Wait for test task to complete
-            try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
@@ -301,9 +281,9 @@ final class KafkaProducerTests: XCTestCase {
 
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
-        var acks: KafkaMessageAcknowledgements?
-        (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
-        _ = acks
+        var acknowledgments: KafkaMessageAcknowledgements?
+        (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        _ = acknowledgments
 
         weak var producerCopy = producer
 
@@ -325,7 +305,7 @@ final class KafkaProducerTests: XCTestCase {
 
         producer = nil
         // Make sure to terminate the AsyncSequence
-        acks = nil
+        acknowledgments = nil
 
         XCTAssertNil(producerCopy)
     }
