@@ -42,10 +42,9 @@ final class KafkaProducerTests: XCTestCase {
     override func setUpWithError() throws {
         self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
 
-        self.config = KafkaProducerConfiguration(
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
-        )
+        self.config = KafkaProducerConfiguration()
+        self.config.bootstrapServers = [self.bootstrapServer]
+        self.config.broker.addressFamily = .v4
     }
 
     override func tearDownWithError() throws {
@@ -203,7 +202,8 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
-        let config = KafkaProducerConfiguration(bootstrapServers: [])
+        var config = KafkaProducerConfiguration()
+        config.bootstrapServers = []
 
         let producer = try KafkaProducer.makeProducer(config: config, logger: mockLogger)
 
