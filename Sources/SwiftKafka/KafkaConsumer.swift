@@ -55,19 +55,29 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
         let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
-        var wrappedIterator: WrappedSequence.AsyncIterator
+        var wrappedIterator: WrappedSequence.AsyncIterator?
 
         public mutating func next() async throws -> Element? {
-            guard let element = try await self.wrappedIterator.next() else {
+            guard let element = try await self.wrappedIterator?.next() else {
+                self.deallocateIterator()
                 return nil
             }
 
             let action = self.stateMachine.withLockedValue { $0.storeOffset() }
             switch action {
             case .storeOffset(let client):
-                try client.storeMessageOffset(element)
+                do {
+                    try client.storeMessageOffset(element)
+                } catch {
+                    self.deallocateIterator()
+                    throw error
+                }
             }
             return element
+        }
+
+        private mutating func deallocateIterator() {
+            self.wrappedIterator = nil
         }
     }
 
