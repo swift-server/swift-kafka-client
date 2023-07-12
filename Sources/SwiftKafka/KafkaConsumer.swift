@@ -40,22 +40,49 @@ extension KafkaConsumerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
+    let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
+
     public typealias Element = KafkaConsumerMessage
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
+    let logger: Logger
+
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
+        let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
         var wrappedIterator: WrappedSequence.AsyncIterator
+        let logger: Logger
 
         public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
+            guard let element = await self.wrappedIterator.next() else {
+                return nil
+            }
+
+            let action = self.stateMachine.withLockedValue { $0.storeOffset() }
+            switch action {
+            case .storeOffset(let client):
+                do {
+                    try client.storeMessageOffset(element)
+                } catch {
+                    self.logger.error("""
+                    Failed committing offset '\(element.offset)' for partition '\(element.partition)'\
+                    of topic '\(element.topic)'
+                    """)
+                    return nil // Finishes sequence
+                }
+            }
+            return element
         }
     }
 
     public func makeAsyncIterator() -> ConsumerMessagesAsyncIterator {
-        return ConsumerMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+        return ConsumerMessagesAsyncIterator(
+            stateMachine: self.stateMachine,
+            wrappedIterator: self.wrappedSequence.makeAsyncIterator(),
+            logger: self.logger
+        )
     }
 }
 
@@ -107,7 +134,9 @@ public final class KafkaConsumer: Sendable, Service {
         )
 
         self.messages = KafkaConsumerMessages(
-            wrappedSequence: sourceAndSequence.sequence
+            stateMachine: self.stateMachine,
+            wrappedSequence: sourceAndSequence.sequence,
+            logger: self.logger
         )
 
         self.stateMachine.withLockedValue {
@@ -420,6 +449,29 @@ extension KafkaConsumer {
                 self.state = .consumptionStopped(client: client, source: source)
             case .finishing, .finished:
                 break
+            }
+        }
+
+        /// Action to take when wanting to store a message offset (to be auto-committed by `librdkafka`).
+        enum StoreOffsetAction {
+            /// Store the message offset with the given `client`.
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case storeOffset(client: KafkaClient)
+        }
+
+        /// Get action to take when wanting to store a message offset (to be auto-committed by `librdkafka`).
+        func storeOffset() -> StoreOffsetAction {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .initializing:
+                fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
+            case .consumptionStopped:
+                fatalError("Cannot store offset when consumption has been stopped")
+            case .consuming(let client, _):
+                return .storeOffset(client: client)
+            case .finishing, .finished:
+                fatalError("\(#function) invoked while still in state \(self.state)")
             }
         }
 

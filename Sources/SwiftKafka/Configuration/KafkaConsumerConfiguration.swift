@@ -48,9 +48,6 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
-    public var enableAutoCommit: Bool = true
-
     // MARK: - librdkafka Config properties
 
     var dictionary: [String: String] = [:]
@@ -73,6 +70,12 @@ public struct KafkaConsumerConfiguration {
     public var maxPollInvervalMs: UInt {
         get { self.dictionary.getUInt("max.poll.interval.ms") ?? 300_000 }
         set { self.dictionary["max.poll.interval.ms"] = String(newValue) }
+    }
+
+    /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
+    public var enableAutoCommit: Bool {
+        get { self.dictionary.getBool("enable.auto.commit") ?? true }
+        set { self.dictionary["enable.auto.commit"] = String(newValue) }
     }
 
     /// The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. (0 = disable).
@@ -380,15 +383,10 @@ public struct KafkaConsumerConfiguration {
         self._consumptionStrategy = consumptionStrategy
         self.consumptionStrategy = consumptionStrategy // used to invoke set { } method
 
-        // We proxy the enableAutoCommit option
-        // because we want to implement our own commit logic.
-        // Hence we hardcode `librdkafka`'s "enable.auto.commit" option to `false`.
-        self.enableAutoCommit = enableAutoCommit
-        self.dictionary["enable.auto.commit"] = String(false)
-
         self.sessionTimeoutMs = sessionTimeoutMs
         self.heartbeatIntervalMs = heartbeatIntervalMs
         self.maxPollInvervalMs = maxPollInvervalMs
+        self.enableAutoCommit = enableAutoCommit
         self.autoCommitIntervalMs = autoCommitIntervalMs
         self.enableAutoOffsetStore = enableAutoOffsetStore
         self.autoOffsetReset = autoOffsetReset

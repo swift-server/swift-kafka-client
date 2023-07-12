@@ -277,11 +277,10 @@ final class KafkaClient: Sendable {
         }
     }
 
-    /// Non-blocking commit of a the `message`'s offset to Kafka.
-    /// Will immediately return regardless of the commit being successful or not.
+    /// Store `message`'s offset for next auto-commit.
     ///
-    /// - Parameter message: Last received message that shall be marked as read.
-    func commit(_ message: KafkaConsumerMessage) throws {
+    /// - Important: `enable.auto.offset.store` must be set to `false` when using this API.
+    func storeMessageOffset(_ message: KafkaConsumerMessage) throws {
         // The offset committed is always the offset of the next requested message.
         // Thus, we increase the offset of the current message by one before committing it.
         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
@@ -292,12 +291,15 @@ final class KafkaClient: Sendable {
             offset: Int64(message.offset + 1)
         )
 
-        changesList.withListPointer { listPointer in
-            rd_kafka_commit(
+        let error = changesList.withListPointer { listPointer in
+            rd_kafka_offsets_store(
                 self.kafkaHandle,
-                listPointer,
-                1 // Enable `async` to make operation non-blocking
+                listPointer
             )
+        }
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
 
