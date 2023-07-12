@@ -124,7 +124,7 @@ final class SwiftKafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer.messages {
+                for try await messageResult in consumer.messages {
                     guard case let message = messageResult else {
                         continue
                     }
@@ -196,7 +196,7 @@ final class SwiftKafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer.messages {
+                for try await messageResult in consumer.messages {
                     guard case let message = messageResult else {
                         continue
                     }
@@ -265,7 +265,7 @@ final class SwiftKafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer.messages {
+                for try await messageResult in consumer.messages {
                     guard case let message = messageResult else {
                         continue
                     }
@@ -337,7 +337,7 @@ final class SwiftKafkaTests: XCTestCase {
             // First Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer1.messages {
+                for try await messageResult in consumer1.messages {
                     guard case let message = messageResult else {
                         continue
                     }
@@ -405,7 +405,7 @@ final class SwiftKafkaTests: XCTestCase {
             // Second Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for await messageResult in consumer2.messages {
+                for try await messageResult in consumer2.messages {
                     guard case let message = messageResult else {
                         continue
                     }

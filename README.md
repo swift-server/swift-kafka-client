@@ -99,7 +99,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await message in consumer.messages {
+        for try await message in consumer.messages {
             // Do something with message
         }
     }
@@ -135,7 +135,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await message in consumer.messages {
+        for try await message in consumer.messages {
             // Do something with message
         }
     }
@@ -172,7 +172,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Task receiving messages
     group.addTask {
-        for await message in consumer.messages {
+        for try await message in consumer.messages {
             // Do something with message
             // ...
             try await consumer.commitSync(message)
