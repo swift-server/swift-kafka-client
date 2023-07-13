@@ -15,15 +15,19 @@
 /// Used to configure new topics created by the ``KafkaProducer``.
 public struct KafkaTopicConfiguration {
     /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request: 0=Broker does not send any response/ack to client, -1 or all=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
+    /// Default: `-1`
     public var acks: Int = -1
 
     /// The ack timeout of the producer request in milliseconds. This value is only enforced by the broker and relies on request.required.acks being != 0.
+    /// Default: `30000`
     public var requestTimeoutMilliseconds: Int = 30000
 
     /// Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery. A time of 0 is infinite. This is the maximum time librdkafka may use to deliver a message (including retries). Delivery error occurs when either the retry count or the message timeout are exceeded. The message timeout is automatically adjusted to transaction.timeout.ms if transactional.id is configured.
+    /// Default: `300_000`
     public var messageTimeoutMilliseconds: Int = 300_000
 
     /// Paritioner. See ``KafkaSharedConfiguration/Partitioner`` for more information.
+    /// Default: `.consistentRandom`
     public var partitioner: KafkaConfiguration.Partitioner = .consistentRandom
 
     /// Compression-related configuratoin options.
@@ -101,9 +105,11 @@ extension KafkaConfiguration {
         }
 
         /// Compression codec to use for compressing message sets.
+        /// Default: `.inherit`
         public var codec: Codec = .inherit
 
         /// Compression level parameter for algorithm selected by configuration property compression.codec. Higher values will result in better compression at the cost of more CPU usage. Usable range is algorithm-dependent: [0-9] for gzip; [0-12] for lz4; only 0 for snappy; -1 = codec-dependent default compression level.
+        /// Default: `-1`
         public var level: Int = -1
     }
 }

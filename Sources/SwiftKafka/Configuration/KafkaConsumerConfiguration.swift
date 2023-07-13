@@ -20,6 +20,7 @@ public struct KafkaConsumerConfiguration {
 
     /// The time between two consecutive polls.
     /// Effectively controls the rate at which incoming events and messages are consumed.
+    /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
     /// The strategy used for consuming messages.
@@ -32,52 +33,64 @@ public struct KafkaConsumerConfiguration {
     public var session: KafkaConfiguration.SessionOptions = .init()
 
     /// Group session keepalive heartbeat interval.
+    /// Default: `3000`
     public var heartbeatIntervalMilliseconds: Int = 3000
 
     /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance in order to reassign the partitions to another consumer group member. Warning: Offset commits may be not possible at this point. Note: It is recommended to set enable.auto.offset.store=false for long-time processing applications and then explicitly store offsets (using offsets_store()) after message processing, to make sure offsets are not auto-committed prior to processing has finished. The interval is checked two times per second. See KIP-62 for more information.
+    /// Default: `300_000`
     public var maxPollInvervalMilliseconds: Int = 300_000
 
     /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
+    /// Default: `true`
     public var enableAutoCommit: Bool = true
 
     /// The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. (0 = disable).
+    /// Default: `5000`
     public var autoCommitIntervalMilliseconds: Int = 5000
 
     /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
+    /// Default: `.largest`
     public var autoOffsetReset: KafkaConfiguration.AutoOffsetReset = .largest
 
     /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
     /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
-    /// Default value: `false`
+    /// Default: `false`
     public var allowAutoCreateTopics: Bool = false
 
     // MARK: - Common Client Config Properties
 
     /// Client identifier.
+    /// Default: `"rdkafka"`
     public var clientID: String = "rdkafka"
 
     /// Initial list of brokers.
+    /// Default: `[]`
     public var bootstrapServers: [KafkaConfiguration.Broker] = []
 
     /// Message options.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
     /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hickups. This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
+    /// Default: `100_000_000`
     public var receiveMessageMaxBytes: Int = 100_000_000
 
     /// Maximum number of in-flight requests per broker connection. This is a generic property applied to all broker communication, however it is primarily relevant to produce requests. In particular, note that other mechanisms limit the number of outstanding consumer fetch request per broker to one.
+    /// Default: `1_000_000`
     public var maxInFlightRequestsPerConnection: Int = 1_000_000
 
     /// Metadata cache max age.
+    /// Default: `900_000`
     public var metadataMaxAgeMilliseconds: Int = 900_000
 
     /// Topic metadata options.
     public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
 
     /// Topic denylist.
+    /// Default: `[]`
     public var topicDenylist: [String] = []
 
     /// Debug options.
+    /// Default: `[]`
     public var debug: [KafkaConfiguration.DebugOption] = []
 
     /// Socket options.
@@ -90,6 +103,7 @@ public struct KafkaConsumerConfiguration {
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
+    /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
     /// SSL options.
@@ -190,6 +204,7 @@ extension KafkaConfiguration {
     /// Client group session options.
     public struct SessionOptions: Sendable, Hashable {
         /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
+        /// Default: `45000`
         public var timeoutMilliseconds: Int = 45000
 
         public init(timeoutMilliseconds: Int = 45000) {
