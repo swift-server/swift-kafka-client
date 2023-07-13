@@ -33,7 +33,13 @@ struct RDKafka {
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
 
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
+        // Manually override some of the configuration options
+        // Handle logs in event queue
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
+        // KafkaConsumer is manually storing read offsets
+        if type == .consumer {
+            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+        }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)

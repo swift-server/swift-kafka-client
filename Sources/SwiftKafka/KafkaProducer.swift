@@ -425,7 +425,7 @@ extension KafkaProducer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .consumptionStopped:
-                fatalError("stopConsuming() must not be invoked more than once")
+                fatalError("messageSequenceTerminated() must not be invoked more than once")
             case .started(let client, _, let source, _):
                 self.state = .consumptionStopped(client: client)
                 return .finishSource(source: source)

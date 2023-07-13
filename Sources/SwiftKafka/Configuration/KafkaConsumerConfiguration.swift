@@ -498,6 +498,7 @@ extension KafkaSharedConfiguration {
         /// - Parameter topic: The name of the Kafka topic.
         /// - Parameter partition: The partition of the topic to consume from.
         /// - Parameter offset: The offset to start consuming from.
+        /// Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
         public static func partition(
             topic: String,
             partition: KafkaPartition,
