@@ -14,69 +14,82 @@
 
 /// Collection of types used in the configuration structs this library provides.
 public enum KafkaConfiguration {
+    /// The URL of a Kafka broker.
+    public struct Broker: Sendable, Hashable, CustomStringConvertible {
+        /// The host component of the broker URL.
+        public let host: String
+
+        /// The port component of the broker URL.
+        public let port: Int
+
+        public var description: String {
+            "\(self.host):\(self.port)"
+        }
+    }
+
     /// Message options.
     public struct MessageOptions: Sendable, Hashable {
-        /// Maximum Kafka protocol request message size.
+        /// Maximum Kafka protocol request message size. Due to differing framing overhead between protocol versions the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests, the broker will enforce the the topic's max.message.bytes limit (see Apache Kafka documentation).
         public var maxBytes: Int = 1_000_000
 
-        /// Maximum topic message copy size passed to the application.
+        /// Maximum size for message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs.
         public var copyMaxBytes: Int = 65535
     }
 
     /// Topic metadata options.
     public struct TopicMetadataOptions: Sendable, Hashable {
-        /// Topic metadata refresh interval in milliseconds.
+        /// Period of time in milliseconds at which topic and broker metadata is refreshed in order to proactively discover any new brokers, topics, partitions or partition leader changes. Use -1 to disable the intervalled refresh (not recommended). If there are no locally referenced topics (no topic objects created, no messages produced, no subscription or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
         public var refreshIntervalMilliseconds: Int = 300_000
 
-        /// Topic metadata refresh fast interval in milliseconds.
+        /// When a topic loses its leader a new metadata request will be enqueued with this initial interval, exponentially increasing until the topic metadata has been refreshed. This is used to recover quickly from transitioning leader brokers.
         public var refreshFastIntervalMilliseconds: Int = 250
 
-        /// Sparse topic metadata refresh (librdkafka 0.11.5 and later).
+        /// Sparse metadata requests (consumes less network bandwidth).
         public var refreshSparse: Bool = true
 
-        /// Topic metadata propagation max interval in milliseconds.
+        /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic will seem to be non-existent and the client will mark the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as non-existent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, e.g., on `send()`.
         public var propagationMaxMilliseconds: Int = 30000
     }
 
     /// Socket options.
     public struct SocketOptions: Sendable, Hashable {
-        /// Timeout for network requests.
+        /// Default timeout for network requests. Producer: ProduceRequests will use the lesser value of socket.timeout.ms and remaining message.timeout.ms for the first message in the batch. Consumer: FetchRequests will use fetch.wait.max.ms + socket.timeout.ms.
         public var timeoutMilliseconds: Int = 60000
 
-        /// Send buffer size.
+        /// Broker socket send buffer size. System default is used if 0.
         public var sendBufferBytes: Int = 0
 
-        /// Receive buffer size.
+        /// Broker socket receive buffer size. System default is used if 0.
         public var receiveBufferBytes: Int = 0
 
-        /// Enable TCP keep-alives.
+        /// Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets.
         public var keepaliveEnable: Bool = false
 
-        /// Disable Nagle's algorithm.
+        /// Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.
         public var nagleDisable: Bool = false
 
-        /// Maximum number of connection setup failures.
+        /// Disconnect from broker when this number of send failures (e.g., timed out requests) is reached. Disable with 0. WARNING: It is highly recommended to leave this setting at its default value of 1 to avoid the client and broker to become desynchronized in case of request timeouts. NOTE: The connection is automatically re-established.
         public var maxFails: Int = 1
 
-        /// Timeout for broker address acquisition.
+        /// Maximum time allowed for broker connection setup (TCP connection setup as well SSL and SASL handshake). If the connection to the broker is not fully functional after this the connection will be closed and retried.
         public var connectionSetupTimeoutMilliseconds: Int = 30000
     }
 
     /// Broker options.
     public struct BrokerOptions: Sendable, Hashable {
-        /// Broker address initial TTL.
+        /// How long to cache the broker address resolving results (milliseconds).
         public var addressTTL: Int = 1000
 
-        /// Broker address family (any, v4, or v6).
+        /// Allowed broker ``KafkaConfiguration/IPAddressFamily``.
         public var addressFamily: KafkaConfiguration.IPAddressFamily = .any
     }
 
     /// Reconnect options.
     public struct ReconnectOptions: Sendable, Hashable {
-        /// Initial connection reconnect backoff in milliseconds.
+        /// The initial time to wait before reconnecting to a broker after the connection has been closed. The time is increased exponentially until reconnect.backoff.max.ms is reached. -25% to +50% jitter is applied to each reconnect backoff. A value of 0 disables the backoff and reconnects immediately.
         public var backoffMilliseconds: Int = 100
 
-        /// Maximum connection reconnect backoff in milliseconds.
+        /// The maximum time to wait before reconnecting to a broker after the connection has been closed.
         public var backoffMaxMilliseconds: Int = 10000
     }
 
@@ -85,13 +98,13 @@ public enum KafkaConfiguration {
         /// Path to client's private key (PEM) used for authentication.
         public var keyLocation: String = ""
 
-        /// Private key's password.
+        /// Private key passphrase (for use with ssl.key.location).
         public var keyPassword: String = ""
 
         /// Path to client's public key (PEM) used for authentication.
         public var certificateLocation: String = ""
 
-        /// Path to trusted CA certificate file for verifying the broker's certificate.
+        /// File or directory path to CA certificate(s) for verifying the broker's key. Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store. On Mac OSX this configuration defaults to probe. It is recommended to install openssl using Homebrew, to provide CA certificates. On Linux install the distribution's ca-certificates package. If OpenSSL is statically linked or ssl.ca.location is set to probe a list of standard paths will be probed and the first one found will be used as the default CA certificate location path. If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see OPENSSLDIR in openssl version -a).
         public var CALocation: String = ""
 
         /// Path to CRL for verifying broker's certificate validity.
@@ -109,10 +122,10 @@ public enum KafkaConfiguration {
         /// SASL mechanism to use for authentication.
         public var mechanism: KafkaConfiguration.SASLMechanism?
 
-        /// SASL username for authentication.
+        /// SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms.
         public var username: String?
 
-        /// SASL password for authentication.
+        /// SASL password for use with the PLAIN and SASL-SCRAM-.. mechanisms.
         public var password: String?
     }
 

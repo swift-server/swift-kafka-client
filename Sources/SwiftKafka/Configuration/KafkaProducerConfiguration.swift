@@ -16,16 +16,10 @@ public struct KafkaProducerConfiguration {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The time between two consecutive polls.
-    /// Effectively controls the rate at which incoming events and acknowledgements are consumed.
+    /// Effectively controls the rate at which incoming events and acknowledgments are consumed.
     public var pollInterval: Duration = .milliseconds(100)
 
     // MARK: - Producer-specific Config Properties
-
-    /// Enables the transactional producer. The transactional.id is used to identify the same transactional producer instance across process restarts. It allows the producer to guarantee that transactions corresponding to earlier instances of the same producer have been finalized prior to starting any new transactions, and that any zombie instances are fenced off. If no transactional.id is provided, then the producer is limited to idempotent delivery (if enable.idempotence is set). Requires broker version >= 0.11.0.
-    public var transactionalID: String?
-
-    /// The maximum amount of time in milliseconds that the transaction coordinator will wait for a transaction status update from the producer before proactively aborting the ongoing transaction. If this value is larger than the transaction.max.timeout.ms setting in the broker, the init_transactions() call will fail with ERR_INVALID_TRANSACTION_TIMEOUT. The transaction timeout automatically adjusts message.timeout.ms and socket.timeout.ms, unless explicitly configured in which case they must not exceed the transaction timeout (socket.timeout.ms must be at least 100ms lower than transaction.timeout.ms). This is also the default timeout value if no timeout (-1) is supplied to the transactional API methods.
-    public var transactionTimeoutMilliseconds: Int = 60000
 
     /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), retries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantation will fail if user-supplied configuration is incompatible.
     public var enableIdempotence: Bool = false
@@ -43,22 +37,22 @@ public struct KafkaProducerConfiguration {
 
     // MARK: - Common Client Config Properties
 
-    /// Client identifier string.
+    /// Client identifier.
     public var clientID: String = "rdkafka"
 
-    /// Bootstrap broker(s) (host[:port]) for initial connection.
-    public var bootstrapServers: [String] = []
+    /// Initial list of brokers.
+    public var bootstrapServers: [KafkaConfiguration.Broker] = []
 
     /// Message options.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
-    /// Maximum receive message size for network requests.
+    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hickups. This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
     public var receiveMessageMaxBytes: Int = 100_000_000
 
-    /// Maximum number of in-flight requests per broker connection.
+    /// Maximum number of in-flight requests per broker connection. This is a generic property applied to all broker communication, however it is primarily relevant to produce requests. In particular, note that other mechanisms limit the number of outstanding consumer fetch request per broker to one.
     public var maxInFlightRequestsPerConnection: Int = 1_000_000
 
-    /// Maximum time, in milliseconds, that broker metadata can be cached.
+    /// Metadata cache max age.
     public var metadataMaxAgeMilliseconds: Int = 900_000
 
     /// Topic metadata options.
@@ -97,8 +91,6 @@ extension KafkaProducerConfiguration {
     internal var dictionary: [String: String] {
         var resultDict: [String: String] = [:]
 
-        resultDict["transactional.id"] = self.transactionalID
-        resultDict["transaction.timeout.ms"] = String(self.transactionTimeoutMilliseconds)
         resultDict["enable.idempotence"] = String(self.enableIdempotence)
         resultDict["queue.buffering.max.messages"] = String(self.queue.bufferingMaxMessages)
         resultDict["queue.buffering.max.kbytes"] = String(self.queue.bufferingMaxKBytes)
@@ -107,7 +99,7 @@ extension KafkaProducerConfiguration {
         resultDict["allow.auto.create.topics"] = String(self.allowAutoCreateTopics)
 
         resultDict["client.id"] = self.clientID
-        resultDict["bootstrap.servers"] = self.bootstrapServers.joined(separator: ",")
+        resultDict["bootstrap.servers"] = self.bootstrapServers.map(\.description).joined(separator: ",")
         resultDict["message.max.bytes"] = String(self.message.maxBytes)
         resultDict["message.copy.max.bytes"] = String(self.message.copyMaxBytes)
         resultDict["receive.message.max.bytes"] = String(self.receiveMessageMaxBytes)
@@ -162,7 +154,7 @@ extension KafkaProducerConfiguration: Hashable {}
 
 extension KafkaProducerConfiguration: Sendable {}
 
-// MARK: - KafkaSharedConfiguration + Producer Additions
+// MARK: - KafkaConfiguration + Producer Additions
 
 extension KafkaConfiguration {
     /// Producer queue options.

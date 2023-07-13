@@ -32,8 +32,9 @@ Both the `KafkaProducer` and the `KafkaConsumer` implement the [`Service`](https
 The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
 
 ```swift
+let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
 var config = KafkaProducerConfiguration()
-config.bootstrapServers = ["localhost:9092"]
+config.bootstrapServers = [broker]
 
 let (producer, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
     config: config,
@@ -73,13 +74,14 @@ await withThrowingTaskGroup(of: Void.self) { group in
 After initializing the `KafkaConsumer` with a topic-partition pair to read from, messages can be consumed using the `messages` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence).
 
 ```swift
+let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
 var config = KafkaConsumerConfiguration(
     consumptionStrategy: .partition(
-        topic: "topic-name",
-        partition: KafkaPartition(rawValue: 0)
+        KafkaPartition(rawValue: 0),
+        topic: "topic-name"
     )
 )
-config.bootstrapServers = ["localhost:9092"]
+config.bootstrapServers = [broker]
 
 let consumer = try KafkaConsumer(
     config: config,
@@ -112,10 +114,11 @@ await withThrowingTaskGroup(of: Void.self) { group in
 SwiftKafka also allows users to subscribe to an array of topics as part of a consumer group.
 
 ```swift
+let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
 var config = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"])
+    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"])
 )
-config.bootstrapServers = ["localhost:9092"]
+config.bootstrapServers = [broker]
 
 let consumer = try KafkaConsumer(
     config: config,
@@ -148,11 +151,12 @@ await withThrowingTaskGroup(of: Void.self) { group in
 By default, the `KafkaConsumer` automatically commits message offsets after receiving the corresponding message. However, we allow users to disable this setting and commit message offsets manually.
 
 ```swift
+let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
 var config = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(groupID: "example-group", topics: ["topic-name"])
+    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"])
 )
 config.enableAutoCommit = false,
-config.bootstrapServers = ["localhost:9092"]
+config.bootstrapServers = [broker]
 
 let consumer = try KafkaConsumer(
     config: config,

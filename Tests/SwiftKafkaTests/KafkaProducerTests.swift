@@ -34,13 +34,13 @@ import XCTest
 
 final class KafkaProducerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
-    let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
-    let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
-    var bootstrapServer: String!
+    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
+    let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
+    var bootstrapServer: KafkaConfiguration.Broker!
     var config: KafkaProducerConfiguration!
 
     override func setUpWithError() throws {
-        self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
+        self.bootstrapServer = KafkaConfiguration.Broker(host: self.kafkaHost, port: self.kafkaPort)
 
         self.config = KafkaProducerConfiguration()
         self.config.bootstrapServers = [self.bootstrapServer]

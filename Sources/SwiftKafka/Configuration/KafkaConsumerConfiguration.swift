@@ -12,9 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-// TODO: docs are busted -> use doc comments from API Review
-// TODO: merge with API Review
-
 import Crdkafka
 import struct Foundation.UUID
 
@@ -25,8 +22,8 @@ public struct KafkaConsumerConfiguration {
     /// Effectively controls the rate at which incoming events and messages are consumed.
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// The consumption strategy for the consumer.
-    /// See ``KafkaSharedConfiguration/ConsumptionStrategy`` for more information.
+    /// The strategy used for consuming messages.
+    /// See ``KafkaConfiguration/ConsumptionStrategy`` for more information.
     public var consumptionStrategy: KafkaConfiguration.ConsumptionStrategy
 
     // MARK: - Consumer-specific Config Properties
@@ -34,45 +31,44 @@ public struct KafkaConsumerConfiguration {
     /// Client group session options.
     public var session: KafkaConfiguration.SessionOptions = .init()
 
-    /// Heartbeat interval in milliseconds.
+    /// Group session keepalive heartbeat interval.
     public var heartbeatIntervalMilliseconds: Int = 3000
 
-    /// Maximum allowed time between calls to consume messages for high-level consumers.
+    /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance in order to reassign the partitions to another consumer group member. Warning: Offset commits may be not possible at this point. Note: It is recommended to set enable.auto.offset.store=false for long-time processing applications and then explicitly store offsets (using offsets_store()) after message processing, to make sure offsets are not auto-committed prior to processing has finished. The interval is checked two times per second. See KIP-62 for more information.
     public var maxPollInvervalMilliseconds: Int = 300_000
 
-    /// If true, automatically commit offsets periodically.
+    /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
     public var enableAutoCommit: Bool = true
 
-    /// The frequency in milliseconds at which to auto-commit offsets when enableAutoCommit is true.
+    /// The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. (0 = disable).
     public var autoCommitIntervalMilliseconds: Int = 5000
 
-    /// Action to take when there is no initial offset in offset store or the offset is out of range.
+    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
     public var autoOffsetReset: KafkaConfiguration.AutoOffsetReset = .largest
 
-    /// If true, automatically store offset of last message provided to application.
-    public var enableAutoOffsetStore: Bool = true
-
-    /// If true, automatically create topics when consuming.
+    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
+    /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
+    /// Default value: `false`
     public var allowAutoCreateTopics: Bool = false
 
     // MARK: - Common Client Config Properties
 
-    /// Client identifier string.
+    /// Client identifier.
     public var clientID: String = "rdkafka"
 
-    /// Bootstrap broker(s) (host[:port]) for initial connection.
-    public var bootstrapServers: [String] = []
+    /// Initial list of brokers.
+    public var bootstrapServers: [KafkaConfiguration.Broker] = []
 
     /// Message options.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
-    /// Maximum receive message size for network requests.
+    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hickups. This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
     public var receiveMessageMaxBytes: Int = 100_000_000
 
-    /// Maximum number of in-flight requests per broker connection.
+    /// Maximum number of in-flight requests per broker connection. This is a generic property applied to all broker communication, however it is primarily relevant to produce requests. In particular, note that other mechanisms limit the number of outstanding consumer fetch request per broker to one.
     public var maxInFlightRequestsPerConnection: Int = 1_000_000
 
-    /// Maximum time, in milliseconds, that broker metadata can be cached.
+    /// Metadata cache max age.
     public var metadataMaxAgeMilliseconds: Int = 900_000
 
     /// Topic metadata options.
@@ -130,11 +126,10 @@ extension KafkaConsumerConfiguration {
         resultDict["enable.auto.commit"] = String(enableAutoCommit)
         resultDict["auto.commit.interval.ms"] = String(autoCommitIntervalMilliseconds)
         resultDict["auto.offset.reset"] = autoOffsetReset.description
-        resultDict["enable.auto.offset.store"] = String(enableAutoOffsetStore)
         resultDict["allow.auto.create.topics"] = String(allowAutoCreateTopics)
 
         resultDict["client.id"] = clientID
-        resultDict["bootstrap.servers"] = bootstrapServers.joined(separator: ",")
+        resultDict["bootstrap.servers"] = bootstrapServers.map(\.description).joined(separator: ",")
         resultDict["message.max.bytes"] = String(message.maxBytes)
         resultDict["message.copy.max.bytes"] = String(message.copyMaxBytes)
         resultDict["receive.message.max.bytes"] = String(receiveMessageMaxBytes)
@@ -194,7 +189,7 @@ extension KafkaConsumerConfiguration: Sendable {}
 extension KafkaConfiguration {
     /// Client group session options.
     public struct SessionOptions: Sendable, Hashable {
-        /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.Milliseconds) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
+        /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
         public var timeoutMilliseconds: Int = 45000
     }
 
@@ -214,13 +209,14 @@ extension KafkaConfiguration {
         /// A consumption strategy based on partition assignment.
         /// The consumer reads from a specific partition of a topic at a given offset.
         ///
-        /// - Parameter topic: The name of the Kafka topic.
-        /// - Parameter partition: The partition of the topic to consume from.
-        /// - Parameter offset: The offset to start consuming from.
-        /// Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
+        /// - Parameters:
+        ///     - partition: The partition of the topic to consume from.
+        ///     - topic: The name of the Kafka topic.
+        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
+        ///       Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
         public static func partition(
+            _ partition: KafkaPartition,
             topic: String,
-            partition: KafkaPartition,
             offset: Int = Int(RD_KAFKA_OFFSET_END)
         ) -> ConsumptionStrategy {
             return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
@@ -229,9 +225,10 @@ extension KafkaConfiguration {
         /// A consumption strategy based on consumer group membership.
         /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
         ///
-        /// - Parameter groupID: The ID of the consumer group to join.
-        /// - Parameter topics: An array of topic names to consume from.
-        public static func group(groupID: String, topics: [String]) -> ConsumptionStrategy {
+        /// - Parameters:
+        ///     - id: The ID of the consumer group to join.
+        ///     - topics: An array of topic names to consume from.
+        public static func group(id groupID: String, topics: [String]) -> ConsumptionStrategy {
             return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
         }
     }
