@@ -237,7 +237,7 @@ public final class KafkaConsumer: Sendable, Service {
                 // Ignore poll result.
                 // We are just polling to serve any remaining events queued inside of `librdkafka`.
                 // All remaining queued consumer messages will get dropped and not be committed (marked as read).
-                _ = try client.eventPoll()
+                _ = client.eventPoll()
                 try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoop:
                 return
