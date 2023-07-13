@@ -191,6 +191,10 @@ extension KafkaConfiguration {
     public struct SessionOptions: Sendable, Hashable {
         /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
         public var timeoutMilliseconds: Int = 45000
+
+        public init(timeoutMilliseconds: Int = 45000) {
+            self.timeoutMilliseconds = timeoutMilliseconds
+        }
     }
 
     /// A struct representing the different Kafka message consumption strategies.

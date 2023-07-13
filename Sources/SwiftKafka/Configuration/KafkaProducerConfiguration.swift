@@ -167,5 +167,15 @@ extension KafkaConfiguration {
 
         /// Delay in milliseconds to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers. A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
         public var bufferingMaxMilliseconds: Int = 5
+
+        public init(
+            bufferingMaxMessages: Int = 100_000,
+            bufferingMaxKBytes: Int = 1_048_576,
+            bufferingMaxMilliseconds: Int = 5
+        ) {
+            self.bufferingMaxMessages = bufferingMaxMessages
+            self.bufferingMaxKBytes = bufferingMaxKBytes
+            self.bufferingMaxMilliseconds = bufferingMaxMilliseconds
+        }
     }
 }

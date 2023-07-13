@@ -2,7 +2,7 @@
 //
 // This source file is part of the swift-kafka-gsoc open source project
 //
-// Copyright (c) 2022 Apple Inc. and the swift-kafka-gsoc project authors
+// Copyright (c) 2023 Apple Inc. and the swift-kafka-gsoc project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -17,13 +17,18 @@ public enum KafkaConfiguration {
     /// The URL of a Kafka broker.
     public struct Broker: Sendable, Hashable, CustomStringConvertible {
         /// The host component of the broker URL.
-        public let host: String
+        public var host: String
 
         /// The port component of the broker URL.
-        public let port: Int
+        public var port: Int
 
         public var description: String {
             "\(self.host):\(self.port)"
+        }
+
+        public init(host: String, port: Int) {
+            self.host = host
+            self.port = port
         }
     }
 
@@ -34,6 +39,14 @@ public enum KafkaConfiguration {
 
         /// Maximum size for message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs.
         public var copyMaxBytes: Int = 65535
+
+        public init(
+            maxBytes: Int = 1_000_000,
+            copyMaxBytes: Int = 65535
+        ) {
+            self.maxBytes = maxBytes
+            self.copyMaxBytes = copyMaxBytes
+        }
     }
 
     /// Topic metadata options.
@@ -49,6 +62,18 @@ public enum KafkaConfiguration {
 
         /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic will seem to be non-existent and the client will mark the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as non-existent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, e.g., on `send()`.
         public var propagationMaxMilliseconds: Int = 30000
+
+        public init(
+            refreshIntervalMilliseconds: Int = 300_000,
+            refreshFastIntervalMilliseconds: Int = 250,
+            refreshSparse: Bool = true,
+            propagationMaxMilliseconds: Int = 30000
+        ) {
+            self.refreshIntervalMilliseconds = refreshIntervalMilliseconds
+            self.refreshFastIntervalMilliseconds = refreshFastIntervalMilliseconds
+            self.refreshSparse = refreshSparse
+            self.propagationMaxMilliseconds = propagationMaxMilliseconds
+        }
     }
 
     /// Socket options.
@@ -73,6 +98,24 @@ public enum KafkaConfiguration {
 
         /// Maximum time allowed for broker connection setup (TCP connection setup as well SSL and SASL handshake). If the connection to the broker is not fully functional after this the connection will be closed and retried.
         public var connectionSetupTimeoutMilliseconds: Int = 30000
+
+        public init(
+            timeoutMilliseconds: Int = 60000,
+            sendBufferBytes: Int = 0,
+            receiveBufferBytes: Int = 0,
+            keepaliveEnable: Bool = false,
+            nagleDisable: Bool = false,
+            maxFails: Int = 1,
+            connectionSetupTimeoutMilliseconds: Int = 30000
+        ) {
+            self.timeoutMilliseconds = timeoutMilliseconds
+            self.sendBufferBytes = sendBufferBytes
+            self.receiveBufferBytes = receiveBufferBytes
+            self.keepaliveEnable = keepaliveEnable
+            self.nagleDisable = nagleDisable
+            self.maxFails = maxFails
+            self.connectionSetupTimeoutMilliseconds = connectionSetupTimeoutMilliseconds
+        }
     }
 
     /// Broker options.
@@ -82,6 +125,14 @@ public enum KafkaConfiguration {
 
         /// Allowed broker ``KafkaConfiguration/IPAddressFamily``.
         public var addressFamily: KafkaConfiguration.IPAddressFamily = .any
+
+        public init(
+            addressTTL: Int = 1000,
+            addressFamily: KafkaConfiguration.IPAddressFamily = .any
+        ) {
+            self.addressTTL = addressTTL
+            self.addressFamily = addressFamily
+        }
     }
 
     /// Reconnect options.
@@ -91,8 +142,17 @@ public enum KafkaConfiguration {
 
         /// The maximum time to wait before reconnecting to a broker after the connection has been closed.
         public var backoffMaxMilliseconds: Int = 10000
+
+        public init(
+            backoffMilliseconds: Int = 100,
+            backoffMaxMilliseconds: Int = 10000
+        ) {
+            self.backoffMilliseconds = backoffMilliseconds
+            self.backoffMaxMilliseconds = backoffMaxMilliseconds
+        }
     }
 
+    // TODO: what to do here?
     /// SSL options.
     public struct SSLOptions: Sendable, Hashable {
         /// Path to client's private key (PEM) used for authentication.
@@ -104,7 +164,7 @@ public enum KafkaConfiguration {
         /// Path to client's public key (PEM) used for authentication.
         public var certificateLocation: String = ""
 
-        /// File or directory path to CA certificate(s) for verifying the broker's key. Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store. On Mac OSX this configuration defaults to probe. It is recommended to install openssl using Homebrew, to provide CA certificates. On Linux install the distribution's ca-certificates package. If OpenSSL is statically linked or ssl.ca.location is set to probe a list of standard paths will be probed and the first one found will be used as the default CA certificate location path. If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see OPENSSLDIR in openssl version -a).
+        /// File or directory path to CA certificate(s) for verifying the broker's key. Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store. On macOS this configuration defaults to probe. It is recommended to install openssl using Homebrew, to provide CA certificates. On Linux install the distribution's ca-certificates package. If OpenSSL is statically linked or ssl.ca.location is set to probe a list of standard paths will be probed and the first one found will be used as the default CA certificate location path. If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see OPENSSLDIR in openssl version -a).
         public var CALocation: String = ""
 
         /// Path to CRL for verifying broker's certificate validity.
@@ -117,6 +177,7 @@ public enum KafkaConfiguration {
         public var keystorePassword: String = ""
     }
 
+    // TODO: what to do here? -> follow up ticket
     /// SASL options.
     public struct SASLOptions: Sendable, Hashable {
         /// SASL mechanism to use for authentication.
