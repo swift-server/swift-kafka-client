@@ -89,6 +89,7 @@ final class KafkaClient: Sendable {
     /// Swift wrapper for events from `librdkafka`'s event queue.
     enum KafkaEvent {
         case deliveryReport(results: [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>])
+        case consumerMessages(result: Result<KafkaConsumerMessage, Error>)
     }
 
     /// Poll the event `rd_kafka_queue_t` for new events.
@@ -110,9 +111,15 @@ final class KafkaClient: Sendable {
             switch eventType {
             case .deliveryReport:
                 let forwardEvent = self.handleDeliveryReportEvent(event)
-                events.append(forwardEvent) // Return KafkaEvent.deliveryReport as part of this method
+                events.append(forwardEvent)
+            case .fetch:
+                if let forwardEvent = self.handleFetchEvent(event) {
+                    events.append(forwardEvent)
+                }
             case .log:
                 self.handleLogEvent(event)
+            case .offsetCommit:
+                self.handleOffsetCommitEvent(event)
             case .none:
                 // Finished reading events, return early
                 return events
@@ -140,7 +147,28 @@ final class KafkaClient: Sendable {
             deliveryReportResults.append(message)
         }
 
+        // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
         return .deliveryReport(results: deliveryReportResults)
+    }
+
+    /// Handle event of type `RDKafkaEvent.fetch`.
+    ///
+    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
+    /// - Returns: `KafkaEvent` to be returned as part of ``KafkaClient.eventPoll()`.
+    private func handleFetchEvent(_ event: OpaquePointer?) -> KafkaEvent? {
+        do {
+            // RD_KAFKA_EVENT_FETCH only returns a single message:
+            // https://docs.confluent.io/platform/current/clients/librdkafka/html/rdkafka_8h.html#a3a855eb7bdf17f5797d4911362a5fc7c
+            if let messagePointer = rd_kafka_event_message_next(event) {
+                let message = try KafkaConsumerMessage(messagePointer: messagePointer)
+                return .consumerMessages(result: .success(message))
+            } else {
+                return nil
+            }
+        } catch {
+            return .consumerMessages(result: .failure(error))
+        }
+        // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
     }
 
     /// Handle event of type `RDKafkaEvent.log`.
@@ -183,6 +211,25 @@ final class KafkaClient: Sendable {
         }
     }
 
+    /// Handle event of type `RDKafkaEvent.offsetCommit`.
+    ///
+    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
+    private func handleOffsetCommitEvent(_ event: OpaquePointer?) {
+        guard let opaquePointer = rd_kafka_event_opaque(event) else {
+            fatalError("Could not resolve reference to catpured Swift callback instance")
+        }
+        let opaque = Unmanaged<CapturedCommitCallback>.fromOpaque(opaquePointer).takeUnretainedValue()
+        let actualCallback = opaque.closure
+
+        let error = rd_kafka_event_error(event)
+        guard error == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            let kafkaError = KafkaError.rdKafkaError(wrapping: error)
+            actualCallback(.failure(kafkaError))
+            return
+        }
+        actualCallback(.success(()))
+    }
+
     /// Redirect the main ``KafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
     /// queue (``KafkaClient/consumerPoll``).
     ///
@@ -195,32 +242,6 @@ final class KafkaClient: Sendable {
         if result != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: result)
         }
-    }
-
-    /// Request a new message from the Kafka cluster.
-    ///
-    /// - Important: This method should only be invoked from ``KafkaConsumer``.
-    ///
-    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
-    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    func consumerPoll() throws -> KafkaConsumerMessage? {
-        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, 0) else {
-            // No error, there might be no more messages
-            return nil
-        }
-
-        defer {
-            // Destroy message otherwise poll() will block forever
-            rd_kafka_message_destroy(messagePointer)
-        }
-
-        // Reached the end of the topic+partition queue on the broker
-        if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
-            return nil
-        }
-
-        let message = try KafkaConsumerMessage(messagePointer: messagePointer)
-        return message
     }
 
     /// Subscribe to topic set using balanced consumer groups.
@@ -285,39 +306,12 @@ final class KafkaClient: Sendable {
             // should not be counted in ARC as this can lead to memory leaks.
             let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
 
-            let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle)
-
-            // Create a C closure that calls the captured closure
-            let callbackWrapper: (
-                @convention(c) (
-                    OpaquePointer?,
-                    rd_kafka_resp_err_t,
-                    UnsafeMutablePointer<rd_kafka_topic_partition_list_t>?,
-                    UnsafeMutableRawPointer?
-                ) -> Void
-            ) = { _, error, _, opaquePointer in
-
-                guard let opaquePointer = opaquePointer else {
-                    fatalError("Could not resolve reference to catpured Swift callback instance")
-                }
-                let opaque = Unmanaged<CapturedCommitCallback>.fromOpaque(opaquePointer).takeUnretainedValue()
-
-                let actualCallback = opaque.closure
-
-                if error == RD_KAFKA_RESP_ERR_NO_ERROR {
-                    actualCallback(.success(()))
-                } else {
-                    let kafkaError = KafkaError.rdKafkaError(wrapping: error)
-                    actualCallback(.failure(kafkaError))
-                }
-            }
-
             changesList.withListPointer { listPointer in
                 rd_kafka_commit_queue(
                     self.kafkaHandle,
                     listPointer,
-                    consumerQueue,
-                    callbackWrapper,
+                    self.mainQueue,
+                    nil,
                     opaquePointer
                 )
             }

@@ -218,6 +218,8 @@ public final class KafkaProducer: Service, Sendable {
                     case .deliveryReport(let results):
                         // Ignore YieldResult as we don't support back pressure in KafkaProducer
                         results.forEach { _ = source?.yield($0) }
+                    default:
+                        break // Ignore
                     }
                 }
                 try await Task.sleep(for: self.config.pollInterval)

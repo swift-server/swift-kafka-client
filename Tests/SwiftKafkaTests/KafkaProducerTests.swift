@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import NIOConcurrencyHelpers
 import NIOCore
 import ServiceLifecycle
 @testable import SwiftKafka
@@ -314,81 +313,5 @@ final class KafkaProducerTests: XCTestCase {
         acknowledgments = nil
 
         XCTAssertNil(producerCopy)
-    }
-
-    // MARK: - Mocks
-
-    internal struct LogEvent {
-        let level: Logger.Level
-        let message: Logger.Message
-        let source: String
-    }
-
-    internal struct LogEventRecorder {
-        let _recordedEvents = NIOLockedValueBox<[LogEvent]>([])
-
-        var recordedEvents: [LogEvent] {
-            self._recordedEvents.withLockedValue { $0 }
-        }
-
-        func record(_ event: LogEvent) {
-            self._recordedEvents.withLockedValue { $0.append(event) }
-        }
-    }
-
-    internal struct MockLogHandler: LogHandler {
-        let recorder: LogEventRecorder
-
-        init(recorder: LogEventRecorder) {
-            self.recorder = recorder
-        }
-
-        func log(
-            level: Logger.Level,
-            message: Logger.Message,
-            metadata: Logger.Metadata?,
-            source: String,
-            file: String,
-            function: String,
-            line: UInt
-        ) {
-            self.recorder.record(LogEvent(level: level, message: message, source: source))
-        }
-
-        private var _logLevel: Logger.Level?
-        var logLevel: Logger.Level {
-            get {
-                // get from config unless set
-                return self._logLevel ?? .debug
-            }
-            set {
-                self._logLevel = newValue
-            }
-        }
-
-        private var _metadataSet = false
-        private var _metadata = Logger.Metadata() {
-            didSet {
-                self._metadataSet = true
-            }
-        }
-
-        public var metadata: Logger.Metadata {
-            get {
-                return self._metadata
-            }
-            set {
-                self._metadata = newValue
-            }
-        }
-
-        subscript(metadataKey metadataKey: Logger.Metadata.Key) -> Logger.Metadata.Value? {
-            get {
-                return self._metadata[metadataKey]
-            }
-            set {
-                self._metadata[metadataKey] = newValue
-            }
-        }
     }
 }
