@@ -169,7 +169,6 @@ public enum KafkaConfiguration {
         }
     }
 
-    // TODO: what to do here?
     /// SSL options.
     public struct SSLOptions: Sendable, Hashable {
         /// Path to client's private key (PEM) used for authentication.
@@ -194,7 +193,6 @@ public enum KafkaConfiguration {
         public var keystorePassword: String = ""
     }
 
-    // TODO: what to do here? -> follow up ticket
     /// SASL options.
     public struct SASLOptions: Sendable, Hashable {
         /// SASL mechanism to use for authentication.
