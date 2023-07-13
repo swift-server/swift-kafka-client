@@ -46,8 +46,9 @@ final class SwiftKafkaTests: XCTestCase {
         self.producerConfig.bootstrapServers = [self.bootstrapServer]
         self.producerConfig.broker.addressFamily = .v4
 
-        var basicConfig = KafkaConsumerConfiguration()
-        basicConfig.consumptionStrategy = .group(groupID: "no-group", topics: [])
+        var basicConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(groupID: "no-group", topics: [])
+        )
         basicConfig.bootstrapServers = [self.bootstrapServer]
         basicConfig.broker.addressFamily = .v4
 
@@ -62,8 +63,9 @@ final class SwiftKafkaTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        var basicConfig = KafkaConsumerConfiguration()
-        basicConfig.consumptionStrategy = .group(groupID: "no-group", topics: [])
+        var basicConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(groupID: "no-group", topics: [])
+        )
         basicConfig.bootstrapServers = [self.bootstrapServer]
         basicConfig.broker.addressFamily = .v4
 
@@ -85,8 +87,9 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
-        var consumerConfig = KafkaConsumerConfiguration()
-        consumerConfig.consumptionStrategy = .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic])
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic])
+        )
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
         consumerConfig.bootstrapServers = [self.bootstrapServer]
         consumerConfig.broker.addressFamily = .v4
@@ -152,11 +155,12 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
-        var consumerConfig = KafkaConsumerConfiguration()
-        consumerConfig.consumptionStrategy = .partition(
-            topic: self.uniqueTestTopic,
-            partition: KafkaPartition(rawValue: 0),
-            offset: 0
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .partition(
+                topic: self.uniqueTestTopic,
+                partition: KafkaPartition(rawValue: 0),
+                offset: 0
+            )
         )
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
         consumerConfig.bootstrapServers = [self.bootstrapServer]
@@ -223,8 +227,9 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
-        var consumerConfig = KafkaConsumerConfiguration()
-        consumerConfig.consumptionStrategy = .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic])
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic])
+        )
         consumerConfig.enableAutoCommit = false
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
         consumerConfig.bootstrapServers = [self.bootstrapServer]

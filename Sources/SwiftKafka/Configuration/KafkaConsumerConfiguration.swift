@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 // TODO: docs are busted -> use doc comments from API Review
-// TODO: README
+// TODO: merge with API Review
 
 import Crdkafka
 import struct Foundation.UUID
@@ -27,7 +27,7 @@ public struct KafkaConsumerConfiguration {
 
     /// The consumption strategy for the consumer.
     /// See ``KafkaSharedConfiguration/ConsumptionStrategy`` for more information.
-    public var consumptionStrategy: KafkaConfiguration.ConsumptionStrategy = .group(groupID: "", topics: [])
+    public var consumptionStrategy: KafkaConfiguration.ConsumptionStrategy
 
     // MARK: - Consumer-specific Config Properties
 
@@ -102,7 +102,9 @@ public struct KafkaConsumerConfiguration {
     /// SASL options.
     public var sasl: KafkaConfiguration.SASLOptions = .init()
 
-    public init() {}
+    public init(consumptionStrategy: KafkaConfiguration.ConsumptionStrategy) {
+        self.consumptionStrategy = consumptionStrategy
+    }
 }
 
 // MARK: - KafkaConsumerConfiguration + Dictionary
