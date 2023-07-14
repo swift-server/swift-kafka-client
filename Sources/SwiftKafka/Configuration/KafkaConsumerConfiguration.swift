@@ -104,13 +104,7 @@ public struct KafkaConsumerConfiguration {
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
-    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
-
-    /// SSL options.
-    public var ssl: KafkaConfiguration.SSLOptions = .init()
-
-    /// SASL options.
-    public var sasl: KafkaConfiguration.SASLOptions = .init()
+    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext()
 
     public init(consumptionStrategy: KafkaConfiguration.ConsumptionStrategy) {
         self.consumptionStrategy = consumptionStrategy
@@ -168,22 +162,10 @@ extension KafkaConsumerConfiguration {
         resultDict["broker.address.family"] = broker.addressFamily.description
         resultDict["reconnect.backoff.ms"] = String(reconnect.backoffMilliseconds)
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.backoffMaxMilliseconds)
-        resultDict["security.protocol"] = securityProtocol.description
-        resultDict["ssl.key.location"] = ssl.keyLocation
-        resultDict["ssl.key.password"] = ssl.keyPassword
-        resultDict["ssl.certificate.location"] = ssl.certificateLocation
-        resultDict["ssl.ca.location"] = ssl.caLocation
-        resultDict["ssl.crl.location"] = ssl.crlLocation
-        resultDict["ssl.keystore.location"] = ssl.keystoreLocation
-        resultDict["ssl.keystore.password"] = ssl.keystorePassword
-        if let saslMechnism = sasl.mechanism {
-            resultDict["sasl.mechanism"] = saslMechnism.description
-        }
-        if let saslUsername = sasl.username {
-            resultDict["sasl.username"] = saslUsername
-        }
-        if let saslPassword = sasl.password {
-            resultDict["sasl.password"] = saslPassword
+
+        // Merge with SecurityProtocol configuration dictionary
+        resultDict.merge(securityProtocol.dictionary) { _, _ in
+            fatalError("securityProtocol and \(#file) should not have duplicate keys")
         }
 
         return resultDict

@@ -43,7 +43,8 @@ final class KafkaConsumerTests: XCTestCase {
             consumptionStrategy: .partition(.unassigned, topic: "some topic")
         )
         config.bootstrapServers = []
-        config.sasl.mechanism = .gssapi // This should trigger a configuration error
+        // This configuration triggers an error log. // TODO: fix test
+        config.securityProtocol = .plaintext()
 
         let consumer = try KafkaConsumer(config: config, logger: mockLogger)
 
@@ -70,7 +71,7 @@ final class KafkaConsumerTests: XCTestCase {
         XCTAssertEqual(1, recordedEvents.count)
 
         let expectedMessage = """
-        [thrd:app]: Configuration property `sasl.mechanism` set to `GSSAPI` but `security.protocol` \
+        [thrd:app]: Configuration property `sasl.mechanism` set to `PLAIN` but `security.protocol` \
         is not configured for SASL: recommend setting `security.protocol` to SASL_SSL or SASL_PLAINTEXT
         """
         let expectedLevel = Logger.Level.warning

@@ -85,13 +85,7 @@ public struct KafkaProducerConfiguration {
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
-    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
-
-    /// SSL options.
-    public var ssl: KafkaConfiguration.SSLOptions = .init()
-
-    /// SASL options.
-    public var sasl: KafkaConfiguration.SASLOptions = .init()
+    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext()
 
     public init() {}
 }
@@ -135,22 +129,10 @@ extension KafkaProducerConfiguration {
         resultDict["broker.address.family"] = self.broker.addressFamily.description
         resultDict["reconnect.backoff.ms"] = String(self.reconnect.backoffMilliseconds)
         resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.backoffMaxMilliseconds)
-        resultDict["security.protocol"] = self.securityProtocol.description
-        resultDict["ssl.key.location"] = self.ssl.keyLocation
-        resultDict["ssl.key.password"] = self.ssl.keyPassword
-        resultDict["ssl.certificate.location"] = self.ssl.certificateLocation
-        resultDict["ssl.ca.location"] = self.ssl.caLocation
-        resultDict["ssl.crl.location"] = self.ssl.crlLocation
-        resultDict["ssl.keystore.location"] = self.ssl.keystoreLocation
-        resultDict["ssl.keystore.password"] = self.ssl.keystorePassword
-        if let saslMechnism = sasl.mechanism {
-            resultDict["sasl.mechanism"] = saslMechnism.description
-        }
-        if let saslUsername = sasl.username {
-            resultDict["sasl.username"] = saslUsername
-        }
-        if let saslPassword = sasl.password {
-            resultDict["sasl.password"] = saslPassword
+
+        // Merge with SecurityProtocol configuration dictionary
+        resultDict.merge(self.securityProtocol.dictionary) { _, _ in
+            fatalError("securityProtocol and \(#file) should not have duplicate keys")
         }
 
         return resultDict

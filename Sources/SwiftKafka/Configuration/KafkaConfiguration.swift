@@ -169,42 +169,6 @@ public enum KafkaConfiguration {
         }
     }
 
-    /// SSL options.
-    public struct SSLOptions: Sendable, Hashable {
-        /// Path to client's private key (PEM) used for authentication.
-        public var keyLocation: String = ""
-
-        /// Private key passphrase (for use with ssl.key.location).
-        public var keyPassword: String = ""
-
-        /// Path to client's public key (PEM) used for authentication.
-        public var certificateLocation: String = ""
-
-        /// File or directory path to CA certificate(s) for verifying the broker's key. Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store. On macOS this configuration defaults to probe. It is recommended to install openssl using Homebrew, to provide CA certificates. On Linux install the distribution's ca-certificates package. If OpenSSL is statically linked or ssl.ca.location is set to probe a list of standard paths will be probed and the first one found will be used as the default CA certificate location path. If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see OPENSSLDIR in openssl version -a).
-        public var caLocation: String = ""
-
-        /// Path to CRL for verifying broker's certificate validity.
-        public var crlLocation: String = ""
-
-        /// Path to client's keystore (PKCS#12) used for authentication.
-        public var keystoreLocation: String = ""
-
-        /// Client's keystore (PKCS#12) password.
-        public var keystorePassword: String = ""
-    }
-
-    /// SASL options.
-    public struct SASLOptions: Sendable, Hashable {
-        /// SASL mechanism to use for authentication.
-        public var mechanism: KafkaConfiguration.SASLMechanism?
-
-        /// SASL username for use with the PLAIN and SASL-SCRAM-.. mechanisms.
-        public var username: String?
-
-        /// SASL password for use with the PLAIN and SASL-SCRAM-.. mechanisms.
-        public var password: String?
-    }
-
     // MARK: - Enum-like Option types
 
     /// Available debug contexts to enable.
@@ -240,35 +204,5 @@ public enum KafkaConfiguration {
         public static let v4 = IPAddressFamily(description: "v4")
         /// Use the IPv6 address family.
         public static let v6 = IPAddressFamily(description: "v6")
-    }
-
-    /// Protocol used to communicate with brokers.
-    public struct SecurityProtocol: Sendable, Hashable, CustomStringConvertible {
-        public let description: String
-
-        /// Send messages as plaintext (no security protocol used).
-        public static let plaintext = SecurityProtocol(description: "plaintext")
-        /// Use the Secure Sockets Layer (SSL) protocol.
-        public static let ssl = SecurityProtocol(description: "ssl")
-        /// Use the Simple Authentication and Security Layer (SASL).
-        public static let saslPlaintext = SecurityProtocol(description: "sasl_plaintext")
-        /// Use the Simple Authentication and Security Layer (SASL) with SSL.
-        public static let saslSSL = SecurityProtocol(description: "sasl_ssl")
-    }
-
-    /// Available SASL mechanisms that can be used for authentication.
-    public struct SASLMechanism: Sendable, Hashable, CustomStringConvertible {
-        public let description: String
-
-        /// Use the GSSAPI mechanism.
-        public static let gssapi = SASLMechanism(description: "GSSAPI")
-        /// Use the PLAIN mechanism.
-        public static let plain = SASLMechanism(description: "PLAIN")
-        /// Use the SCRAM-SHA-256 mechanism.
-        public static let scramSHA256 = SASLMechanism(description: "SCRAM-SHA-256")
-        /// Use the SCRAM-SHA-512 mechanism.
-        public static let scramSHA512 = SASLMechanism(description: "SCRAM-SHA-512")
-        /// Use the OAUTHBEARER mechanism.
-        public static let oauthbearer = SASLMechanism(description: "OAUTHBEARER")
     }
 }
