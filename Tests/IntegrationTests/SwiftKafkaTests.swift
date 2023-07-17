@@ -33,25 +33,24 @@ import XCTest
 
 final class SwiftKafkaTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
-    let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
-    let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
-    var bootstrapServer: String!
+    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
+    let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
+    var bootstrapServer: KafkaConfiguration.Broker!
     var producerConfig: KafkaProducerConfiguration!
     var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
-        self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
+        self.bootstrapServer = KafkaConfiguration.Broker(host: self.kafkaHost, port: self.kafkaPort)
 
-        self.producerConfig = KafkaProducerConfiguration(
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
-        )
+        self.producerConfig = KafkaProducerConfiguration()
+        self.producerConfig.bootstrapServers = [self.bootstrapServer]
+        self.producerConfig.broker.addressFamily = .v4
 
-        let basicConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(groupID: "no-group", topics: []),
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
+        var basicConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "no-group", topics: [])
         )
+        basicConfig.bootstrapServers = [self.bootstrapServer]
+        basicConfig.broker.addressFamily = .v4
 
         // TODO: ok to block here? How to make setup async?
         let client = try RDKafka.createClient(
@@ -64,11 +63,11 @@ final class SwiftKafkaTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        let basicConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(groupID: "no-group", topics: []),
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
+        var basicConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "no-group", topics: [])
         )
+        basicConfig.bootstrapServers = [self.bootstrapServer]
+        basicConfig.broker.addressFamily = .v4
 
         // TODO: ok to block here? Problem: Tests may finish before topic is deleted
         let client = try RDKafka.createClient(
@@ -88,12 +87,12 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
-        let consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(groupID: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
-            autoOffsetReset: .beginning, // Always read topics from beginning
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "subscription-test-group-id", topics: [self.uniqueTestTopic])
         )
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.bootstrapServers = [self.bootstrapServer]
+        consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
             config: consumerConfig,
@@ -156,16 +155,16 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
-        let consumerConfig = KafkaConsumerConfiguration(
+        var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .partition(
+                KafkaPartition(rawValue: 0),
                 topic: self.uniqueTestTopic,
-                partition: KafkaPartition(rawValue: 0),
                 offset: 0
-            ),
-            autoOffsetReset: .beginning, // Always read topics from beginning
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
+            )
         )
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.bootstrapServers = [self.bootstrapServer]
+        consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
             config: consumerConfig,
@@ -228,13 +227,13 @@ final class SwiftKafkaTests: XCTestCase {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
 
-        let consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(groupID: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
-            enableAutoCommit: false,
-            autoOffsetReset: .beginning, // Always read topics from beginning
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic])
         )
+        consumerConfig.enableAutoCommit = false
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.bootstrapServers = [self.bootstrapServer]
+        consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
             config: consumerConfig,
@@ -298,15 +297,15 @@ final class SwiftKafkaTests: XCTestCase {
 
         // MARK: First Consumer
 
-        let consumer1Config = KafkaConsumerConfiguration(
+        var consumer1Config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
-                groupID: uniqueGroupID,
+                id: uniqueGroupID,
                 topics: [self.uniqueTestTopic]
-            ),
-            autoOffsetReset: .beginning, // Read topic from beginning
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
+            )
         )
+        consumer1Config.autoOffsetReset = .beginning // Read topic from beginning
+        consumer1Config.bootstrapServers = [self.bootstrapServer]
+        consumer1Config.broker.addressFamily = .v4
 
         let consumer1 = try KafkaConsumer(
             config: consumer1Config,
@@ -375,15 +374,15 @@ final class SwiftKafkaTests: XCTestCase {
         // This means our second consumer should be able to read the second
         // half of messages without any problems.
 
-        let consumer2Config = KafkaConsumerConfiguration(
+        var consumer2Config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
-                groupID: uniqueGroupID,
+                id: uniqueGroupID,
                 topics: [self.uniqueTestTopic]
-            ),
-            autoOffsetReset: .largest,
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
+            )
         )
+        consumer2Config.autoOffsetReset = .largest
+        consumer2Config.bootstrapServers = [self.bootstrapServer]
+        consumer2Config.broker.addressFamily = .v4
 
         let consumer2 = try KafkaConsumer(
             config: consumer2Config,

@@ -39,11 +39,11 @@ final class KafkaConsumerTests: XCTestCase {
         }
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
-        let config = KafkaConsumerConfiguration(
-            consumptionStrategy: .partition(topic: "some topic", partition: .unassigned),
-            bootstrapServers: [],
-            saslMechanism: .gssapi // This should trigger a configuration error
+        var config = KafkaConsumerConfiguration(
+            consumptionStrategy: .partition(.unassigned, topic: "some topic")
         )
+        config.bootstrapServers = []
+        config.sasl.mechanism = .gssapi // This should trigger a configuration error
 
         let consumer = try KafkaConsumer(config: config, logger: mockLogger)
 

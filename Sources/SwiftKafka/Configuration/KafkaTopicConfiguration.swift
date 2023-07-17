@@ -14,82 +14,58 @@
 
 /// Used to configure new topics created by the ``KafkaProducer``.
 public struct KafkaTopicConfiguration {
-    var dictionary: [String: String] = [:]
-
-    /// This field indicates the number of acknowledgements the leader broker must receive from ISR brokers before responding to the request: 0=Broker does not send any response/ack to client, -1 or all=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
-    public var acks: Int {
-        get { self.dictionary.getInt("acks") ?? -1 }
-        set { self.dictionary["acks"] = String(newValue) }
-    }
+    /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request: 0=Broker does not send any response/ack to client, -1 or all=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
+    /// Default: `-1`
+    public var acks: Int = -1
 
     /// The ack timeout of the producer request in milliseconds. This value is only enforced by the broker and relies on request.required.acks being != 0.
-    public var requestTimeoutMs: UInt {
-        get { self.dictionary.getUInt("request.timeout.ms") ?? 30000 }
-        set { self.dictionary["request.timeout.ms"] = String(newValue) }
-    }
+    /// Default: `30000`
+    public var requestTimeoutMilliseconds: Int = 30000
 
     /// Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery. A time of 0 is infinite. This is the maximum time librdkafka may use to deliver a message (including retries). Delivery error occurs when either the retry count or the message timeout are exceeded. The message timeout is automatically adjusted to transaction.timeout.ms if transactional.id is configured.
-    public var messageTimeoutMs: UInt {
-        get { self.dictionary.getUInt("message.timeout.ms") ?? 300_000 }
-        set { self.dictionary["message.timeout.ms"] = String(newValue) }
-    }
+    /// Default: `300_000`
+    public var messageTimeoutMilliseconds: Int = 300_000
 
     /// Paritioner. See ``KafkaSharedConfiguration/Partitioner`` for more information.
-    public var partitioner: KafkaSharedConfiguration.Partitioner {
-        get { self.getPartitioner() ?? .consistentRandom }
-        set { self.dictionary["partitioner"] = newValue.description }
-    }
+    /// Default: `.consistentRandom`
+    public var partitioner: KafkaConfiguration.Partitioner = .consistentRandom
 
-    /// Compression codec to use for compressing message sets.
-    public var compressionCodec: KafkaSharedConfiguration.CompressionCodec {
-        get { self.getCompressionCodec() ?? .inherit }
-        set { self.dictionary["compression.codec"] = newValue.description }
-    }
+    /// Compression-related configuratoin options.
+    public var compression: KafkaConfiguration.Compression = .init()
 
-    /// Compression level parameter for algorithm selected by configuration property compression.codec. Higher values will result in better compression at the cost of more CPU usage. Usable range is algorithm-dependent: [0-9] for gzip; [0-12] for lz4; only 0 for snappy; -1 = codec-dependent default compression level.
-    public var compressionLevel: Int {
-        get { self.dictionary.getInt("compression.level") ?? -1 }
-        set { self.dictionary["compression.level"] = String(newValue) }
-    }
+    public init() {}
+}
 
-    public init(
-        acks: Int = -1,
-        requestTimeoutMs: UInt = 30000,
-        messageTimeoutMs: UInt = 300_000,
-        partitioner: KafkaSharedConfiguration.Partitioner = .consistentRandom,
-        compressionCodec: KafkaSharedConfiguration.CompressionCodec = .inherit,
-        compressionLevel: Int = -1
-    ) {
-        self.acks = acks
-        self.requestTimeoutMs = requestTimeoutMs
-        self.messageTimeoutMs = messageTimeoutMs
-        self.partitioner = partitioner
-        self.compressionCodec = compressionCodec
-        self.compressionLevel = compressionLevel
-    }
+// MARK: - KafkaTopicConfiguration + Hashable
 
-    // MARK: - Helpers
+extension KafkaTopicConfiguration: Hashable {}
 
-    func getPartitioner() -> KafkaSharedConfiguration.Partitioner? {
-        guard let value = dictionary["partitioner"] else {
-            return nil
-        }
-        return KafkaSharedConfiguration.Partitioner(description: value)
-    }
+// MARK: - KafkaTopicConfiguration + Sendable
 
-    func getCompressionCodec() -> KafkaSharedConfiguration.CompressionCodec? {
-        guard let value = dictionary["compression.codec"] else {
-            return nil
-        }
-        return KafkaSharedConfiguration.CompressionCodec(description: value)
+extension KafkaTopicConfiguration: Sendable {}
+
+// MARK: - KafkaTopicConfiguration + Dictionary
+
+extension KafkaTopicConfiguration {
+    internal var dictionary: [String: String] {
+        var resultDict: [String: String] = [:]
+
+        resultDict["acks"] = String(self.acks)
+        resultDict["request.timeout.ms"] = String(self.requestTimeoutMilliseconds)
+        resultDict["message.timeout.ms"] = String(self.messageTimeoutMilliseconds)
+        resultDict["partitioner"] = self.partitioner.description
+        resultDict["compression.codec"] = self.compression.codec.description
+        resultDict["compression.level"] = String(self.compression.level)
+
+        return resultDict
     }
 }
 
-// MARK: - KafkaSharedConfiguration + Additions
+// MARK: - KafkaConfiguration + Additions
 
-extension KafkaSharedConfiguration {
+extension KafkaConfiguration {
     /// Partitioner. Computes the partition that a message is stored in.
-    public struct Partitioner: Hashable, CustomStringConvertible {
+    public struct Partitioner: Sendable, Hashable, CustomStringConvertible {
         public let description: String
 
         /// Random distribution.
@@ -108,29 +84,32 @@ extension KafkaSharedConfiguration {
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
     }
 
-    /// Process to compress and decompress data.
-    public struct CompressionCodec: Hashable, CustomStringConvertible {
-        public let description: String
+    /// Compression-related configuration options.
+    public struct Compression: Sendable, Hashable {
+        /// Process to compress and decompress data.
+        public struct Codec: Sendable, Hashable, CustomStringConvertible {
+            public let description: String
 
-        /// No compression.
-        public static let none = CompressionCodec(description: "none")
-        /// gzip compression.
-        public static let gzip = CompressionCodec(description: "gzip")
-        /// snappy compression.
-        public static let snappy = CompressionCodec(description: "snappy")
-        /// lz4 compression.
-        public static let lz4 = CompressionCodec(description: "lz4")
-        /// zstd compression.
-        public static let zstd = CompressionCodec(description: "zstd")
-        /// Inherit global compression.codec configuration.
-        public static let inherit = CompressionCodec(description: "inherit")
+            /// No compression.
+            public static let none = Codec(description: "none")
+            /// gzip compression.
+            public static let gzip = Codec(description: "gzip")
+            /// snappy compression.
+            public static let snappy = Codec(description: "snappy")
+            /// lz4 compression.
+            public static let lz4 = Codec(description: "lz4")
+            /// zstd compression.
+            public static let zstd = Codec(description: "zstd")
+            /// Inherit global compression.codec configuration.
+            public static let inherit = Codec(description: "inherit")
+        }
+
+        /// Compression codec to use for compressing message sets.
+        /// Default: `.inherit`
+        public var codec: Codec = .inherit
+
+        /// Compression level parameter for algorithm selected by configuration property compression.codec. Higher values will result in better compression at the cost of more CPU usage. Usable range is algorithm-dependent: [0-9] for gzip; [0-12] for lz4; only 0 for snappy; -1 = codec-dependent default compression level.
+        /// Default: `-1`
+        public var level: Int = -1
     }
 }
-
-// MARK: - KafkaTopicConfiguration + Hashable
-
-extension KafkaTopicConfiguration: Hashable {}
-
-// MARK: - KafkaTopicConfiguration + Sendable
-
-extension KafkaTopicConfiguration: Sendable {}

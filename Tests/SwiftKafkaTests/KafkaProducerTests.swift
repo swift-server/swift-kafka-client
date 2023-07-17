@@ -34,18 +34,17 @@ import XCTest
 
 final class KafkaProducerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
-    let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
-    let kafkaPort = ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092"
-    var bootstrapServer: String!
+    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
+    let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
+    var bootstrapServer: KafkaConfiguration.Broker!
     var config: KafkaProducerConfiguration!
 
     override func setUpWithError() throws {
-        self.bootstrapServer = "\(self.kafkaHost):\(self.kafkaPort)"
+        self.bootstrapServer = KafkaConfiguration.Broker(host: self.kafkaHost, port: self.kafkaPort)
 
-        self.config = KafkaProducerConfiguration(
-            bootstrapServers: [self.bootstrapServer],
-            brokerAddressFamily: .v4
-        )
+        self.config = KafkaProducerConfiguration()
+        self.config.bootstrapServers = [self.bootstrapServer]
+        self.config.broker.addressFamily = .v4
     }
 
     override func tearDownWithError() throws {
@@ -203,7 +202,8 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
-        let config = KafkaProducerConfiguration(bootstrapServers: [])
+        var config = KafkaProducerConfiguration()
+        config.bootstrapServers = []
 
         let producer = try KafkaProducer.makeProducer(config: config, logger: mockLogger)
 
