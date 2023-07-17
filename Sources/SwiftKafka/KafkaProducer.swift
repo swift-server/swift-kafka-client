@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Crdkafka
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -119,7 +118,7 @@ public final class KafkaProducer: Service, Sendable {
     ) throws -> KafkaProducer {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        let client = try RDKafka.createClient(
+        let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: config.dictionary,
             events: [.log], // No .deliveryReport here!
@@ -169,7 +168,7 @@ public final class KafkaProducer: Service, Sendable {
         )
         let source = sourceAndSequence.source
 
-        let client = try RDKafka.createClient(
+        let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: config.dictionary,
             events: [.log, .deliveryReport],
@@ -283,7 +282,7 @@ extension KafkaProducer {
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
             case started(
-                client: KafkaClient,
+                client: RDKafkaClient,
                 messageIDCounter: UInt,
                 source: Producer.Source?,
                 topicHandles: RDKafkaTopicHandles
@@ -292,14 +291,14 @@ extension KafkaProducer {
             /// All incoming acknowledgements will be dropped.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case consumptionStopped(client: KafkaClient)
+            case consumptionStopped(client: RDKafkaClient)
             /// ``KafkaProducer/triggerGracefulShutdown()`` was invoked so we are flushing
             /// any messages that wait to be sent and serve any remaining queued callbacks.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             case flushing(
-                client: KafkaClient,
+                client: RDKafkaClient,
                 source: Producer.Source?
             )
             /// The ``KafkaProducer`` has been shut down and cannot be used anymore.
@@ -312,7 +311,7 @@ extension KafkaProducer {
         /// Delayed initialization of `StateMachine` as the `source` is not yet available
         /// when the normal initialization occurs.
         mutating func initialize(
-            client: KafkaClient,
+            client: RDKafkaClient,
             source: Producer.Source?
         ) {
             guard case .uninitialized = self.state else {
@@ -331,12 +330,12 @@ extension KafkaProducer {
             /// Poll client.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case pollWithoutYield(client: KafkaClient)
+            case pollWithoutYield(client: RDKafkaClient)
             /// Poll client and yield acknowledgments if any received.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case pollAndYield(client: KafkaClient, source: Producer.Source?)
+            case pollAndYield(client: RDKafkaClient, source: Producer.Source?)
             /// Terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
             ///
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
@@ -375,7 +374,7 @@ extension KafkaProducer {
             ///
             /// - Important: `newMessageID` is the new message ID assigned to the message to be sent.
             case send(
-                client: KafkaClient,
+                client: RDKafkaClient,
                 newMessageID: UInt,
                 topicHandles: RDKafkaTopicHandles
             )

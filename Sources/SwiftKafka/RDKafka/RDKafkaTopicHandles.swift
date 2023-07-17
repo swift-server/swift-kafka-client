@@ -21,9 +21,9 @@ internal final class RDKafkaTopicHandles: Sendable {
 
     // Note: we retain the client to ensure it does not get
     // deinitialized before rd_kafka_topic_destroy() is invoked (required)
-    private let client: KafkaClient
+    private let client: RDKafkaClient
 
-    init(client: KafkaClient) {
+    init(client: RDKafkaClient) {
         self._internal = NIOLockedValueBox([:])
         self.client = client
     }
