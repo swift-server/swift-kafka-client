@@ -139,8 +139,8 @@ extension KafkaProducerConfiguration {
         resultDict["ssl.key.location"] = self.ssl.keyLocation
         resultDict["ssl.key.password"] = self.ssl.keyPassword
         resultDict["ssl.certificate.location"] = self.ssl.certificateLocation
-        resultDict["ssl.ca.location"] = self.ssl.CALocation
-        resultDict["ssl.crl.location"] = self.ssl.CRLLocation
+        resultDict["ssl.ca.location"] = self.ssl.caLocation
+        resultDict["ssl.crl.location"] = self.ssl.crlLocation
         resultDict["ssl.keystore.location"] = self.ssl.keystoreLocation
         resultDict["ssl.keystore.password"] = self.ssl.keystorePassword
         if let saslMechnism = sasl.mechanism {

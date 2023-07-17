@@ -14,12 +14,12 @@
 
 /// Collection of types used in the configuration structs this library provides.
 public enum KafkaConfiguration {
-    /// The URL of a Kafka broker.
+    /// A Kafka Broker to connect to.
     public struct Broker: Sendable, Hashable, CustomStringConvertible {
-        /// The host component of the broker URL.
+        /// The host component of the broker to connect to.
         public var host: String
 
-        /// The port component of the broker URL.
+        /// The port to connect to.
         public var port: Int
 
         public var description: String {
@@ -181,10 +181,10 @@ public enum KafkaConfiguration {
         public var certificateLocation: String = ""
 
         /// File or directory path to CA certificate(s) for verifying the broker's key. Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store. On macOS this configuration defaults to probe. It is recommended to install openssl using Homebrew, to provide CA certificates. On Linux install the distribution's ca-certificates package. If OpenSSL is statically linked or ssl.ca.location is set to probe a list of standard paths will be probed and the first one found will be used as the default CA certificate location path. If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see OPENSSLDIR in openssl version -a).
-        public var CALocation: String = ""
+        public var caLocation: String = ""
 
         /// Path to CRL for verifying broker's certificate validity.
-        public var CRLLocation: String = ""
+        public var crlLocation: String = ""
 
         /// Path to client's keystore (PKCS#12) used for authentication.
         public var keystoreLocation: String = ""

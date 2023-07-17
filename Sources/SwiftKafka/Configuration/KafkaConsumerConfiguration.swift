@@ -172,8 +172,8 @@ extension KafkaConsumerConfiguration {
         resultDict["ssl.key.location"] = ssl.keyLocation
         resultDict["ssl.key.password"] = ssl.keyPassword
         resultDict["ssl.certificate.location"] = ssl.certificateLocation
-        resultDict["ssl.ca.location"] = ssl.CALocation
-        resultDict["ssl.crl.location"] = ssl.CRLLocation
+        resultDict["ssl.ca.location"] = ssl.caLocation
+        resultDict["ssl.crl.location"] = ssl.crlLocation
         resultDict["ssl.keystore.location"] = ssl.keystoreLocation
         resultDict["ssl.keystore.password"] = ssl.keystorePassword
         if let saslMechnism = sasl.mechanism {
