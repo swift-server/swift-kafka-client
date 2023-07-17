@@ -45,7 +45,7 @@ final class KafkaConsumerTests: XCTestCase {
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"])
         )
         config.bootstrapServers = []
-        config.securityProtocol = .plaintext()
+        config.securityProtocol = .plaintext
         config.debug = [.all]
 
         let consumer = try KafkaConsumer(config: config, logger: mockLogger)

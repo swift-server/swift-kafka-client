@@ -17,8 +17,9 @@ extension KafkaConfiguration {
 
     /// Use to configure an SSL connection.
     public struct SSLConfiguration: Sendable, Hashable {
-        /// A key either located in a file or directly as a key String (PEM format).
-        public struct Key: Sendable, Hashable {
+        /// Certificate chain consisting of one leaf certificate and potenentially multiple intermediate certificates.
+        /// The public key of the leaf certificate will be used for authentication.
+        public struct LeafAndIntermediates: Sendable, Hashable {
             internal enum _Key: Sendable, Hashable {
                 case file(location: String)
                 case pem(String)
@@ -26,16 +27,47 @@ extension KafkaConfiguration {
 
             let _internal: _Key
 
-            /// A key located in a file at the given `location`.
-            public static func file(location: String) -> Key {
-                return Key(
+            /// Read certificate chain from file.
+            public static func file(location: String) -> LeafAndIntermediates {
+                return LeafAndIntermediates(
                     _internal: .file(location: location)
                 )
             }
 
-            /// A key String (PEM format).
-            public static func pem(_ pem: String) -> Key {
-                return Key(
+            /// Read X.509 certificate from String.
+            public static func pem(_ pem: String) -> LeafAndIntermediates {
+                return LeafAndIntermediates(
+                    _internal: .pem(pem)
+                )
+            }
+        }
+
+        public struct RootCertificate: Sendable, Hashable {
+            internal enum _RootCertificate: Sendable, Hashable {
+                case probe
+                case disableBrokerVerification
+                case file(location: String)
+                case pem(String)
+            }
+
+            let _internal: _RootCertificate
+
+            /// A list of standard paths will be probed and the first one found will be used as the default root certificate location path.
+            public static let probe = RootCertificate(_internal: .probe)
+
+            /// Disable OpenSSL's builtin broker (server) certificate verification.
+            public static let disableBrokerVerification = RootCertificate(_internal: .disableBrokerVerification)
+
+            /// File or directory path to root certificate(s) for verifying the broker's key.
+            public static func file(location: String) -> RootCertificate {
+                return RootCertificate(
+                    _internal: .file(location: location)
+                )
+            }
+
+            /// Root certificate String for verifying the broker's key.
+            public static func pem(_ pem: String) -> RootCertificate {
+                return RootCertificate(
                     _internal: .pem(pem)
                 )
             }
@@ -43,12 +75,35 @@ extension KafkaConfiguration {
 
         /// A SSL private key.
         public struct PrivateKey: Sendable, Hashable {
+            public struct Location: Sendable, Hashable {
+                internal enum _Location: Sendable, Hashable {
+                    case file(location: String)
+                    case pem(String)
+                }
+
+                let _internal: _Location
+
+                /// A key located in a file at the given `location`.
+                public static func file(location: String) -> Location {
+                    return Location(
+                        _internal: .file(location: location)
+                    )
+                }
+
+                /// A key String (PEM format).
+                public static func pem(_ pem: String) -> Location {
+                    return Location(
+                        _internal: .pem(pem)
+                    )
+                }
+            }
+
             /// The private key itself.
-            public var key: Key
+            public var key: Location
             /// The password associated with the private key.
             public var password: String
 
-            public init(location: Key, password: String) {
+            public init(location: Location, password: String) {
                 self.key = location
                 self.password = password
             }
@@ -70,13 +125,13 @@ extension KafkaConfiguration {
         internal enum _SSLConfiguration: Sendable, Hashable {
             case keyPair(
                 privateKey: PrivateKey,
-                publicKeyCertificate: Key,
-                caCertificate: Key,
+                publicKeyCertificate: LeafAndIntermediates,
+                caCertificate: RootCertificate,
                 crlLocation: String?
             )
             case keyStore(
                 keyStore: KeyStore,
-                caCertificate: Key,
+                caCertificate: RootCertificate,
                 crlLocation: String?
             )
         }
@@ -93,8 +148,8 @@ extension KafkaConfiguration {
         ///     - crlocation: Path to CRL for verifying broker's certificate validity.
         public static func keyPair(
             privateKey: PrivateKey,
-            publicKeyCertificate: Key,
-            caCertificate: Key,
+            publicKeyCertificate: LeafAndIntermediates,
+            caCertificate: RootCertificate = .probe,
             crlLocation: String?
         ) -> SSLConfiguration {
             return SSLConfiguration(
@@ -107,7 +162,6 @@ extension KafkaConfiguration {
             )
         }
 
-        /// Use SSL with a given keystore (PKCS#12).
         ///
         /// - Parameters:
         ///
@@ -116,7 +170,7 @@ extension KafkaConfiguration {
         ///     - crlocation: Path to CRL for verifying broker's certificate validity.
         public static func keyStore(
             keyStore: KeyStore,
-            caCertificate: Key,
+            caCertificate: RootCertificate = .probe,
             crlLocation: String?
         ) -> SSLConfiguration {
             return SSLConfiguration(
@@ -150,6 +204,10 @@ extension KafkaConfiguration {
                     resultDict["ssl.certificate.pem"] = pem
                 }
                 switch caCertificate._internal {
+                case .disableBrokerVerification:
+                    resultDict["enable.ssl.certificate.verification"] = String(false)
+                case .probe:
+                    resultDict["ssl.ca.location"] = "probe"
                 case .file(location: let location):
                     resultDict["ssl.ca.location"] = location
                 case .pem(let pem):
@@ -160,6 +218,10 @@ extension KafkaConfiguration {
                 resultDict["ssl.keystore.location"] = keyStore.location
                 resultDict["ssl.keystore.password"] = keyStore.password
                 switch caCertificate._internal {
+                case .disableBrokerVerification:
+                    resultDict["enable.ssl.certificate.verification"] = String(false)
+                case .probe:
+                    resultDict["ssl.ca.location"] = "probe"
                 case .file(location: let location):
                     resultDict["ssl.ca.location"] = location
                 case .pem(let pem):
@@ -386,11 +448,9 @@ extension KafkaConfiguration {
         private let _internal: _SecurityProtocol
 
         /// Send messages as plaintext (no security protocol used).
-        public static func plaintext() -> SecurityProtocol {
-            return SecurityProtocol(
-                _internal: .plaintext
-            )
-        }
+        public static let plaintext = SecurityProtocol(
+            _internal: .plaintext
+        )
 
         /// Use the Secure Sockets Layer (SSL) protocol.
         public static func ssl(configuration: SSLConfiguration) -> SecurityProtocol {

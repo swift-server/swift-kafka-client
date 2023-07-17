@@ -104,7 +104,7 @@ public struct KafkaConsumerConfiguration {
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
-    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext()
+    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
     public init(consumptionStrategy: KafkaConfiguration.ConsumptionStrategy) {
         self.consumptionStrategy = consumptionStrategy
