@@ -261,6 +261,10 @@ extension KafkaConfiguration {
             /// Disable automatic key refresh by setting this property to 0.
             /// Default: `60000`
             public var minTimeBeforeRelogin: Int = 60000
+
+            public init(keytab: String) {
+                self.keytab = keytab
+            }
         }
 
         public struct OAuthBearerMethod: Sendable, Hashable {
