@@ -13,10 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 extension KafkaConfiguration {
-    // MARK: - SSLConfiguration
+    // MARK: - TLSConfiguration
 
-    /// Use to configure an SSL connection.
-    public struct SSLConfiguration: Sendable, Hashable {
+    /// Use to configure an TLS connection.
+    public struct TLSConfiguration: Sendable, Hashable {
         /// Certificate chain consisting of one leaf certificate and potenentially multiple intermediate certificates.
         /// The public key of the leaf certificate will be used for authentication.
         public struct LeafAndIntermediates: Sendable, Hashable {
@@ -73,7 +73,7 @@ extension KafkaConfiguration {
             }
         }
 
-        /// A SSL private key.
+        /// A TLS private key.
         public struct PrivateKey: Sendable, Hashable {
             public struct Location: Sendable, Hashable {
                 internal enum _Location: Sendable, Hashable {
@@ -109,7 +109,7 @@ extension KafkaConfiguration {
             }
         }
 
-        /// A SSL key store (PKCS#12).
+        /// A TLS key store (PKCS#12).
         public struct KeyStore: Sendable, Hashable {
             /// Path to the key store.
             public var location: String
@@ -122,7 +122,7 @@ extension KafkaConfiguration {
             }
         }
 
-        internal enum _SSLConfiguration: Sendable, Hashable {
+        internal enum _TLSConfiguration: Sendable, Hashable {
             case keyPair(
                 privateKey: PrivateKey,
                 publicKeyCertificate: LeafAndIntermediates,
@@ -136,9 +136,9 @@ extension KafkaConfiguration {
             )
         }
 
-        let _internal: _SSLConfiguration
+        let _internal: _TLSConfiguration
 
-        /// Use SSL with a given private/public key pair.
+        /// Use TLS with a given private/public key pair.
         ///
         /// - Parameters:
         ///
@@ -151,8 +151,8 @@ extension KafkaConfiguration {
             publicKeyCertificate: LeafAndIntermediates,
             caCertificate: RootCertificate = .probe,
             crlLocation: String?
-        ) -> SSLConfiguration {
-            return SSLConfiguration(
+        ) -> TLSConfiguration {
+            return TLSConfiguration(
                 _internal: .keyPair(
                     privateKey: privateKey,
                     publicKeyCertificate: publicKeyCertificate,
@@ -172,8 +172,8 @@ extension KafkaConfiguration {
             keyStore: KeyStore,
             caCertificate: RootCertificate = .probe,
             crlLocation: String?
-        ) -> SSLConfiguration {
-            return SSLConfiguration(
+        ) -> TLSConfiguration {
+            return TLSConfiguration(
                 _internal: .keyStore(
                     keyStore: keyStore,
                     caCertificate: caCertificate,
@@ -182,7 +182,7 @@ extension KafkaConfiguration {
             )
         }
 
-        // MARK: SSLConfiguration + Dictionary
+        // MARK: TLSConfiguration + Dictionary
 
         internal var dictionary: [String: String] {
             var resultDict: [String: String] = [:]
@@ -444,9 +444,9 @@ extension KafkaConfiguration {
     public struct SecurityProtocol: Sendable, Hashable {
         internal enum _SecurityProtocol: Sendable, Hashable {
             case plaintext
-            case ssl(configuration: SSLConfiguration)
+            case tls(configuration: TLSConfiguration)
             case saslPlaintext(mechanism: SASLMechanism)
-            case saslSSL(saslMechanism: SASLMechanism, sslConfiguaration: SSLConfiguration)
+            case saslTLS(saslMechanism: SASLMechanism, tlsConfiguaration: TLSConfiguration)
         }
 
         private let _internal: _SecurityProtocol
@@ -456,10 +456,10 @@ extension KafkaConfiguration {
             _internal: .plaintext
         )
 
-        /// Use the Secure Sockets Layer (SSL) protocol.
-        public static func ssl(configuration: SSLConfiguration) -> SecurityProtocol {
+        /// Use the Transport Layer Security (TLS) protocol.
+        public static func tls(configuration: TLSConfiguration) -> SecurityProtocol {
             return SecurityProtocol(
-                _internal: .ssl(configuration: configuration)
+                _internal: .tls(configuration: configuration)
             )
         }
 
@@ -470,13 +470,13 @@ extension KafkaConfiguration {
             )
         }
 
-        /// Use the Simple Authentication and Security Layer (SASL) with SSL.
-        public static func saslSSL(
+        /// Use the Simple Authentication and Security Layer (SASL) with TLS.
+        public static func saslTLS(
             saslMechanism: SASLMechanism,
-            sslConfiguaration: SSLConfiguration
+            tlsConfiguaration: TLSConfiguration
         ) -> SecurityProtocol {
             return SecurityProtocol(
-                _internal: .saslSSL(saslMechanism: saslMechanism, sslConfiguaration: sslConfiguaration)
+                _internal: .saslTLS(saslMechanism: saslMechanism, tlsConfiguaration: tlsConfiguaration)
             )
         }
 
@@ -488,10 +488,10 @@ extension KafkaConfiguration {
             switch self._internal {
             case .plaintext:
                 resultDict["security.protocol"] = "plaintext"
-            case .ssl(let sslConfig):
+            case .tls(let tlsConfig):
                 resultDict["security.protocol"] = "ssl"
                 // Merge result dict with SASLMechanism config values
-                resultDict.merge(sslConfig.dictionary) { _, _ in
+                resultDict.merge(tlsConfig.dictionary) { _, _ in
                     fatalError("Tried to override key that was already set!")
                 }
             case .saslPlaintext(let saslMechanism):
@@ -500,13 +500,13 @@ extension KafkaConfiguration {
                 resultDict.merge(saslMechanism.dictionary) { _, _ in
                     fatalError("Tried to override key that was already set!")
                 }
-            case .saslSSL(let saslMechanism, let sslConfig):
+            case .saslTLS(let saslMechanism, let tlsConfig):
                 resultDict["security.protocol"] = "sasl_ssl"
                 // Merge with other dictionaries
                 resultDict.merge(saslMechanism.dictionary) { _, _ in
                     fatalError("Tried to override key that was already set!")
                 }
-                resultDict.merge(sslConfig.dictionary) { _, _ in
+                resultDict.merge(tlsConfig.dictionary) { _, _ in
                     fatalError("Tried to override key that was already set!")
                 }
             }
