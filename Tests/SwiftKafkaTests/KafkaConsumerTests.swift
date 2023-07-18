@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import struct Foundation.UUID
 import Logging
 import ServiceLifecycle
 @testable import SwiftKafka
@@ -39,11 +40,13 @@ final class KafkaConsumerTests: XCTestCase {
         }
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
+        let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfiguration(
-            consumptionStrategy: .partition(.unassigned, topic: "some topic")
+            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"])
         )
         config.bootstrapServers = []
-        config.sasl.mechanism = .gssapi // This should trigger a configuration error
+        config.securityProtocol = .plaintext
+        config.debug = [.all]
 
         let consumer = try KafkaConsumer(config: config, logger: mockLogger)
 
@@ -67,18 +70,19 @@ final class KafkaConsumerTests: XCTestCase {
         }
 
         let recordedEvents = recorder.recordedEvents
-        XCTAssertEqual(1, recordedEvents.count)
+        let expectedLogs: [(level: Logger.Level, source: String, message: String)] = [
+            (Logger.Level.debug, "MEMBERID", uniqueGroupID),
+        ]
 
-        let expectedMessage = """
-        [thrd:app]: Configuration property `sasl.mechanism` set to `GSSAPI` but `security.protocol` \
-        is not configured for SASL: recommend setting `security.protocol` to SASL_SSL or SASL_PLAINTEXT
-        """
-        let expectedLevel = Logger.Level.warning
-        let expectedSource = "CONFWARN"
-
-        let receivedEvent = try XCTUnwrap(recordedEvents.first, "Expected log event, but found none")
-        XCTAssertEqual(expectedMessage, receivedEvent.message.description)
-        XCTAssertEqual(expectedLevel, receivedEvent.level)
-        XCTAssertEqual(expectedSource, receivedEvent.source)
+        for expectedLog in expectedLogs {
+            XCTAssertTrue(
+                recordedEvents.contains(where: { event in
+                    event.level == expectedLog.level &&
+                        event.source == expectedLog.source &&
+                        event.message.description.contains(expectedLog.message)
+                }),
+                "Expected log \(expectedLog) but was not found"
+            )
+        }
     }
 }
