@@ -296,7 +296,7 @@ extension KafkaConfiguration {
             ///     For example: `principalClaimName=azp principal=admin scopeClaimName=roles scope=role1,role2 lifeSeconds=600`.
             ///     In addition, SASL extensions can be communicated to the broker via `extension_NAME=value`.
             ///     For example: `principal=admin extension_traceId=123`
-            static func `default`(configuration: String? = nil) -> OAuthBearerMethod {
+            public static func `default`(configuration: String? = nil) -> OAuthBearerMethod {
                 return OAuthBearerMethod(_internal: .default(configuration: configuration))
             }
 
@@ -319,7 +319,7 @@ extension KafkaConfiguration {
             ///     - scope: Client use this to specify the scope of the access request to the broker.
             ///     - extensions: Allow additional information to be provided to the broker.
             ///     Comma-separated list of key=value pairs. E.g., "supportFeatureX=true,organizationId=sales-emea".
-            static func oidc(
+            public static func oidc(
                 configuration: String? = nil,
                 clientID: String,
                 clientSecret: String,
