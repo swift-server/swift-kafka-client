@@ -36,7 +36,7 @@ struct RDKafkaConfig {
     /// - Parameter value: The new value of the configuration property to be changed.
     /// - Throws: A ``KafkaError`` if setting the value failed.
     static func set(configPointer: OpaquePointer, key: String, value: String) throws {
-        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
+        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
         let configResult = rd_kafka_conf_set(
@@ -44,7 +44,7 @@ struct RDKafkaConfig {
             key,
             value,
             errorChars,
-            KafkaClient.stringSize
+            RDKafkaClient.stringSize
         )
 
         if configResult != RD_KAFKA_CONF_OK {

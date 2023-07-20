@@ -17,7 +17,13 @@ import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
-final class KafkaClient: Sendable {
+final class RDKafkaClient: Sendable {
+    /// Determines if client is a producer or a consumer.
+    enum ClientType {
+        case producer
+        case consumer
+    }
+
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
@@ -29,7 +35,8 @@ final class KafkaClient: Sendable {
     /// `librdkafka`'s main `rd_kafka_queue_t`.
     private let mainQueue: OpaquePointer
 
-    init(
+    // Use factory method to initialize
+    private init(
         kafkaHandle: OpaquePointer,
         logger: Logger
     ) {
@@ -43,6 +50,44 @@ final class KafkaClient: Sendable {
 
     deinit {
         rd_kafka_destroy(kafkaHandle)
+    }
+
+    /// Factory method creating a new instance of a ``RDKafkaClient``.
+    static func makeClient(
+        type: ClientType,
+        configDictionary: [String: String],
+        events: [RDKafkaEvent],
+        logger: Logger
+    ) throws -> RDKafkaClient {
+        let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
+
+        let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
+        // Manually override some of the configuration options
+        // Handle logs in event queue
+        try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
+        // KafkaConsumer is manually storing read offsets
+        if type == .consumer {
+            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+        }
+        RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
+
+        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
+        defer { errorChars.deallocate() }
+
+        guard let handle = rd_kafka_new(
+            clientType,
+            rdConfig,
+            errorChars,
+            RDKafkaClient.stringSize
+        ) else {
+            // rd_kafka_new only frees the rd_kafka_conf_t upon success
+            rd_kafka_conf_destroy(rdConfig)
+
+            let errorString = String(cString: errorChars)
+            throw KafkaError.client(reason: errorString)
+        }
+
+        return RDKafkaClient(kafkaHandle: handle, logger: logger)
     }
 
     /// Produce a message to the Kafka cluster.
@@ -134,7 +179,7 @@ final class KafkaClient: Sendable {
     /// Handle event of type `RDKafkaEvent.deliveryReport`.
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    /// - Returns: `KafkaEvent` to be returned as part of ``KafkaClient.eventPoll()`.
+    /// - Returns: `KafkaEvent` to be returned as part of ``RDKafkaClient.eventPoll()`.
     private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> KafkaEvent {
         let deliveryReportCount = rd_kafka_event_message_count(event)
         var deliveryReportResults = [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>]()
@@ -230,13 +275,13 @@ final class KafkaClient: Sendable {
         actualCallback(.success(()))
     }
 
-    /// Redirect the main ``KafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
-    /// queue (``KafkaClient/consumerPoll``).
+    /// Redirect the main ``RDKafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
+    /// queue (``RDKafkaClient/consumerPoll``).
     ///
-    /// Events that would be triggered by ``KafkaClient/poll(timeout:)``
-    /// are now triggered by ``KafkaClient/consumerPoll``.
+    /// Events that would be triggered by ``RDKafkaClient/poll(timeout:)``
+    /// are now triggered by ``RDKafkaClient/consumerPoll``.
     ///
-    /// - Warning: It is not allowed to call ``KafkaClient/poll(timeout:)`` after ``KafkaClient/pollSetConsumer``.
+    /// - Warning: It is not allowed to call ``RDKafkaClient/poll(timeout:)`` after ``RDKafkaClient/pollSetConsumer``.
     func pollSetConsumer() throws {
         let result = rd_kafka_poll_set_consumer(self.kafkaHandle)
         if result != RD_KAFKA_RESP_ERR_NO_ERROR {
@@ -347,7 +392,7 @@ final class KafkaClient: Sendable {
     /// Close the consumer asynchronously. This means revoking its assignemnt, committing offsets to broker and
     /// leaving the consumer group (if applicable).
     ///
-    /// Make sure to run poll loop until ``KafkaClient/consumerIsClosed`` returns `true`.
+    /// Make sure to run poll loop until ``RDKafkaClient/consumerIsClosed`` returns `true`.
     func consumerClose() throws {
         let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle)
         let result = rd_kafka_consumer_close_queue(self.kafkaHandle, consumerQueue)

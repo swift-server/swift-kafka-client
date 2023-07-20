@@ -53,7 +53,7 @@ final class SwiftKafkaTests: XCTestCase {
         basicConfig.broker.addressFamily = .v4
 
         // TODO: ok to block here? How to make setup async?
-        let client = try RDKafka.createClient(
+        let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: basicConfig.dictionary,
             events: [],
@@ -70,7 +70,7 @@ final class SwiftKafkaTests: XCTestCase {
         basicConfig.broker.addressFamily = .v4
 
         // TODO: ok to block here? Problem: Tests may finish before topic is deleted
-        let client = try RDKafka.createClient(
+        let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: basicConfig.dictionary,
             events: [],

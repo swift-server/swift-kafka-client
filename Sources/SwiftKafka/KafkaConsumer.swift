@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Crdkafka
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -122,7 +121,7 @@ public final class KafkaConsumer: Sendable, Service {
         self.config = config
         self.logger = logger
 
-        let client = try RDKafka.createClient(
+        let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: config.dictionary,
             events: [.log, .fetch, .offsetCommit],
@@ -149,8 +148,8 @@ public final class KafkaConsumer: Sendable, Service {
             )
         }
 
-        // Events that would be triggered by ``KafkaClient/poll(timeout:)``
-        // are now triggered by ``KafkaClient/consumerPoll``.
+        // Events that would be triggered by ``RDKafkaClient/poll(timeout:)``
+        // are now triggered by ``RDKafkaClient/consumerPoll``.
         try client.pollSetConsumer()
 
         switch config.consumptionStrategy._internal {
@@ -289,7 +288,7 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     private func _triggerGracefulShutdown(
-        client: KafkaClient,
+        client: RDKafkaClient,
         logger: Logger
     ) {
         do {
@@ -323,7 +322,7 @@ extension KafkaConsumer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             case initializing(
-                client: KafkaClient,
+                client: RDKafkaClient,
                 source: Producer.Source
             )
             /// The ``KafkaConsumer`` is consuming messages.
@@ -331,19 +330,19 @@ extension KafkaConsumer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             case consuming(
-                client: KafkaClient,
+                client: RDKafkaClient,
                 source: Producer.Source
             )
             /// Consumer is still running but the messages asynchronous sequence was terminated.
             /// All incoming messages will be dropped.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case consumptionStopped(client: KafkaClient)
+            case consumptionStopped(client: RDKafkaClient)
             /// The ``KafkaConsumer/triggerGracefulShutdown()`` has been invoked.
             /// We are now in the process of commiting our last state to the broker.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case finishing(client: KafkaClient)
+            case finishing(client: RDKafkaClient)
             /// The ``KafkaConsumer`` is closed.
             case finished
         }
@@ -354,7 +353,7 @@ extension KafkaConsumer {
         /// Delayed initialization of `StateMachine` as the `source` and the `pollClosure` are
         /// not yet available when the normal initialization occurs.
         mutating func initialize(
-            client: KafkaClient,
+            client: RDKafkaClient,
             source: Producer.Source
         ) {
             guard case .uninitialized = self.state else {
@@ -373,7 +372,7 @@ extension KafkaConsumer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             case pollForAndYieldMessage(
-                client: KafkaClient,
+                client: RDKafkaClient,
                 source: Producer.Source
             )
             /// The ``KafkaConsumer`` stopped consuming messages or
@@ -381,7 +380,7 @@ extension KafkaConsumer {
             /// Poll to serve any queued events and commit outstanding state to the broker.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case pollWithoutYield(client: KafkaClient)
+            case pollWithoutYield(client: RDKafkaClient)
             /// Terminate the poll loop.
             case terminatePollLoop
         }
@@ -416,7 +415,7 @@ extension KafkaConsumer {
         enum SetUpConnectionAction {
             /// Set up the connection through ``subscribe()`` or ``assign()``.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case setUpConnection(client: KafkaClient)
+            case setUpConnection(client: RDKafkaClient)
         }
 
         /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
@@ -458,7 +457,7 @@ extension KafkaConsumer {
         enum StoreOffsetAction {
             /// Store the message offset with the given `client`.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case storeOffset(client: KafkaClient)
+            case storeOffset(client: RDKafkaClient)
         }
 
         /// Get action to take when wanting to store a message offset (to be auto-committed by `librdkafka`).
@@ -483,7 +482,7 @@ extension KafkaConsumer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case commitSync(
-                client: KafkaClient
+                client: RDKafkaClient
             )
             /// Throw an error. The ``KafkaConsumer`` is closed.
             case throwClosedError
@@ -514,14 +513,14 @@ extension KafkaConsumer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case triggerGracefulShutdown(
-                client: KafkaClient
+                client: RDKafkaClient
             )
             /// Shut down the ``KafkaConsumer`` and finish the given `source` object.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             case triggerGracefulShutdownAndFinishSource(
-                client: KafkaClient,
+                client: RDKafkaClient,
                 source: Producer.Source
             )
         }

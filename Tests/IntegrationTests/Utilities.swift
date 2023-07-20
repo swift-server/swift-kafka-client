@@ -25,7 +25,7 @@ extension Logger {
     }
 }
 
-extension KafkaClient {
+extension RDKafkaClient {
 //    func createUniqueTopic(timeout: Int32 = 10000) async throws -> String {
 //        try await withCheckedThrowingContinuation { continuation in
 //            do {
@@ -45,7 +45,7 @@ extension KafkaClient {
     func _createUniqueTopic(timeout: Int32) throws -> String {
         let uniqueTopicName = UUID().uuidString
 
-        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: KafkaClient.stringSize)
+        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
         guard let newTopic = rd_kafka_NewTopic_new(
@@ -53,7 +53,7 @@ extension KafkaClient {
             -1, // use default num_partitions
             -1, // use default replication_factor
             errorChars,
-            KafkaClient.stringSize
+            RDKafkaClient.stringSize
         ) else {
             let errorString = String(cString: errorChars)
             throw KafkaError.topicCreation(reason: errorString)
