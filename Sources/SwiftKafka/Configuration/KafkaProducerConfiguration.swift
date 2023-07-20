@@ -22,7 +22,11 @@ public struct KafkaProducerConfiguration {
 
     /// Maximum timeout for flushing outstanding produce requests when the ``KakfaProducer`` is shutting down.
     /// Default: `10000`
-    public var flushTimeoutMilliseconds: Int32 = 10000
+    public var flushTimeoutMilliseconds: Int = 10000 {
+        didSet {
+            precondition(0...Int(Int32.max) ~= self.flushTimeoutMilliseconds)
+        }
+    }
 
     // MARK: - Producer-specific Config Properties
 
