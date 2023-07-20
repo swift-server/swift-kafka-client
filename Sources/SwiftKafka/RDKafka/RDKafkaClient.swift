@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
+import Dispatch
 import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
@@ -389,6 +390,28 @@ final class RDKafkaClient: Sendable {
         }
     }
 
+    /// Flush any outstanding produce requests.
+    ///
+    /// Parameters:
+    ///
+    ///     - timeoutMilliseconds: Maximum time to wait for outstanding messages to be flushed.
+    func flush(timeoutMilliseconds: Int32) async throws {
+        // rd_kafka_flush is blocking and there is no convenient way to make it non-blocking.
+        // We therefore execute rd_kafka_flush on a DispatchQueue to ensure it gets executed
+        // on a separate thread that is not part of Swift Concurrency's cooperative thread pool.
+        let queue = DispatchQueue(label: "com.swift-server.swift-kafka.flush")
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async {
+                let error = rd_kafka_flush(self.kafkaHandle, timeoutMilliseconds)
+                if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
     /// Close the consumer asynchronously. This means revoking its assignemnt, committing offsets to broker and
     /// leaving the consumer group (if applicable).
     ///
@@ -405,14 +428,6 @@ final class RDKafkaClient: Sendable {
     /// Returns `true` if the underlying `librdkafka` consumer is closed.
     var isConsumerClosed: Bool {
         rd_kafka_consumer_closed(self.kafkaHandle) == 1
-    }
-
-    /// Returns the current out queue length.
-    ///
-    /// This means the number of producer messages that wait to be sent + the number of any
-    /// callbacks that are waiting to be executed by invoking `rd_kafka_poll`.
-    var outgoingQueueSize: Int32 {
-        return rd_kafka_outq_len(self.kafkaHandle)
     }
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.

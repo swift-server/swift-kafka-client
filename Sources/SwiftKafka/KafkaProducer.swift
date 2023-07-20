@@ -222,7 +222,8 @@ public final class KafkaProducer: Service, Sendable {
                     }
                 }
                 try await Task.sleep(for: self.config.pollInterval)
-            case .terminatePollLoopAndFinishSource(let source):
+            case .flushFinishSourceAndTerminatePollLoop(let client, let source):
+                try await client.flush(timeoutMilliseconds: 10 * 1000)
                 source?.finish()
                 return
             case .terminatePollLoop:
@@ -297,7 +298,7 @@ extension KafkaProducer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case flushing(
+            case finishing(
                 client: RDKafkaClient,
                 source: Producer.Source?
             )
@@ -336,10 +337,12 @@ extension KafkaProducer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             case pollAndYield(client: RDKafkaClient, source: Producer.Source?)
-            /// Terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
+            /// Flush any outstanding producer messages.
+            /// Then terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
             ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case terminatePollLoopAndFinishSource(source: Producer.Source?)
+            case flushFinishSourceAndTerminatePollLoop(client: RDKafkaClient, source: Producer.Source?)
             /// Terminate the poll loop.
             case terminatePollLoop
         }
@@ -356,13 +359,8 @@ extension KafkaProducer {
                 return .pollAndYield(client: client, source: source)
             case .consumptionStopped(let client):
                 return .pollWithoutYield(client: client)
-            case .flushing(let client, let source):
-                if client.outgoingQueueSize > 0 {
-                    return .pollAndYield(client: client, source: source)
-                } else {
-                    self.state = .finished
-                    return .terminatePollLoopAndFinishSource(source: source)
-                }
+            case .finishing(let client, let source):
+                return .flushFinishSourceAndTerminatePollLoop(client: client, source: source)
             case .finished:
                 return .terminatePollLoop
             }
@@ -402,8 +400,8 @@ extension KafkaProducer {
                 )
             case .consumptionStopped:
                 throw KafkaError.connectionClosed(reason: "Sequence consuming acknowledgements was abruptly terminated, producer closed")
-            case .flushing:
-                throw KafkaError.connectionClosed(reason: "Producer in the process of flushing and shutting down")
+            case .finishing:
+                throw KafkaError.connectionClosed(reason: "Producer in the process of finishing")
             case .finished:
                 throw KafkaError.connectionClosed(reason: "Tried to produce a message with a closed producer")
             }
@@ -428,9 +426,9 @@ extension KafkaProducer {
             case .started(let client, _, let source, _):
                 self.state = .consumptionStopped(client: client)
                 return .finishSource(source: source)
-            case .flushing(let client, let source):
+            case .finishing(let client, let source):
                 // Setting source to nil to prevent incoming acknowledgements from buffering in `source`
-                self.state = .flushing(client: client, source: nil)
+                self.state = .finishing(client: client, source: nil)
                 return .finishSource(source: source)
             case .finished:
                 break
@@ -446,10 +444,10 @@ extension KafkaProducer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
-                self.state = .flushing(client: client, source: source)
+                self.state = .finishing(client: client, source: source)
             case .consumptionStopped(let client):
-                self.state = .flushing(client: client, source: nil)
-            case .flushing, .finished:
+                self.state = .finishing(client: client, source: nil)
+            case .finishing, .finished:
                 break
             }
         }
