@@ -20,6 +20,17 @@ public struct KafkaProducerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
+    /// Maximum timeout for flushing outstanding produce requests when the ``KakfaProducer`` is shutting down.
+    /// Default: `10000`
+    public var flushTimeoutMilliseconds: Int = 10000 {
+        didSet {
+            precondition(
+                0...Int(Int32.max) ~= self.flushTimeoutMilliseconds,
+                "Flush timeout outside of valid range \(0...Int32.max)"
+            )
+        }
+    }
+
     // MARK: - Producer-specific Config Properties
 
     /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), retries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantation will fail if user-supplied configuration is incompatible.
