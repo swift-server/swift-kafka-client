@@ -97,33 +97,45 @@ final class RDKafkaClient: Sendable {
     /// - Parameter newMessageID: ID that was assigned to the `message`.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
-    func produce(
-        message: KafkaProducerMessage,
+    func produce<K, V>(
+        message: KafkaProducerMessage<K, V>,
         newMessageID: UInt,
         topicConfig: KafkaTopicConfiguration,
         topicHandles: RDKafkaTopicHandles
     ) throws {
-        let keyBytes: [UInt8]?
-        if var key = message.key {
-            keyBytes = key.readBytes(length: key.readableBytes)
-        } else {
-            keyBytes = nil
-        }
-
-        let responseCode = try message.value.withUnsafeReadableBytes { valueBuffer in
-            return try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfig: topicConfig) { topicHandle in
-                // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
-                // Returns 0 on success, error code otherwise.
-                return rd_kafka_produce(
-                    topicHandle,
-                    message.partition.rawValue,
-                    RD_KAFKA_MSG_F_COPY,
-                    UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                    valueBuffer.count,
-                    keyBytes,
-                    keyBytes?.count ?? 0,
-                    UnsafeMutableRawPointer(bitPattern: newMessageID)
-                )
+        let responseCode = try message.value.withUnsafeRawBufferPointer { valueBuffer in
+            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfig: topicConfig) { topicHandle in
+                if let key = message.key {
+                    // Key available, we can use scoped accessor to safely access its rawBufferPointer.
+                    // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
+                    // Returns 0 on success, error code otherwise.
+                    return key.withUnsafeRawBufferPointer { keyBuffer in
+                        return rd_kafka_produce(
+                            topicHandle,
+                            message.partition.rawValue,
+                            RD_KAFKA_MSG_F_COPY,
+                            UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
+                            valueBuffer.count,
+                            keyBuffer.baseAddress,
+                            keyBuffer.count,
+                            UnsafeMutableRawPointer(bitPattern: newMessageID)
+                        )
+                    }
+                } else {
+                    // No key set.
+                    // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
+                    // Returns 0 on success, error code otherwise.
+                    return rd_kafka_produce(
+                        topicHandle,
+                        message.partition.rawValue,
+                        RD_KAFKA_MSG_F_COPY,
+                        UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
+                        valueBuffer.count,
+                        nil,
+                        0,
+                        UnsafeMutableRawPointer(bitPattern: newMessageID)
+                    )
+                }
             }
         }
 

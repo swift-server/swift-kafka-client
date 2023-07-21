@@ -16,11 +16,11 @@ import Crdkafka
 import NIOCore
 
 /// Message that is sent by the `KafkaProducer`
-public struct KafkaProducerMessage {
+public struct KafkaProducerMessage<Key: KafkaBuffer, Value: KafkaBuffer> {
     public var topic: String
     public var partition: KafkaPartition
-    public var key: ByteBuffer?
-    public var value: ByteBuffer
+    public var key: Key?
+    public var value: Value
 
     /// Create a new `KafkaProducerMessage` with a `ByteBuffer` key and value
     /// - Parameter topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
@@ -30,8 +30,8 @@ public struct KafkaProducerMessage {
     public init(
         topic: String,
         partition: KafkaPartition? = nil,
-        key: ByteBuffer? = nil,
-        value: ByteBuffer
+        key: Key? = nil,
+        value: Value
     ) {
         self.topic = topic
         self.key = key
@@ -42,31 +42,5 @@ public struct KafkaProducerMessage {
         } else {
             self.partition = .unassigned
         }
-    }
-
-    /// Create a new `KafkaProducerMessage` with a `String` key and value
-    /// - Parameter topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
-    /// - Parameter partition: The topic partition the message will be sent to. If not set explicitly, the partiotion will be assigned automatically.
-    /// - Parameter key: Used to guarantee that messages with the same key will be sent to the same partittion so that their order is preserved.
-    /// - Parameter value: The message body.
-    public init(
-        topic: String,
-        partition: KafkaPartition? = nil,
-        key: String? = nil,
-        value: String
-    ) {
-        let keyBuffer: ByteBuffer?
-        if let key = key {
-            keyBuffer = ByteBuffer(string: key)
-        } else {
-            keyBuffer = nil
-        }
-
-        self.init(
-            topic: topic,
-            partition: partition,
-            key: keyBuffer,
-            value: ByteBuffer(string: value)
-        )
     }
 }
