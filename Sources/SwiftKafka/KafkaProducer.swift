@@ -223,7 +223,10 @@ public final class KafkaProducer: Service, Sendable {
                 }
                 try await Task.sleep(for: self.config.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
-                precondition(0...Int(Int32.max) ~= self.config.flushTimeoutMilliseconds)
+                precondition(
+                    0...Int(Int32.max) ~= self.config.flushTimeoutMilliseconds,
+                    "Flush timeout outside of valid range \(0...Int32.max)"
+                )
                 try await client.flush(timeoutMilliseconds: Int32(self.config.flushTimeoutMilliseconds))
                 source?.finish()
                 return

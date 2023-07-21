@@ -24,7 +24,10 @@ public struct KafkaProducerConfiguration {
     /// Default: `10000`
     public var flushTimeoutMilliseconds: Int = 10000 {
         didSet {
-            precondition(0...Int(Int32.max) ~= self.flushTimeoutMilliseconds)
+            precondition(
+                0...Int(Int32.max) ~= self.flushTimeoutMilliseconds,
+                "Flush timeout outside of valid range \(0...Int32.max)"
+            )
         }
     }
 

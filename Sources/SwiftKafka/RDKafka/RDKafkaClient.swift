@@ -393,7 +393,6 @@ final class RDKafkaClient: Sendable {
     /// Flush any outstanding produce requests.
     ///
     /// Parameters:
-    ///
     ///     - timeoutMilliseconds: Maximum time to wait for outstanding messages to be flushed.
     func flush(timeoutMilliseconds: Int32) async throws {
         // rd_kafka_flush is blocking and there is no convenient way to make it non-blocking.
