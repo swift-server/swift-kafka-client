@@ -15,16 +15,17 @@
 import NIOCore
 
 extension String: KafkaBuffer {
-    /// Yields a buffer pointer containing this `KafkaBuffer`'s readable bytes.
-    ///
-    /// - warning: Do not escape the pointer from the closure for later use.
-    ///
-    /// - parameters:
-    ///     - body: The closure that will accept the yielded bytes.
-    /// - returns: The value returned by `body`.
     public func withUnsafeRawBufferPointer<T>(_ body: (UnsafeRawBufferPointer) throws -> T) rethrows -> T {
-        try ByteBuffer(string: self).withUnsafeReadableBytes { UnsafeRawBufferPointer in
-            try body(UnsafeRawBufferPointer)
+        if let read = try self.utf8.withContiguousStorageIfAvailable({ unsafePointer in
+            let unsafeRawBufferPointer = UnsafeRawBufferPointer(start: unsafePointer.baseAddress, count: self.count)
+            return try body(unsafeRawBufferPointer)
+        }) {
+            return read
+        } else {
+            // Slow path
+            return try ByteBuffer(string: self).withUnsafeReadableBytes { UnsafeRawBufferPointer in
+                try body(UnsafeRawBufferPointer)
+            }
         }
     }
 }

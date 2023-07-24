@@ -12,12 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIOCore
-
-extension ByteBuffer: KafkaBuffer {
-    public func withUnsafeRawBufferPointer<T>(_ body: (UnsafeRawBufferPointer) throws -> T) rethrows -> T {
-        try self.withUnsafeReadableBytes { unsafeReadableBytes in
-            try body(unsafeReadableBytes)
-        }
+extension Never: KafkaBuffer {
+    public func withUnsafeRawBufferPointer<T>(_: (UnsafeRawBufferPointer) throws -> T) rethrows -> T {
+        fatalError("Cannot read bytes of type `Never`")
     }
 }

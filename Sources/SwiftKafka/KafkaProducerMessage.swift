@@ -30,12 +30,34 @@ public struct KafkaProducerMessage<Key: KafkaBuffer, Value: KafkaBuffer> {
     public init(
         topic: String,
         partition: KafkaPartition? = nil,
-        key: Key? = nil,
+        key: Key,
         value: Value
     ) {
         self.topic = topic
         self.key = key
         self.value = value
+
+        if let partition = partition {
+            self.partition = partition
+        } else {
+            self.partition = .unassigned
+        }
+    }
+}
+
+extension KafkaProducerMessage where Key == Never {
+    /// Create a new `KafkaProducerMessage` with a `ByteBuffer` key and value
+    /// - Parameter topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
+    /// - Parameter partition: The topic partition the message will be sent to. If not set explicitly, the partiotion will be assigned automatically.
+    /// - Parameter value: The message body.
+    public init(
+        topic: String,
+        partition: KafkaPartition? = nil,
+        value: Value
+    ) {
+        self.topic = topic
+        self.value = value
+        self.key = nil
 
         if let partition = partition {
             self.partition = partition

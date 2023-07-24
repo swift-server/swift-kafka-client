@@ -126,7 +126,7 @@ final class KafkaProducerTests: XCTestCase {
             }
 
             let expectedTopic = "test-topic"
-            let message = KafkaProducerMessage<ByteBuffer, ByteBuffer>(
+            let message = KafkaProducerMessage(
                 topic: expectedTopic,
                 value: ByteBuffer()
             )
@@ -158,9 +158,8 @@ final class KafkaProducerTests: XCTestCase {
                 return
             }
 
-            XCTAssertEqual(expectedTopic, receivedMessage.topic)
-            XCTAssertEqual(message.key, receivedMessage.key)
-            XCTAssertEqual(message.value, receivedMessage.value)
+                XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
+                XCTAssertEqual(message.value, acknowledgedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()

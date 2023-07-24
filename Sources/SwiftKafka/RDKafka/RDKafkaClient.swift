@@ -97,8 +97,8 @@ final class RDKafkaClient: Sendable {
     /// - Parameter newMessageID: ID that was assigned to the `message`.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
-    func produce<K, V>(
-        message: KafkaProducerMessage<K, V>,
+    func produce<Key, Value>(
+        message: KafkaProducerMessage<Key, Value>,
         newMessageID: UInt,
         topicConfig: KafkaTopicConfiguration,
         topicHandles: RDKafkaTopicHandles
