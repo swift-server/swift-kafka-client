@@ -95,7 +95,7 @@ final class SwiftKafkaTests: XCTestCase {
         consumerConfig.bootstrapServers = [self.bootstrapServer]
         consumerConfig.broker.addressFamily = .v4
 
-        let consumer = try KafkaConsumer(
+        let consumer = try KafkaConsumer.makeConsumer(
             config: consumerConfig,
             logger: .kafkaTest
         )
@@ -167,7 +167,7 @@ final class SwiftKafkaTests: XCTestCase {
         consumerConfig.bootstrapServers = [self.bootstrapServer]
         consumerConfig.broker.addressFamily = .v4
 
-        let consumer = try KafkaConsumer(
+        let consumer = try KafkaConsumer.makeConsumer(
             config: consumerConfig,
             logger: .kafkaTest
         )
@@ -236,7 +236,7 @@ final class SwiftKafkaTests: XCTestCase {
         consumerConfig.bootstrapServers = [self.bootstrapServer]
         consumerConfig.broker.addressFamily = .v4
 
-        let consumer = try KafkaConsumer(
+        let consumer = try KafkaConsumer.makeConsumer(
             config: consumerConfig,
             logger: .kafkaTest
         )
@@ -308,7 +308,7 @@ final class SwiftKafkaTests: XCTestCase {
         consumer1Config.bootstrapServers = [self.bootstrapServer]
         consumer1Config.broker.addressFamily = .v4
 
-        let consumer1 = try KafkaConsumer(
+        let consumer1 = try KafkaConsumer.makeConsumer(
             config: consumer1Config,
             logger: .kafkaTest
         )
@@ -385,7 +385,7 @@ final class SwiftKafkaTests: XCTestCase {
         consumer2Config.bootstrapServers = [self.bootstrapServer]
         consumer2Config.broker.addressFamily = .v4
 
-        let consumer2 = try KafkaConsumer(
+        let consumer2 = try KafkaConsumer.makeConsumer(
             config: consumer2Config,
             logger: .kafkaTest
         )

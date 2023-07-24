@@ -88,7 +88,7 @@ var config = KafkaConsumerConfiguration(
 )
 config.bootstrapServers = [broker]
 
-let consumer = try KafkaConsumer(
+let consumer = try KafkaConsumer.makeConsumer(
     config: config,
     logger: logger
 )
@@ -125,7 +125,7 @@ var config = KafkaConsumerConfiguration(
 )
 config.bootstrapServers = [broker]
 
-let consumer = try KafkaConsumer(
+let consumer = try KafkaConsumer.makeConsumer(
     config: config,
     logger: logger
 )
@@ -163,7 +163,7 @@ var config = KafkaConsumerConfiguration(
 config.enableAutoCommit = false,
 config.bootstrapServers = [broker]
 
-let consumer = try KafkaConsumer(
+let consumer = try KafkaConsumer.makeConsumer(
     config: config,
     logger: logger
 )
