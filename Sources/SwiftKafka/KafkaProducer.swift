@@ -212,12 +212,11 @@ public final class KafkaProducer: Service, Sendable {
                 let _ = client.eventPoll()
             case .pollAndYield(let client, let source):
                 let events = client.eventPoll()
-                events
-                    .map(KafkaProducerEvent.fromKafkaEvent(_:))
-                    .forEach {
-                        // Ignore YieldResult as we don't support back pressure in KafkaProducer
-                        _ = source?.yield($0)
-                    }
+                for event in events {
+                    let producerEvent = KafkaProducerEvent(event)
+                    // Ignore YieldResult as we don't support back pressure in KafkaProducer
+                    _ = source?.yield(producerEvent)
+                }
                 try await Task.sleep(for: self.config.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
                 precondition(

@@ -82,11 +82,11 @@ final class KafkaProducerTests: XCTestCase {
                 switch event {
                 case .deliveryReport(let acknowledgementResults):
                     for result in acknowledgementResults {
-                        guard case .success(let acknowledgedMessage) = result else {
+                        guard case .acknowledged(let message) = result else {
                             XCTFail()
                             return
                         }
-                        acknowledgedMessages.insert(acknowledgedMessage)
+                        acknowledgedMessages.insert(message)
                     }
                 default:
                     break // Ignore any other events
@@ -138,11 +138,11 @@ final class KafkaProducerTests: XCTestCase {
                 switch event {
                 case .deliveryReport(let acknowledgementResults):
                     for result in acknowledgementResults {
-                        guard case .success(let acknowledgedMessage) = result else {
+                        guard case .acknowledged(let message) = result else {
                             XCTFail()
                             return
                         }
-                        acknowledgedMessages.insert(acknowledgedMessage)
+                        acknowledgedMessages.insert(message)
                     }
                 default:
                     break // Ignore any other events
@@ -202,11 +202,11 @@ final class KafkaProducerTests: XCTestCase {
                 switch event {
                 case .deliveryReport(let acknowledgementResults):
                     for result in acknowledgementResults {
-                        guard case .success(let acknowledgedMessage) = result else {
+                        guard case .acknowledged(let message) = result else {
                             XCTFail()
                             return
                         }
-                        acknowledgedMessages.insert(acknowledgedMessage)
+                        acknowledgedMessages.insert(message)
                     }
                 default:
                     break // Ignore any other events

@@ -13,20 +13,19 @@
 //===----------------------------------------------------------------------===//
 
 /// An enumeration representing events that can be received through the ``KafkaProducerEvents`` asynchronous sequence.
-public enum KafkaProducerEvent: Hashable, Sendable {
-    /// A delivery report received from the Kafka cluster indicating the status of a produced message.
+public enum KafkaProducerEvent: Sendable, Hashable {
+    /// A delivery reports received from the Kafka cluster indicating the status of produced messages.
     ///
     /// Parameters:
     ///    - results: Array of message acknowledgement results.
-    case deliveryReport(results: [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>])
+    case deliveryReport(results: [KafkaProducerMessageStatus])
     /// - Important: Always provide a `default` case when switiching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 
-    /// Down-cast ``RDKafkaClient/KafkaEvent`` to ``KafkaProducerEvent``.
-    static func fromKafkaEvent(_ event: RDKafkaClient.KafkaEvent) -> KafkaProducerEvent {
+    internal init(_ event: RDKafkaClient.KafkaEvent) {
         switch event {
         case .deliveryReport(results: let results):
-            return .deliveryReport(results: results)
+            self = .deliveryReport(results: results)
         case .consumerMessages:
             fatalError("Cannot cast \(event) to KafkaProducerEvent")
         }

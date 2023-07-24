@@ -36,7 +36,7 @@ let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
 var config = KafkaProducerConfiguration()
 config.bootstrapServers = [broker]
 
-let (producer, acknowledgements) = try KafkaProducer.makeProducerWithAcknowledgements(
+let (producer, events) = try KafkaProducer.makeProducerWithEvents(
     config: config,
     logger: logger
 )
@@ -53,7 +53,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
         try await serviceGroup.run()
     }
 
-    // Task receiving acknowledgements
+    // Task sending message and receiving events
     group.addTask {
         let messageID = try producer.send(
             KafkaProducerMessage(
