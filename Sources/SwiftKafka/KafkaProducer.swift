@@ -265,6 +265,43 @@ public final class KafkaProducer: Service, Sendable {
             return KafkaProducerMessageID(rawValue: newMessageID)
         }
     }
+    
+    func initTransactions(timeout: Duration = .seconds(5)) async throws {
+        guard config.transactionalId != nil else {
+            throw KafkaError.config(
+                reason: "Could not initialize transactions because transactionalId is not set in config")
+        }
+        // FIXME: maybe add state 'startedWithTransactions'?
+        let client = try self.stateMachine.withLockedValue { try $0.transactionsClient() }
+        try await client.initTransactions(timeout: timeout)
+    }
+    
+    func beginTransaction() throws {
+        let client = try self.stateMachine.withLockedValue { try $0.transactionsClient() }
+        try client.beginTransaction()
+    }
+    
+    func send(
+        offsets: RDKafkaTopicPartitionList,
+        forConsumer consumer: KafkaConsumer,
+        timeout: Duration = .kafkaUntilEndOfTransactionTimeout,
+        attempts: UInt64 = .max
+    ) async throws {
+        let client = try self.stateMachine.withLockedValue { try $0.transactionsClient() }
+        let consumerClient = try consumer.client()
+        try await consumerClient.withKafkaHandlePointer {
+            try await client.send(attempts: attempts, offsets: offsets, forConsumerKafkaHandle: $0, timeout: timeout)
+        }
+    }
+    
+    func abortTransaction(
+        timeout: Duration = .kafkaUntilEndOfTransactionTimeout,
+        attempts: UInt64) async throws {
+        let client = try self.stateMachine.withLockedValue { try $0.transactionsClient() }
+            try await client.abortTransaction(attempts: attempts, timeout: timeout)
+    }
+    
+    
 }
 
 // MARK: - KafkaProducer + StateMachine
@@ -453,6 +490,23 @@ extension KafkaProducer {
                 self.state = .finishing(client: client, source: nil)
             case .finishing, .finished:
                 break
+            }
+        }
+
+        // TODO:
+        // 1. add client()
+        // 2. initTransactions() -> change state to startedWithTransactions
+        // 3. transactionsClient() -> return client only for startedWithTransactions
+        
+        
+        func transactionsClient() throws -> RDKafkaClient {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .started(let client, _, _, _):
+                return client
+            default:
+                throw KafkaError.connectionClosed(reason: "Producer is stopping or finished")
             }
         }
     }

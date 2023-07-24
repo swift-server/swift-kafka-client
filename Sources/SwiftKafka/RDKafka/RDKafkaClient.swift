@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
+import BlockingCallWrapper
 import Dispatch
 import Logging
 
@@ -436,6 +437,14 @@ final class RDKafkaClient: Sendable {
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
         return try body(self.kafkaHandle)
     }
+    
+    /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle with async closure.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the Kafka handle pointer.
+    @discardableResult
+    func withKafkaHandlePointer<T>(_ body: (OpaquePointer) async throws -> T) async rethrows -> T {
+        return try await body(self.kafkaHandle)
+    }
 
     /// Convert an unsafe`rd_kafka_message_t` object to a safe ``KafkaAcknowledgementResult``.
     /// - Parameter messagePointer: An `UnsafePointer` pointing to the `rd_kafka_message_t` object in memory.
@@ -462,4 +471,138 @@ final class RDKafkaClient: Sendable {
 
         return messageResult
     }
+    
+    func initTransactions(timeout: Duration) async throws {
+        let result = await forBlockingFunc {
+            rd_kafka_init_transactions(self.kafkaHandle, Int32(timeout.totalMilliseconds))
+        }
+        
+        if result != nil {
+            let code = rd_kafka_error_code(result)
+            rd_kafka_error_destroy(result)
+            throw KafkaError.rdKafkaError(wrapping: code)
+        }
+    }
+    
+    func beginTransaction() throws {
+        let result = rd_kafka_begin_transaction(kafkaHandle)
+        if result != nil {
+            let code = rd_kafka_error_code(result)
+            rd_kafka_error_destroy(result)
+            throw KafkaError.rdKafkaError(wrapping: code)
+        }
+    }
+    
+    func send(
+        attempts: UInt64,
+        offsets: RDKafkaTopicPartitionList,
+        forConsumerKafkaHandle consumer: OpaquePointer,
+        timeout: Duration) async throws {
+            try await offsets.withListPointer { topicPartitionList in
+                
+                let consumerMetadata = rd_kafka_consumer_group_metadata(consumer)
+                defer { rd_kafka_consumer_group_metadata_destroy(consumerMetadata) }
+                
+                // TODO: actually it should be withing some timeout (like transaction timeout or session timeout)
+                for idx in 0..<attempts {
+                    let error = await forBlockingFunc {
+                        rd_kafka_send_offsets_to_transaction(self.kafkaHandle, topicPartitionList,
+                                                             consumerMetadata, timeout.totalMillisecondsOrMinusOne)
+                    }
+                    
+                    /* check if offset commit is completed successfully  */
+                    if error == nil {
+                        return
+                    }
+                    defer { rd_kafka_error_destroy(error) }
+                    
+                    /* check if offset commit is retriable */
+                    if rd_kafka_error_is_retriable(error) == 1 {
+                        continue
+                    }
+                    
+                    /* check if transaction need to be aborted */
+                    if rd_kafka_error_txn_requires_abort(error) == 1 {
+                        do {
+                            try await abortTransaction(attempts: attempts - idx, timeout: timeout)
+                            throw KafkaError.transactionAborted(reason: "Transaction aborted and can be started from scratch")
+                        } catch {
+                            throw KafkaError.transactionIncomplete(
+                                reason: "Could not complete or abort transaction with error \(error)")
+                        }
+                    }
+                    let isFatal = (rd_kafka_error_is_fatal(error) == 1) // fatal when Producer/Consumer must be restarted
+                    throw KafkaError.rdKafkaError(wrapping: rd_kafka_error_code(error), isFatal: isFatal)
+                }
+            }
+            throw KafkaError.transactionOutOfAttempts(numOfAttempts: attempts)
+        }
+    
+    func abortTransaction(attempts: UInt64, timeout: Duration) async throws {
+        for _ in 0..<attempts {
+            let error = await forBlockingFunc {
+                rd_kafka_abort_transaction(self.kafkaHandle, timeout.totalMillisecondsOrMinusOne)
+            }
+            /* check if transaction abort is completed successfully  */
+            if error == nil {
+                return
+            }
+            defer { rd_kafka_error_destroy(error) }
+
+            /* check if transaction abort is retriable */
+            if rd_kafka_error_is_retriable(error) == 1 {
+                continue
+            }
+            let isFatal = (rd_kafka_error_is_fatal(error) == 1) // fatal when Producer/Consumer must be restarted
+            throw KafkaError.rdKafkaError(wrapping: rd_kafka_error_code(error), isFatal: isFatal)
+        }
+        throw KafkaError.transactionOutOfAttempts(numOfAttempts: attempts)
+    }
+    
+    func commitTransaction(attempts: UInt64, timeout: Duration) async throws {
+        for idx in 0..<attempts {
+            let error = await forBlockingFunc {
+                rd_kafka_commit_transaction(self.kafkaHandle, timeout.totalMillisecondsOrMinusOne)
+            }
+            /* check if transaction is completed successfully  */
+            if error == nil {
+                return
+            }
+            /* check if transaction is retriable */
+            if rd_kafka_error_is_retriable(error) == 1 {
+                continue
+            }
+            defer { rd_kafka_error_destroy(error) }
+            
+            /* check if transaction need to be aborted */
+            if rd_kafka_error_txn_requires_abort(error) == 1 {
+                do {
+                    try await abortTransaction(attempts: attempts - idx, timeout: timeout)
+                    throw KafkaError.transactionAborted(reason: "Transaction aborted and can be started from scratch")
+                } catch {
+                    throw KafkaError.transactionIncomplete(
+                        reason: "Could not complete or abort transaction with error \(error)")
+                }
+            }
+            /* check if error is fatal */
+            let isFatal = (rd_kafka_error_is_fatal(error) == 1) // fatal when Producer/Consumer must be restarted
+            throw KafkaError.rdKafkaError(wrapping: rd_kafka_error_code(error), isFatal: isFatal)
+        }
+        throw KafkaError.transactionOutOfAttempts(numOfAttempts: attempts)
+    }
+}
+
+// TODO: tmp, should be in other PRs
+extension Duration {
+    // Internal usage only: librdkafka accepts Int32 as timeouts
+    var totalMilliseconds: Int32 {
+        return Int32(self.components.seconds * 1000 + self.components.attoseconds / 1_000_000_000_000_000)
+    }
+    
+    var totalMillisecondsOrMinusOne: Int32 {
+        return max(totalMilliseconds, -1)
+    }
+    
+    public static var kafkaUntilEndOfTransactionTimeout: Duration = .milliseconds(-1)
+    public static var kafkaNoWaitTransaction: Duration = .zero
 }
