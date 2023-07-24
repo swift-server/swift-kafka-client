@@ -34,7 +34,7 @@ public struct KafkaConsumerMessage {
         let rdKafkaMessage = messagePointer.pointee
 
         guard let valuePointer = rdKafkaMessage.payload else {
-            fatalError("Could not resolve payload of acknowledged message")
+            fatalError("Could not resolve payload of consumer message")
         }
 
         let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)

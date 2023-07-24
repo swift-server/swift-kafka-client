@@ -53,7 +53,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSend() async throws {
-        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -76,18 +76,33 @@ final class KafkaProducerTests: XCTestCase {
 
             let messageID = try producer.send(message)
 
-            for await messageResult in acknowledgments {
-                guard case .success(let acknowledgedMessage) = messageResult else {
-                    XCTFail()
-                    return
+            var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+
+            for await event in events {
+                switch event {
+                case .deliveryReport(let acknowledgementResults):
+                    for result in acknowledgementResults {
+                        guard case .success(let acknowledgedMessage) = result else {
+                            XCTFail()
+                            return
+                        }
+                        acknowledgedMessages.insert(acknowledgedMessage)
+                    }
+                default:
+                    break // Ignore any other events
                 }
 
-                XCTAssertEqual(messageID, acknowledgedMessage.id)
-                XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
-                XCTAssertEqual(message.key, acknowledgedMessage.key)
-                XCTAssertEqual(message.value, acknowledgedMessage.value)
-                break
+                if acknowledgedMessages.count >= 1 {
+                    break
+                }
             }
+
+            let receivedMessage = acknowledgedMessages.first!
+
+            XCTAssertEqual(messageID, receivedMessage.id)
+            XCTAssertEqual(expectedTopic, receivedMessage.topic)
+            XCTAssertEqual(message.key, receivedMessage.key)
+            XCTAssertEqual(message.value, receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -95,7 +110,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendEmptyMessage() async throws {
-        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -117,18 +132,33 @@ final class KafkaProducerTests: XCTestCase {
 
             let messageID = try producer.send(message)
 
-            for await messageResult in acknowledgments {
-                guard case .success(let acknowledgedMessage) = messageResult else {
-                    XCTFail()
-                    return
+            var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+
+            for await event in events {
+                switch event {
+                case .deliveryReport(let acknowledgementResults):
+                    for result in acknowledgementResults {
+                        guard case .success(let acknowledgedMessage) = result else {
+                            XCTFail()
+                            return
+                        }
+                        acknowledgedMessages.insert(acknowledgedMessage)
+                    }
+                default:
+                    break // Ignore any other events
                 }
 
-                XCTAssertEqual(messageID, acknowledgedMessage.id)
-                XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
-                XCTAssertEqual(message.key, acknowledgedMessage.key)
-                XCTAssertEqual(message.value, acknowledgedMessage.value)
-                break
+                if acknowledgedMessages.count >= 1 {
+                    break
+                }
             }
+
+            let receivedMessage = acknowledgedMessages.first!
+
+            XCTAssertEqual(messageID, receivedMessage.id)
+            XCTAssertEqual(expectedTopic, receivedMessage.topic)
+            XCTAssertEqual(message.key, receivedMessage.key)
+            XCTAssertEqual(message.value, receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -136,7 +166,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendTwoTopics() async throws {
-        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -168,13 +198,19 @@ final class KafkaProducerTests: XCTestCase {
 
             var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
 
-            for await messageResult in acknowledgments {
-                guard case .success(let acknowledgedMessage) = messageResult else {
-                    XCTFail()
-                    return
+            for await event in events {
+                switch event {
+                case .deliveryReport(let acknowledgementResults):
+                    for result in acknowledgementResults {
+                        guard case .success(let acknowledgedMessage) = result else {
+                            XCTFail()
+                            return
+                        }
+                        acknowledgedMessages.insert(acknowledgedMessage)
+                    }
+                default:
+                    break // Ignore any other events
                 }
-
-                acknowledgedMessages.insert(acknowledgedMessage)
 
                 if acknowledgedMessages.count >= 2 {
                     break
@@ -240,7 +276,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendFailsAfterTerminatingAcknowledgementSequence() async throws {
-        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -267,12 +303,12 @@ final class KafkaProducerTests: XCTestCase {
 
             try producer.send(message1)
 
-            // Terminate the acknowledgements sequence by deallocating its AsyncIterator
-            var iterator: KafkaMessageAcknowledgements.AsyncIterator? = acknowledgments.makeAsyncIterator()
+            // Terminate the events sequence by deallocating its AsyncIterator
+            var iterator: KafkaProducerEvents.AsyncIterator? = events.makeAsyncIterator()
             _ = iterator
             iterator = nil
 
-            // Sending a new message should fail after the acknowledgements sequence
+            // Sending a new message should fail after the events sequence
             // has been terminated
             XCTAssertThrowsError(try producer.send(message2)) { error in
                 let error = error as! KafkaError
@@ -286,9 +322,9 @@ final class KafkaProducerTests: XCTestCase {
 
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
-        var acknowledgments: KafkaMessageAcknowledgements?
-        (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.config, logger: .kafkaTest)
-        _ = acknowledgments
+        var events: KafkaProducerEvents?
+        (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
+        _ = events
 
         weak var producerCopy = producer
 
@@ -310,7 +346,7 @@ final class KafkaProducerTests: XCTestCase {
 
         producer = nil
         // Make sure to terminate the AsyncSequence
-        acknowledgments = nil
+        events = nil
 
         XCTAssertNil(producerCopy)
     }

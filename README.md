@@ -29,7 +29,7 @@ Both the `KafkaProducer` and the `KafkaConsumer` implement the [`Service`](https
 
 ### Producer API
 
-The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `acknowledgements` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
+The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `events` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
 
 ```swift
 let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
@@ -62,8 +62,13 @@ await withThrowingTaskGroup(of: Void.self) { group in
             )
         )
 
-        for await acknowledgement in acknowledgements {
-            // Check if acknowledgement belongs to the sent message
+        for await event in events {
+            switch event {
+            case .deliveryReport(let acknowledgementResults):
+                // Check what messages the acknowledgements belong to
+            default:
+                break // Ignore any other events
+            }
         }
     }
 }

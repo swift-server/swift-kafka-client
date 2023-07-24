@@ -41,17 +41,17 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
-// MARK: - KafkaMessageAcknowledgements
+// MARK: - KafkaProducerEvents
 
-/// `AsyncSequence` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
-public struct KafkaMessageAcknowledgements: AsyncSequence {
-    public typealias Element = Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>
+/// `AsyncSequence` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
+public struct KafkaProducerEvents: AsyncSequence {
+    public typealias Element = KafkaProducerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
-    /// `AsynceIteratorProtocol` implementation for handling messages acknowledged by the Kafka cluster (``KafkaAcknowledgedMessage``).
-    public struct AcknowledgedMessagesAsyncIterator: AsyncIteratorProtocol {
+    /// `AsynceIteratorProtocol` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
+    public struct KafkaProducerEventsAsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
         public mutating func next() async -> Element? {
@@ -59,8 +59,8 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
         }
     }
 
-    public func makeAsyncIterator() -> AcknowledgedMessagesAsyncIterator {
-        return AcknowledgedMessagesAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    public func makeAsyncIterator() -> KafkaProducerEventsAsyncIterator {
+        return KafkaProducerEventsAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
 }
 
@@ -72,7 +72,7 @@ public struct KafkaMessageAcknowledgements: AsyncSequence {
 /// configuration object (only works if server has `auto.create.topics.enable` property set).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
-        Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>,
+        KafkaProducerEvent,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaProducerCloseOnTerminate
     >
@@ -104,7 +104,7 @@ public final class KafkaProducer: Service, Sendable {
 
     /// Initialize a new ``KafkaProducer``.
     ///
-    /// This factory method creates a producer without message acknowledgements.
+    /// This factory method creates a producer without listening for events.
     ///
     /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
@@ -141,28 +141,28 @@ public final class KafkaProducer: Service, Sendable {
         return producer
     }
 
-    /// Initialize a new ``KafkaProducer`` and a ``KafkaMessageAcknowledgements`` asynchronous sequence.
+    /// Initialize a new ``KafkaProducer`` and a ``KafkaProducerEvents`` asynchronous sequence.
     ///
-    /// Use the asynchronous sequence to consume message acknowledgements.
+    /// Use the asynchronous sequence to consume events.
     ///
     /// - Important: When the asynchronous sequence is deinited the producer will be shutdown and disallow sending more messages.
-    /// Additionally, make sure to consume the asynchronous sequence otherwise the acknowledgements will be buffered in memory indefinitely.
+    /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
     ///
     /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter logger: A logger.
-    /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaMessageAcknowledgements``
-    /// `AsyncSequence` used for receiving message acknowledgements.
+    /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaProducerEvents``
+    /// `AsyncSequence` used for receiving message events.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public static func makeProducerWithAcknowledgements(
+    public static func makeProducerWithEvents(
         config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
-    ) throws -> (KafkaProducer, KafkaMessageAcknowledgements) {
+    ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>.self,
+            elementType: KafkaProducerEvent.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
@@ -188,11 +188,11 @@ public final class KafkaProducer: Service, Sendable {
             )
         }
 
-        let acknowlegementsSequence = KafkaMessageAcknowledgements(wrappedSequence: sourceAndSequence.sequence)
-        return (producer, acknowlegementsSequence)
+        let eventsSequence = KafkaProducerEvents(wrappedSequence: sourceAndSequence.sequence)
+        return (producer, eventsSequence)
     }
 
-    /// Start polling Kafka for acknowledged messages.
+    /// Start polling Kafka for events.
     ///
     /// - Returns: An awaitable task representing the execution of the poll loop.
     public func run() async throws {
@@ -208,19 +208,16 @@ public final class KafkaProducer: Service, Sendable {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollWithoutYield(let client):
-                // Drop any incoming acknowledgments
+                // Drop any incoming events
                 let _ = client.eventPoll()
             case .pollAndYield(let client, let source):
                 let events = client.eventPoll()
-                for event in events {
-                    switch event {
-                    case .deliveryReport(let results):
+                events
+                    .map(KafkaProducerEvent.fromKafkaEvent(_:))
+                    .forEach {
                         // Ignore YieldResult as we don't support back pressure in KafkaProducer
-                        results.forEach { _ = source?.yield($0) }
-                    default:
-                        break // Ignore
+                        _ = source?.yield($0)
                     }
-                }
                 try await Task.sleep(for: self.config.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
                 precondition(
@@ -292,8 +289,8 @@ extension KafkaProducer {
                 source: Producer.Source?,
                 topicHandles: RDKafkaTopicHandles
             )
-            /// Producer is still running but the acknowledgement asynchronous sequence was terminated.
-            /// All incoming acknowledgements will be dropped.
+            /// Producer is still running but the event asynchronous sequence was terminated.
+            /// All incoming events will be dropped.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case consumptionStopped(client: RDKafkaClient)
@@ -336,7 +333,7 @@ extension KafkaProducer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case pollWithoutYield(client: RDKafkaClient)
-            /// Poll client and yield acknowledgments if any received.
+            /// Poll client and yield events if any received.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
@@ -403,7 +400,7 @@ extension KafkaProducer {
                     topicHandles: topicHandles
                 )
             case .consumptionStopped:
-                throw KafkaError.connectionClosed(reason: "Sequence consuming acknowledgements was abruptly terminated, producer closed")
+                throw KafkaError.connectionClosed(reason: "Sequence consuming events was abruptly terminated, producer closed")
             case .finishing:
                 throw KafkaError.connectionClosed(reason: "Producer in the process of finishing")
             case .finished:
@@ -419,8 +416,8 @@ extension KafkaProducer {
             case finishSource(source: Producer.Source?)
         }
 
-        /// The acknowledgements asynchronous sequence was terminated.
-        /// All incoming acknowledgements will be dropped.
+        /// The events asynchronous sequence was terminated.
+        /// All incoming events will be dropped.
         mutating func stopConsuming() -> StopConsumingAction? {
             switch self.state {
             case .uninitialized:
@@ -431,7 +428,7 @@ extension KafkaProducer {
                 self.state = .consumptionStopped(client: client)
                 return .finishSource(source: source)
             case .finishing(let client, let source):
-                // Setting source to nil to prevent incoming acknowledgements from buffering in `source`
+                // Setting source to nil to prevent incoming events from buffering in `source`
                 self.state = .finishing(client: client, source: nil)
                 return .finishSource(source: source)
             case .finished:

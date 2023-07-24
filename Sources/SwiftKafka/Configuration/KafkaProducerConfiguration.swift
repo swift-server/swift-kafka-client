@@ -16,7 +16,7 @@ public struct KafkaProducerConfiguration {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The time between two consecutive polls.
-    /// Effectively controls the rate at which incoming events and acknowledgments are consumed.
+    /// Effectively controls the rate at which incoming events are consumed.
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
