@@ -51,7 +51,7 @@ public struct KafkaProducerEvents: AsyncSequence {
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
-    public struct KafkaProducerEventsAsyncIterator: AsyncIteratorProtocol {
+    public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
         public mutating func next() async -> Element? {
@@ -59,8 +59,8 @@ public struct KafkaProducerEvents: AsyncSequence {
         }
     }
 
-    public func makeAsyncIterator() -> KafkaProducerEventsAsyncIterator {
-        return KafkaProducerEventsAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    public func makeAsyncIterator() -> AsyncIterator {
+        return AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
 }
 

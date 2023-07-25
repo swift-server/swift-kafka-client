@@ -14,9 +14,9 @@
 
 /// An enumeration representing events that can be received through the ``KafkaProducerEvents`` asynchronous sequence.
 public enum KafkaProducerEvent: Sendable, Hashable {
-    /// A delivery reports received from the Kafka cluster indicating the status of produced messages.
+    /// A collection delivery reports received from the Kafka cluster indicating the status of produced messages.
     case deliveryReports([KafkaDeliveryReport])
-    /// - Important: Always provide a `default` case when switiching over this `enum`.
+    /// - Important: Always provide a `default` case when switching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 
     internal init(_ event: RDKafkaClient.KafkaEvent) {

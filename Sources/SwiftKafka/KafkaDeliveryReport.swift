@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-/// A delivery report for message that was sent to the Kafka cluster.
+/// A delivery report for a message that was sent to the Kafka cluster.
 public struct KafkaDeliveryReport: Sendable, Hashable {
     public enum Status: Sendable, Hashable {
         /// The message has been successfully acknowledged by the Kafka cluster.
@@ -26,9 +26,9 @@ public struct KafkaDeliveryReport: Sendable, Hashable {
     /// The Status of a Kafka producer message after attempting to send it.
     public var status: Status
 
-    /// The unique identifier assigned by the ``KafkaProducer`` when the message was send to Kafka.
+    /// The unique identifier assigned by the ``KafkaProducer`` when the message was sent to Kafka.
     /// The same identifier is returned by ``KafkaProducer/send(_:)`` and can be used to correlate
-    /// a sent message and an acknowledged message.
+    /// a sent message with a delivery report.
     public var id: KafkaProducerMessageID
 
     internal init?(messagePointer: UnsafePointer<rd_kafka_message_t>?) {
