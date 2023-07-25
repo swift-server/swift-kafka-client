@@ -45,7 +45,7 @@ public struct KafkaConsumerEvents: AsyncSequence {
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
-    public struct KafkaConsumerEventsAsyncIterator: AsyncIteratorProtocol {
+    public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
         public mutating func next() async -> Element? {
@@ -53,8 +53,8 @@ public struct KafkaConsumerEvents: AsyncSequence {
         }
     }
 
-    public func makeAsyncIterator() -> KafkaConsumerEventsAsyncIterator {
-        return KafkaConsumerEventsAsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    public func makeAsyncIterator() -> AsyncIterator {
+        return AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
 }
 
@@ -75,7 +75,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
-    public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
+    public struct AsyncIterator: AsyncIteratorProtocol {
         let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
         var wrappedIterator: WrappedSequence.AsyncIterator?
 
@@ -103,8 +103,8 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         }
     }
 
-    public func makeAsyncIterator() -> ConsumerMessagesAsyncIterator {
-        return ConsumerMessagesAsyncIterator(
+    public func makeAsyncIterator() -> AsyncIterator {
+        return AsyncIterator(
             stateMachine: self.stateMachine,
             wrappedIterator: self.wrappedSequence.makeAsyncIterator()
         )
