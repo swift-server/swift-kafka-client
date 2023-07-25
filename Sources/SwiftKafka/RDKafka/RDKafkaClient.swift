@@ -474,7 +474,7 @@ final class RDKafkaClient: Sendable {
     
     func initTransactions(timeout: Duration) async throws {
         let result = await forBlockingFunc {
-            rd_kafka_init_transactions(self.kafkaHandle, Int32(timeout.totalMilliseconds))
+            rd_kafka_init_transactions(self.kafkaHandle, timeout.totalMilliseconds)
         }
         
         if result != nil {
@@ -592,7 +592,6 @@ final class RDKafkaClient: Sendable {
     }
 }
 
-// TODO: tmp, should be in other PRs
 extension Duration {
     // Internal usage only: librdkafka accepts Int32 as timeouts
     var totalMilliseconds: Int32 {

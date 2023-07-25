@@ -271,8 +271,7 @@ public final class KafkaProducer: Service, Sendable {
             throw KafkaError.config(
                 reason: "Could not initialize transactions because transactionalId is not set in config")
         }
-        // FIXME: maybe add state 'startedWithTransactions'?
-        let client = try self.stateMachine.withLockedValue { try $0.transactionsClient() }
+        let client = try self.stateMachine.withLockedValue { try $0.initTransactions() }
         try await client.initTransactions(timeout: timeout)
     }
     
@@ -324,6 +323,18 @@ extension KafkaProducer {
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
             case started(
+                client: RDKafkaClient,
+                messageIDCounter: UInt,
+                source: Producer.Source?,
+                topicHandles: RDKafkaTopicHandles
+            )
+            /// The ``KafkaProducer`` has started and is ready to use, transactions were initialized.
+            ///
+            /// - Parameter messageIDCounter:Used to incrementally assign unique IDs to messages.
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
+            case startedWithTransactions(
                 client: RDKafkaClient,
                 messageIDCounter: UInt,
                 source: Producer.Source?,
@@ -396,7 +407,7 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, let source, _):
+            case .started(let client, _, let source, _), .startedWithTransactions(let client, _, let source, _):
                 return .pollAndYield(client: client, source: source)
             case .consumptionStopped(let client):
                 return .pollWithoutYield(client: client)
@@ -439,6 +450,19 @@ extension KafkaProducer {
                     newMessageID: newMessageID,
                     topicHandles: topicHandles
                 )
+            case .startedWithTransactions(let client, let messageIDCounter, let source, let topicHandles):
+                let newMessageID = messageIDCounter + 1
+                self.state = .startedWithTransactions(
+                    client: client,
+                    messageIDCounter: newMessageID,
+                    source: source,
+                    topicHandles: topicHandles
+                )
+                return .send(
+                    client: client,
+                    newMessageID: newMessageID,
+                    topicHandles: topicHandles
+                )
             case .consumptionStopped:
                 throw KafkaError.connectionClosed(reason: "Sequence consuming acknowledgements was abruptly terminated, producer closed")
             case .finishing:
@@ -464,7 +488,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .consumptionStopped:
                 fatalError("messageSequenceTerminated() must not be invoked more than once")
-            case .started(let client, _, let source, _):
+            case .started(let client, _, let source, _), .startedWithTransactions(let client, _, let source, _):
                 self.state = .consumptionStopped(client: client)
                 return .finishSource(source: source)
             case .finishing(let client, let source):
@@ -484,7 +508,7 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, let source, _):
+            case .started(let client, _, let source, _), .startedWithTransactions(let client, _, let source, _):
                 self.state = .finishing(client: client, source: source)
             case .consumptionStopped(let client):
                 self.state = .finishing(client: client, source: nil)
@@ -493,21 +517,25 @@ extension KafkaProducer {
             }
         }
 
-        // TODO:
-        // 1. add client()
-        // 2. initTransactions() -> change state to startedWithTransactions
-        // 3. transactionsClient() -> return client only for startedWithTransactions
-        
-        
-        func transactionsClient() throws -> RDKafkaClient {
+        mutating func initTransactions() throws -> RDKafkaClient {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, _, _):
+            case .started(let client, let messageIDCounter, let source, let topicHandles):
+                self.state = .startedWithTransactions(client: client, messageIDCounter: messageIDCounter, source: source, topicHandles: topicHandles)
                 return client
-            default:
+            case .startedWithTransactions:
+                throw KafkaError.config(reason: "Transactions were already initialized")
+            case .consumptionStopped, .finishing, .finished:
                 throw KafkaError.connectionClosed(reason: "Producer is stopping or finished")
             }
+        }
+        
+        func transactionsClient() throws -> RDKafkaClient {
+            guard case let .startedWithTransactions(client, _, _, _) = self.state else {
+                throw KafkaError.transactionAborted(reason: "Transactions were not initialized or producer is being stopped")
+            }
+            return client
         }
     }
 }
