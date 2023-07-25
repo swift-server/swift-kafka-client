@@ -134,7 +134,7 @@ final class RDKafkaClient: Sendable {
 
     /// Swift wrapper for events from `librdkafka`'s event queue.
     enum KafkaEvent {
-        case deliveryReport(results: [KafkaProducerMessageStatus])
+        case deliveryReport(results: [KafkaDeliveryReport])
         case consumerMessages(result: Result<KafkaConsumerMessage, Error>)
     }
 
@@ -183,11 +183,11 @@ final class RDKafkaClient: Sendable {
     /// - Returns: `KafkaEvent` to be returned as part of ``RDKafkaClient.eventPoll()`.
     private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> KafkaEvent {
         let deliveryReportCount = rd_kafka_event_message_count(event)
-        var deliveryReportResults = [KafkaProducerMessageStatus]()
+        var deliveryReportResults = [KafkaDeliveryReport]()
         deliveryReportResults.reserveCapacity(deliveryReportCount)
 
         while let messagePointer = rd_kafka_event_message_next(event) {
-            guard let messageStatus = KafkaProducerMessageStatus(messagePointer: messagePointer) else {
+            guard let messageStatus = KafkaDeliveryReport(messagePointer: messagePointer) else {
                 continue
             }
             deliveryReportResults.append(messageStatus)

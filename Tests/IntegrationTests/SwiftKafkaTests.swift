@@ -455,30 +455,33 @@ final class SwiftKafkaTests: XCTestCase {
             messageIDs.insert(try producer.send(message))
         }
 
-        var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+        var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
         for await event in events {
             switch event {
-            case .deliveryReport(let acknowledgementResults):
-                for result in acknowledgementResults {
-                    guard case .acknowledged(let message) = result else {
-                        XCTFail()
-                        return
-                    }
-                    acknowledgedMessages.insert(message)
+            case .deliveryReports(let deliveryReports):
+                for deliveryReport in deliveryReports {
+                    receivedDeliveryReports.insert(deliveryReport)
                 }
             default:
                 break // Ignore any other events
             }
 
-            if acknowledgedMessages.count >= messages.count {
+            if receivedDeliveryReports.count >= 2 {
                 break
             }
         }
 
-        XCTAssertEqual(messages.count, acknowledgedMessages.count)
-        XCTAssertEqual(Set(acknowledgedMessages.map(\.id)), messageIDs)
+        XCTAssertEqual(Set(receivedDeliveryReports.map(\.id)), messageIDs)
 
+        let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
+            guard case .acknowledged(let receivedMessage) = $0.status else {
+                return nil
+            }
+            return receivedMessage
+        }
+
+        XCTAssertEqual(messages.count, acknowledgedMessages.count)
         for message in messages {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message.key }))

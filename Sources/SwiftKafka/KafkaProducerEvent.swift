@@ -18,14 +18,14 @@ public enum KafkaProducerEvent: Sendable, Hashable {
     ///
     /// Parameters:
     ///    - results: Array of message acknowledgement results.
-    case deliveryReport(results: [KafkaProducerMessageStatus])
+    case deliveryReports(results: [KafkaDeliveryReport])
     /// - Important: Always provide a `default` case when switiching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 
     internal init(_ event: RDKafkaClient.KafkaEvent) {
         switch event {
         case .deliveryReport(results: let results):
-            self = .deliveryReport(results: results)
+            self = .deliveryReports(results: results)
         case .consumerMessages:
             fatalError("Cannot cast \(event) to KafkaProducerEvent")
         }

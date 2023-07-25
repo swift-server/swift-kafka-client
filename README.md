@@ -64,7 +64,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
         for await event in events {
             switch event {
-            case .deliveryReport(let acknowledgementResults):
+            case .deliveryReports(let deliveryReports):
                 // Check what messages the acknowledgements belong to
             default:
                 break // Ignore any other events

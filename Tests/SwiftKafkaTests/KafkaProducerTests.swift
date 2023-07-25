@@ -76,30 +76,31 @@ final class KafkaProducerTests: XCTestCase {
 
             let messageID = try producer.send(message)
 
-            var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
             for await event in events {
                 switch event {
-                case .deliveryReport(let acknowledgementResults):
-                    for result in acknowledgementResults {
-                        guard case .acknowledged(let message) = result else {
-                            XCTFail()
-                            return
-                        }
-                        acknowledgedMessages.insert(message)
+                case .deliveryReports(let deliveryReports):
+                    for deliveryReport in deliveryReports {
+                        receivedDeliveryReports.insert(deliveryReport)
                     }
                 default:
                     break // Ignore any other events
                 }
 
-                if acknowledgedMessages.count >= 1 {
+                if receivedDeliveryReports.count >= 1 {
                     break
                 }
             }
 
-            let receivedMessage = acknowledgedMessages.first!
+            let receivedDeliveryReport = receivedDeliveryReports.first!
+            XCTAssertEqual(messageID, receivedDeliveryReport.id)
 
-            XCTAssertEqual(messageID, receivedMessage.id)
+            guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
+                XCTFail()
+                return
+            }
+
             XCTAssertEqual(expectedTopic, receivedMessage.topic)
             XCTAssertEqual(message.key, receivedMessage.key)
             XCTAssertEqual(message.value, receivedMessage.value)
@@ -132,30 +133,31 @@ final class KafkaProducerTests: XCTestCase {
 
             let messageID = try producer.send(message)
 
-            var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
             for await event in events {
                 switch event {
-                case .deliveryReport(let acknowledgementResults):
-                    for result in acknowledgementResults {
-                        guard case .acknowledged(let message) = result else {
-                            XCTFail()
-                            return
-                        }
-                        acknowledgedMessages.insert(message)
+                case .deliveryReports(let deliveryReports):
+                    for deliveryReport in deliveryReports {
+                        receivedDeliveryReports.insert(deliveryReport)
                     }
                 default:
                     break // Ignore any other events
                 }
 
-                if acknowledgedMessages.count >= 1 {
+                if receivedDeliveryReports.count >= 1 {
                     break
                 }
             }
 
-            let receivedMessage = acknowledgedMessages.first!
+            let receivedDeliveryReport = receivedDeliveryReports.first!
+            XCTAssertEqual(messageID, receivedDeliveryReport.id)
 
-            XCTAssertEqual(messageID, receivedMessage.id)
+            guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
+                XCTFail()
+                return
+            }
+
             XCTAssertEqual(expectedTopic, receivedMessage.topic)
             XCTAssertEqual(message.key, receivedMessage.key)
             XCTAssertEqual(message.value, receivedMessage.value)
@@ -196,29 +198,33 @@ final class KafkaProducerTests: XCTestCase {
             messageIDs.insert(try producer.send(message1))
             messageIDs.insert(try producer.send(message2))
 
-            var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
             for await event in events {
                 switch event {
-                case .deliveryReport(let acknowledgementResults):
-                    for result in acknowledgementResults {
-                        guard case .acknowledged(let message) = result else {
-                            XCTFail()
-                            return
-                        }
-                        acknowledgedMessages.insert(message)
+                case .deliveryReports(let deliveryReports):
+                    for deliveryReport in deliveryReports {
+                        receivedDeliveryReports.insert(deliveryReport)
                     }
                 default:
                     break // Ignore any other events
                 }
 
-                if acknowledgedMessages.count >= 2 {
+                if receivedDeliveryReports.count >= 2 {
                     break
                 }
             }
 
+            XCTAssertEqual(Set(receivedDeliveryReports.map(\.id)), messageIDs)
+
+            let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
+                guard case .acknowledged(let receivedMessage) = $0.status else {
+                    return nil
+                }
+                return receivedMessage
+            }
+
             XCTAssertEqual(2, acknowledgedMessages.count)
-            XCTAssertEqual(Set(acknowledgedMessages.map(\.id)), messageIDs)
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message1.key }))
