@@ -101,9 +101,9 @@ final class KafkaProducerTests: XCTestCase {
                 return
             }
 
-                XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
-                XCTAssertEqual(ByteBuffer(string: message.key!), acknowledgedMessage.key)
-                XCTAssertEqual(ByteBuffer(string: message.value), acknowledgedMessage.value)
+            XCTAssertEqual(expectedTopic, receivedMessage.topic)
+            XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
+            XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -158,8 +158,8 @@ final class KafkaProducerTests: XCTestCase {
                 return
             }
 
-                XCTAssertEqual(expectedTopic, acknowledgedMessage.topic)
-                XCTAssertEqual(message.value, acknowledgedMessage.value)
+            XCTAssertEqual(expectedTopic, receivedMessage.topic)
+            XCTAssertEqual(message.value, receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
