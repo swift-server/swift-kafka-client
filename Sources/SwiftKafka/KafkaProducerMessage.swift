@@ -16,7 +16,7 @@ import Crdkafka
 import NIOCore
 
 /// Message that is sent by the `KafkaProducer`
-public struct KafkaProducerMessage<Key: KafkaBuffer, Value: KafkaBuffer> {
+public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
     public var topic: String
     public var partition: KafkaPartition
     public var key: Key?

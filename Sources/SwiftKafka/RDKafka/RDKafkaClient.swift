@@ -103,13 +103,13 @@ final class RDKafkaClient: Sendable {
         topicConfig: KafkaTopicConfiguration,
         topicHandles: RDKafkaTopicHandles
     ) throws {
-        let responseCode = try message.value.withUnsafeRawBufferPointer { valueBuffer in
+        let responseCode = try message.value.withUnsafeBytes { valueBuffer in
             try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfig: topicConfig) { topicHandle in
                 if let key = message.key {
                     // Key available, we can use scoped accessor to safely access its rawBufferPointer.
                     // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
                     // Returns 0 on success, error code otherwise.
-                    return key.withUnsafeRawBufferPointer { keyBuffer in
+                    return key.withUnsafeBytes { keyBuffer in
                         return rd_kafka_produce(
                             topicHandle,
                             message.partition.rawValue,

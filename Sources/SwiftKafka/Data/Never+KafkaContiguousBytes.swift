@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-extension Never: KafkaBuffer {
-    public func withUnsafeRawBufferPointer<T>(_: (UnsafeRawBufferPointer) throws -> T) rethrows -> T {
-        fatalError("Cannot read bytes of type `Never`")
+extension Never: KafkaContiguousBytes {
+    public func withUnsafeBytes<R>(_: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
+        fatalError("This statement should never be reached")
     }
 }

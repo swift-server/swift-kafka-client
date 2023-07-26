@@ -14,17 +14,18 @@
 
 import NIOCore
 
-extension String: KafkaBuffer {
-    public func withUnsafeRawBufferPointer<T>(_ body: (UnsafeRawBufferPointer) throws -> T) rethrows -> T {
+extension String: KafkaContiguousBytes {
+    public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
         if let read = try self.utf8.withContiguousStorageIfAvailable({ unsafePointer in
+            // Fast Path
             let unsafeRawBufferPointer = UnsafeRawBufferPointer(start: unsafePointer.baseAddress, count: self.count)
             return try body(unsafeRawBufferPointer)
         }) {
             return read
         } else {
             // Slow path
-            return try ByteBuffer(string: self).withUnsafeReadableBytes { UnsafeRawBufferPointer in
-                try body(UnsafeRawBufferPointer)
+            return try ByteBuffer(string: self).withUnsafeReadableBytes { unsafeRawBufferPointer in
+                try body(unsafeRawBufferPointer)
             }
         }
     }

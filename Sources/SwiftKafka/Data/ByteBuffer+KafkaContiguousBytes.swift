@@ -14,10 +14,10 @@
 
 import NIOCore
 
-extension ByteBuffer: KafkaBuffer {
-    public func withUnsafeRawBufferPointer<T>(_ body: (UnsafeRawBufferPointer) throws -> T) rethrows -> T {
-        try self.withUnsafeReadableBytes { unsafeReadableBytes in
-            try body(unsafeReadableBytes)
+extension ByteBuffer: KafkaContiguousBytes {
+    public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
+        try self.withUnsafeReadableBytes {
+            try body($0)
         }
     }
 }
