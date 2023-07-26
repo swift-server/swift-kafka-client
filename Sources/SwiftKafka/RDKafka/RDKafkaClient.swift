@@ -135,7 +135,7 @@ final class RDKafkaClient: Sendable {
 
     /// Swift wrapper for events from `librdkafka`'s event queue.
     enum KafkaEvent {
-        case deliveryReport(results: [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>])
+        case deliveryReport(results: [KafkaDeliveryReport])
         case consumerMessages(result: Result<KafkaConsumerMessage, Error>)
     }
 
@@ -184,14 +184,14 @@ final class RDKafkaClient: Sendable {
     /// - Returns: `KafkaEvent` to be returned as part of ``RDKafkaClient.eventPoll()`.
     private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> KafkaEvent {
         let deliveryReportCount = rd_kafka_event_message_count(event)
-        var deliveryReportResults = [Result<KafkaAcknowledgedMessage, KafkaAcknowledgedMessageError>]()
+        var deliveryReportResults = [KafkaDeliveryReport]()
         deliveryReportResults.reserveCapacity(deliveryReportCount)
 
         while let messagePointer = rd_kafka_event_message_next(event) {
-            guard let message = Self.convertMessageToAcknowledgementResult(messagePointer: messagePointer) else {
+            guard let messageStatus = KafkaDeliveryReport(messagePointer: messagePointer) else {
                 continue
             }
-            deliveryReportResults.append(message)
+            deliveryReportResults.append(messageStatus)
         }
 
         // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().

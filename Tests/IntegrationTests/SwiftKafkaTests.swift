@@ -85,7 +85,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "subscription-test-group-id", topics: [self.uniqueTestTopic])
@@ -115,7 +115,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    acknowledgements: acknowledgments,
+                    events: events,
                     messages: testMessages
                 )
             }
@@ -153,7 +153,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .partition(
@@ -187,7 +187,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    acknowledgements: acknowledgments,
+                    events: events,
                     messages: testMessages
                 )
             }
@@ -225,7 +225,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithCommitSync() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, acknowledgments) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic])
@@ -256,7 +256,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    acknowledgements: acknowledgments,
+                    events: events,
                     messages: testMessages
                 )
             }
@@ -290,7 +290,7 @@ final class SwiftKafkaTests: XCTestCase {
     func testCommittedOffsetsAreCorrect() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let firstConsumerOffset = testMessages.count / 2
-        let (producer, acks) = try KafkaProducer.makeProducerWithAcknowledgements(config: self.producerConfig, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(config: self.producerConfig, logger: .kafkaTest)
 
         // Important: both consumer must have the same group.id
         let uniqueGroupID = UUID().uuidString
@@ -328,7 +328,7 @@ final class SwiftKafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    acknowledgements: acks,
+                    events: acks,
                     messages: testMessages
                 )
             }
@@ -446,7 +446,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
-        acknowledgements: KafkaMessageAcknowledgements,
+        events: KafkaProducerEvents,
         messages: [KafkaProducerMessage]
     ) async throws {
         var messageIDs = Set<KafkaProducerMessageID>()
@@ -455,24 +455,33 @@ final class SwiftKafkaTests: XCTestCase {
             messageIDs.insert(try producer.send(message))
         }
 
-        var acknowledgedMessages = Set<KafkaAcknowledgedMessage>()
+        var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
-        for await messageResult in acknowledgements {
-            guard case .success(let acknowledgedMessage) = messageResult else {
-                XCTFail()
-                return
+        for await event in events {
+            switch event {
+            case .deliveryReports(let deliveryReports):
+                for deliveryReport in deliveryReports {
+                    receivedDeliveryReports.insert(deliveryReport)
+                }
+            default:
+                break // Ignore any other events
             }
 
-            acknowledgedMessages.insert(acknowledgedMessage)
-
-            if acknowledgedMessages.count >= messages.count {
+            if receivedDeliveryReports.count >= 2 {
                 break
             }
         }
 
-        XCTAssertEqual(messages.count, acknowledgedMessages.count)
-        XCTAssertEqual(Set(acknowledgedMessages.map(\.id)), messageIDs)
+        XCTAssertEqual(Set(receivedDeliveryReports.map(\.id)), messageIDs)
 
+        let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
+            guard case .acknowledged(let receivedMessage) = $0.status else {
+                return nil
+            }
+            return receivedMessage
+        }
+
+        XCTAssertEqual(messages.count, acknowledgedMessages.count)
         for message in messages {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message.key }))
