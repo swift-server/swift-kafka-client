@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 import ServiceLifecycle
 @testable import SwiftKafka
@@ -355,5 +356,58 @@ final class KafkaProducerTests: XCTestCase {
         events = nil
 
         XCTAssertNil(producerCopy)
+    }
+
+    func testProducerStatistics() async throws {
+        self.config.statisticsInterval = Duration.milliseconds(100)
+        self.config.debug = [.all]
+
+        let statistics = NIOLockedValueBox<KafkaStatistics?>(nil)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: self.config,
+            logger: .kafkaTest
+        )
+
+        let serviceGroup = ServiceGroup(
+            services: [producer],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // check for librdkafka statistics
+            group.addTask {
+                for try await e in events {
+                    switch e {
+                    case .statistics(let stat):
+                        statistics.withLockedValue {
+                            $0 = stat
+                        }
+                    default:
+                        break
+                    }
+                }
+            }
+
+            // Sleep for 1s to let poll loop receive statistics callback
+            try! await Task.sleep(for: .milliseconds(500))
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+
+            try await group.next()
+        }
+        let stats = statistics.withLockedValue { $0 }
+        guard let stats else {
+            XCTFail("stats are not occurred")
+            return
+        }
+        XCTAssertFalse(stats.jsonString.isEmpty)
+        XCTAssertNoThrow(try stats.json)
     }
 }

@@ -206,3 +206,10 @@ public enum KafkaConfiguration {
         public static let v6 = IPAddressFamily(description: "v6")
     }
 }
+
+extension Duration {
+    // Calculated total milliseconds
+    internal var totalMilliseconds: Int64 {
+        self.components.seconds * 1000 + self.components.attoseconds / 1_000_000_000_000_000
+    }
+}

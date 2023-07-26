@@ -20,6 +20,11 @@ public struct KafkaProducerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
+    /// Interval for librdkafka statistics reports
+    /// 0ms - disabled
+    /// >= 1ms - statistics provided every specified interval
+    public var statisticsInterval: Duration = .zero
+
     /// Maximum timeout for flushing outstanding produce requests when the ``KakfaProducer`` is shutting down.
     /// Default: `10000`
     public var flushTimeoutMilliseconds: Int = 10000 {
@@ -106,6 +111,12 @@ public struct KafkaProducerConfiguration {
 extension KafkaProducerConfiguration {
     internal var dictionary: [String: String] {
         var resultDict: [String: String] = [:]
+
+        // we only check that it is 0 or >=1 ms, librdkafka checks for negativity
+        // in both debug and release
+        // FIXME: should we make `get throws` and throw exception instead of assert?
+        assert(self.statisticsInterval == .zero || self.statisticsInterval > Duration.milliseconds(1), "Statistics interval must be expressed in milliseconds")
+        resultDict["statistics.interval.ms"] = String(self.statisticsInterval.totalMilliseconds)
 
         resultDict["enable.idempotence"] = String(self.enableIdempotence)
         resultDict["queue.buffering.max.messages"] = String(self.queue.bufferingMaxMessages)
