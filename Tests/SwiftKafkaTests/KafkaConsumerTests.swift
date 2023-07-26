@@ -48,7 +48,7 @@ final class KafkaConsumerTests: XCTestCase {
         config.securityProtocol = .plaintext
         config.debug = [.all]
 
-        let consumer = try KafkaConsumer.makeConsumer(config: config, logger: mockLogger)
+        let consumer = try KafkaConsumer(config: config, logger: mockLogger)
 
         let serviceGroup = ServiceGroup(
             services: [consumer],

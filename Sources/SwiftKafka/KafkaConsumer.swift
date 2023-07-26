@@ -38,7 +38,7 @@ extension KafkaConsumerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 // MARK: - KafkaConsumerEvents
 
 /// `AsyncSequence` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
-public struct KafkaConsumerEvents: AsyncSequence {
+public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     public typealias Element = KafkaConsumerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerCloseOnTerminate>
@@ -193,10 +193,10 @@ public final class KafkaConsumer: Sendable, Service {
     ///     - logger: A logger.
     /// - Returns: The newly created ``KafkaConsumer``.
     /// - Throws: A ``KafkaError`` if the initialization failed.
-    public static func makeConsumer(
+    public convenience init(
         config: KafkaConsumerConfiguration,
         logger: Logger
-    ) throws -> KafkaConsumer {
+    ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
@@ -212,14 +212,12 @@ public final class KafkaConsumer: Sendable, Service {
             logger: logger
         )
 
-        let consumer = try KafkaConsumer(
+        try self.init(
             client: client,
             stateMachine: stateMachine,
             config: config,
             logger: logger
         )
-
-        return consumer
     }
 
     /// Initialize a new ``KafkaConsumer`` and a ``KafkaConsumerEvents`` asynchronous sequence.

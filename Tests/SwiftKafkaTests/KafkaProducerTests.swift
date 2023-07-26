@@ -246,7 +246,7 @@ final class KafkaProducerTests: XCTestCase {
         var config = KafkaProducerConfiguration()
         config.bootstrapServers = []
 
-        let producer = try KafkaProducer.makeProducer(config: config, logger: mockLogger)
+        let producer = try KafkaProducer(config: config, logger: mockLogger)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
