@@ -137,6 +137,8 @@ public final class KafkaConsumer: Sendable, Service {
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     ///
     /// - Parameters:
+    ///     - client: Client used for handling the connection to the Kafka cluster.
+    ///     - stateMachine: The state machine containing the state of the ``KafkaConsumer``.
     ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
     ///     - logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
