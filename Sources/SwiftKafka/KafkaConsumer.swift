@@ -121,10 +121,16 @@ public final class KafkaConsumer: Sendable, Service {
         self.config = config
         self.logger = logger
 
+        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
+        // Only listen to offset commit events when autoCommit is false
+        if self.config.enableAutoCommit == false {
+            subscribedEvents.append(.offsetCommit)
+        }
+
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: config.dictionary,
-            events: [.log, .fetch, .offsetCommit],
+            events: subscribedEvents,
             logger: logger
         )
 
