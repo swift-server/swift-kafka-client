@@ -152,8 +152,6 @@ public final class KafkaConsumer: Sendable, Service {
         self.stateMachine = stateMachine
         self.logger = logger
 
-        self.stateMachine = NIOLockedValueBox(StateMachine(logger: self.logger))
-
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerMessage.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
@@ -201,7 +199,7 @@ public final class KafkaConsumer: Sendable, Service {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
         // Only listen to offset commit events when autoCommit is false
-        if self.config.enableAutoCommit == false {
+        if config.enableAutoCommit == false {
             subscribedEvents.append(.offsetCommit)
         }
 
@@ -241,7 +239,7 @@ public final class KafkaConsumer: Sendable, Service {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
         // Only listen to offset commit events when autoCommit is false
-        if self.config.enableAutoCommit == false {
+        if config.enableAutoCommit == false {
             subscribedEvents.append(.offsetCommit)
         }
 
