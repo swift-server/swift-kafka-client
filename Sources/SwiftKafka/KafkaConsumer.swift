@@ -131,7 +131,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// `AsyncSequence` that returns all ``KafkaConsumerMessage`` objects that the consumer receives.
     public let messages: KafkaConsumerMessages
 
-    // Private initializer, use factory methods to create KafkaConsumer
+    // Private initializer, use factory method or convenience init to create KafkaConsumer
     /// Initialize a new ``KafkaConsumer``.
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
@@ -184,7 +184,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Initialize a new ``KafkaConsumer``.
     ///
-    /// This factory method creates a consumer without that does not listen to any events other than consumer messages.
+    /// This creates a consumer without that does not listen to any events other than consumer messages.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
