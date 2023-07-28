@@ -231,7 +231,7 @@ extension KafkaConfiguration {
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {
-            case partition(topic: String, partition: KafkaPartition, offset: Int)
+            case partition(topic: String, partition: KafkaPartition, offset: KafkaOffset)
             case group(groupID: String, topics: [String])
         }
 
@@ -251,7 +251,7 @@ extension KafkaConfiguration {
         public static func partition(
             _ partition: KafkaPartition,
             topic: String,
-            offset: Int = Int(RD_KAFKA_OFFSET_END)
+            offset: KafkaOffset = .end
         ) -> ConsumptionStrategy {
             return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
         }

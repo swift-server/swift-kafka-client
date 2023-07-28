@@ -162,7 +162,7 @@ final class KafkaTests: XCTestCase {
             consumptionStrategy: .partition(
                 KafkaPartition(rawValue: 0),
                 topic: self.uniqueTestTopic,
-                offset: 0
+                offset: KafkaOffset(rawValue: 0)
             )
         )
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
