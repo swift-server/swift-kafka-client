@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import struct Foundation.UUID
+import NIOCore
 import ServiceLifecycle
 @testable import SwiftKafka
 import XCTest
@@ -138,8 +139,8 @@ final class SwiftKafkaTests: XCTestCase {
 
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
-                    XCTAssertEqual(testMessages[index].key, consumedMessage.key)
-                    XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].key!), consumedMessage.key)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value), consumedMessage.value)
                 }
             }
 
@@ -210,8 +211,8 @@ final class SwiftKafkaTests: XCTestCase {
 
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
-                    XCTAssertEqual(testMessages[index].key, consumedMessage.key)
-                    XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].key!), consumedMessage.key)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value), consumedMessage.value)
                 }
             }
 
@@ -352,8 +353,8 @@ final class SwiftKafkaTests: XCTestCase {
 
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
-                    XCTAssertEqual(testMessages[index].key, consumedMessage.key)
-                    XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].key!), consumedMessage.key)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value), consumedMessage.value)
                 }
             }
 
@@ -420,8 +421,8 @@ final class SwiftKafkaTests: XCTestCase {
 
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[firstConsumerOffset + index].topic, consumedMessage.topic)
-                    XCTAssertEqual(testMessages[firstConsumerOffset + index].key, consumedMessage.key)
-                    XCTAssertEqual(testMessages[firstConsumerOffset + index].value, consumedMessage.value)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[firstConsumerOffset + index].key!), consumedMessage.key)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[firstConsumerOffset + index].value), consumedMessage.value)
                 }
             }
 
@@ -434,7 +435,7 @@ final class SwiftKafkaTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static func createTestMessages(topic: String, count: UInt) -> [KafkaProducerMessage] {
+    private static func createTestMessages(topic: String, count: UInt) -> [KafkaProducerMessage<String, String>] {
         return Array(0..<count).map {
             KafkaProducerMessage(
                 topic: topic,
@@ -447,7 +448,7 @@ final class SwiftKafkaTests: XCTestCase {
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
         events: KafkaProducerEvents,
-        messages: [KafkaProducerMessage]
+        messages: [KafkaProducerMessage<String, String>]
     ) async throws {
         var messageIDs = Set<KafkaProducerMessageID>()
 
@@ -484,8 +485,8 @@ final class SwiftKafkaTests: XCTestCase {
         XCTAssertEqual(messages.count, acknowledgedMessages.count)
         for message in messages {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message.key }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message.value }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
         }
     }
 }

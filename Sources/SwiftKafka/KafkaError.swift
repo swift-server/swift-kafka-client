@@ -64,16 +64,6 @@ public struct KafkaError: Error, CustomStringConvertible {
         )
     }
 
-    static func acknowledgement(
-        reason: String, file: String = #fileID, line: UInt = #line
-    ) -> KafkaError {
-        return KafkaError(
-            backing: .init(
-                code: .acknowledgement, reason: reason, file: file, line: line
-            )
-        )
-    }
-
     static func config(
         reason: String, file: String = #fileID, line: UInt = #line
     ) -> KafkaError {
@@ -184,7 +174,6 @@ extension KafkaError {
     public struct ErrorCode: Hashable, Sendable, CustomStringConvertible {
         fileprivate enum BackingCode {
             case rdKafkaError
-            case acknowledgement
             case config
             case topicConfig
             case connectionClosed
@@ -206,8 +195,6 @@ extension KafkaError {
 
         /// Errors caused by the underlying `librdkafka` library.
         public static let rdKafkaError = ErrorCode(.rdKafkaError)
-        /// A ``KafkaProducerMessage`` could not be acknowledged by the Kafka server.
-        public static let acknowledgement = ErrorCode(.acknowledgement)
         /// There is an error in the Kafka client configuration.
         public static let config = ErrorCode(.config)
         /// There is an error in the Kafka topic configuration.
