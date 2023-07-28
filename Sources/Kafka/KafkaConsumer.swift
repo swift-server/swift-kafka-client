@@ -351,7 +351,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Mark all messages up to the passed message in the topic as read and request the next message from the topic.
+    /// Mark all messages up to the passed message in the topic as read.
     ///
     /// This method is only used for manual offset management.
     ///
