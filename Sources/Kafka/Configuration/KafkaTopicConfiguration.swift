@@ -217,6 +217,10 @@ extension KafkaConfiguration {
             ///
             /// Usable compression level range: `0-9`.
             public static func gzip(compressionLevel: Level) -> Codec {
+                precondition(
+                    0...9 ~= compressionLevel.rawValue || compressionLevel == .codecDependent,
+                    "Compression level outside of valid range"
+                )
                 return Codec(_internal: .gzip(compressionLevel: compressionLevel))
             }
 
@@ -227,6 +231,10 @@ extension KafkaConfiguration {
             ///
             /// Usable compression level range: `0-12`.
             public func lz4(compressionLevel: Level) -> Codec {
+                precondition(
+                    0...12 ~= compressionLevel.rawValue || compressionLevel == .codecDependent,
+                    "Compression level outside of valid range"
+                )
                 return Codec(_internal: .lz4(compressionLevel: compressionLevel))
             }
 
