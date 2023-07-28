@@ -46,7 +46,7 @@ final class KafkaConsumerTests: XCTestCase {
         )
         config.bootstrapServers = []
         config.securityProtocol = .plaintext
-        config.debug = [.all]
+        config.debugOptions = [.all]
 
         let consumer = try KafkaConsumer(config: config, logger: mockLogger)
 

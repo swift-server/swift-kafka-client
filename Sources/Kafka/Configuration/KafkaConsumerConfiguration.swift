@@ -33,29 +33,47 @@ public struct KafkaConsumerConfiguration {
     public var session: KafkaConfiguration.SessionOptions = .init()
 
     /// Group session keepalive heartbeat interval.
-    /// Default: `3000`
-    public var heartbeatIntervalMilliseconds: Int = 3000
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(3000)`
+    public var heartbeatInterval: Duration = .milliseconds(3000) {
+        didSet {
+            precondition(
+                heartbeatInterval.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
 
-    /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance in order to reassign the partitions to another consumer group member. Warning: Offset commits may be not possible at this point. Note: It is recommended to set enable.auto.offset.store=false for long-time processing applications and then explicitly store offsets (using offsets_store()) after message processing, to make sure offsets are not auto-committed prior to processing has finished. The interval is checked two times per second. See KIP-62 for more information.
-    /// Default: `300_000`
-    public var maxPollInvervalMilliseconds: Int = 300_000
+    /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance to reassign the partitions to another consumer group member.
+    ///
+    /// - Warning: Offset commits may be not possible at this point.
+    /// - Note: It is recommended to set enable.auto.offset.store=false for long-time processing applications and then explicitly store offsets (using offsets_store()) after message processing, to make sure offsets are not auto-committed before processing has finished.
+    ///
+    /// The interval is checked two times per second. See KIP-62 for more information.
+    ///
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(300_000)`
+    public var maxPollInverval: Duration = .milliseconds(300_000) {
+        didSet {
+            precondition(
+                maxPollInverval.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
 
     /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
     /// Default: `true`
-    public var enableAutoCommit: Bool = true
+    public var isAutoCommitEnabled: Bool = true
 
-    /// The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. (0 = disable).
-    /// Default: `5000`
-    public var autoCommitIntervalMilliseconds: Int = 5000
-
-    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
+    /// Action to take when there is no initial offset in the offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
     /// Default: `.largest`
     public var autoOffsetReset: KafkaConfiguration.AutoOffsetReset = .largest
 
     /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
     /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
     /// Default: `false`
-    public var allowAutoCreateTopics: Bool = false
+    public var isAllowAutoCreateTopicsEnabled: Bool = false
 
     // MARK: - Common Client Config Properties
 
@@ -65,22 +83,33 @@ public struct KafkaConsumerConfiguration {
 
     /// Initial list of brokers.
     /// Default: `[]`
-    public var bootstrapServers: [KafkaConfiguration.Broker] = []
+    public var bootstrapServers: [KafkaConfiguration.BrokerAddress] = []
 
     /// Message options.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
-    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hickups. This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
+    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
+    /// This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
     /// Default: `100_000_000`
     public var receiveMessageMaxBytes: Int = 100_000_000
 
-    /// Maximum number of in-flight requests per broker connection. This is a generic property applied to all broker communication, however it is primarily relevant to produce requests. In particular, note that other mechanisms limit the number of outstanding consumer fetch request per broker to one.
+    /// Maximum number of in-flight requests per broker connection.
+    /// This is a generic property applied to all broker communication, however, it is primarily relevant to produce requests.
+    /// In particular, note that other mechanisms limit the number of outstanding consumer fetch requests per broker to one.
     /// Default: `1_000_000`
     public var maxInFlightRequestsPerConnection: Int = 1_000_000
 
     /// Metadata cache max age.
-    /// Default: `900_000`
-    public var metadataMaxAgeMilliseconds: Int = 900_000
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(900_000)`
+    public var metadataMaxAge: Duration = .milliseconds(900_000) {
+        didSet {
+            precondition(
+                metadataMaxAge.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
 
     /// Topic metadata options.
     public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
@@ -91,7 +120,7 @@ public struct KafkaConsumerConfiguration {
 
     /// Debug options.
     /// Default: `[]`
-    public var debug: [KafkaConfiguration.DebugOption] = []
+    public var debugOptions: [KafkaConfiguration.DebugOption] = []
 
     /// Socket options.
     public var socket: KafkaConfiguration.SocketOptions = .init()
@@ -128,13 +157,12 @@ extension KafkaConsumerConfiguration {
             resultDict["group.id"] = groupID
         }
 
-        resultDict["session.timeout.ms"] = String(session.timeoutMilliseconds)
-        resultDict["heartbeat.interval.ms"] = String(heartbeatIntervalMilliseconds)
-        resultDict["max.poll.interval.ms"] = String(maxPollInvervalMilliseconds)
-        resultDict["enable.auto.commit"] = String(enableAutoCommit)
-        resultDict["auto.commit.interval.ms"] = String(autoCommitIntervalMilliseconds)
+        resultDict["session.timeout.ms"] = String(session.timeout.inMilliseconds)
+        resultDict["heartbeat.interval.ms"] = String(heartbeatInterval.inMilliseconds)
+        resultDict["max.poll.interval.ms"] = String(maxPollInverval.inMilliseconds)
+        resultDict["enable.auto.commit"] = String(isAutoCommitEnabled)
         resultDict["auto.offset.reset"] = autoOffsetReset.description
-        resultDict["allow.auto.create.topics"] = String(allowAutoCreateTopics)
+        resultDict["allow.auto.create.topics"] = String(isAllowAutoCreateTopicsEnabled)
 
         resultDict["client.id"] = clientID
         resultDict["bootstrap.servers"] = bootstrapServers.map(\.description).joined(separator: ",")
@@ -142,26 +170,26 @@ extension KafkaConsumerConfiguration {
         resultDict["message.copy.max.bytes"] = String(message.copyMaxBytes)
         resultDict["receive.message.max.bytes"] = String(receiveMessageMaxBytes)
         resultDict["max.in.flight.requests.per.connection"] = String(maxInFlightRequestsPerConnection)
-        resultDict["metadata.max.age.ms"] = String(metadataMaxAgeMilliseconds)
-        resultDict["topic.metadata.refresh.interval.ms"] = String(topicMetadata.refreshIntervalMilliseconds)
-        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(topicMetadata.refreshFastIntervalMilliseconds)
-        resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.refreshSparse)
-        resultDict["topic.metadata.propagation.max.ms"] = String(topicMetadata.propagationMaxMilliseconds)
+        resultDict["metadata.max.age.ms"] = String(metadataMaxAge.inMilliseconds)
+        resultDict["topic.metadata.refresh.interval.ms"] = String(topicMetadata.refreshInterval.rawValue)
+        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(topicMetadata.refreshFastInterval.inMilliseconds)
+        resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.isRefreshSparseEnabled)
+        resultDict["topic.metadata.propagation.max.ms"] = String(topicMetadata.propagationMax.inMilliseconds)
         resultDict["topic.blacklist"] = topicDenylist.joined(separator: ",")
-        if !debug.isEmpty {
-            resultDict["debug"] = debug.map(\.description).joined(separator: ",")
+        if !debugOptions.isEmpty {
+            resultDict["debug"] = debugOptions.map(\.description).joined(separator: ",")
         }
-        resultDict["socket.timeout.ms"] = String(socket.timeoutMilliseconds)
-        resultDict["socket.send.buffer.bytes"] = String(socket.sendBufferBytes)
-        resultDict["socket.receive.buffer.bytes"] = String(socket.receiveBufferBytes)
-        resultDict["socket.keepalive.enable"] = String(socket.keepaliveEnable)
-        resultDict["socket.nagle.disable"] = String(socket.nagleDisable)
-        resultDict["socket.max.fails"] = String(socket.maxFails)
-        resultDict["socket.connection.setup.timeout.ms"] = String(socket.connectionSetupTimeoutMilliseconds)
-        resultDict["broker.address.ttl"] = String(broker.addressTTL)
+        resultDict["socket.timeout.ms"] = String(socket.timeout.inMilliseconds)
+        resultDict["socket.send.buffer.bytes"] = String(socket.sendBufferBytes.rawValue)
+        resultDict["socket.receive.buffer.bytes"] = String(socket.receiveBufferBytes.rawValue)
+        resultDict["socket.keepalive.enable"] = String(socket.isKeepaliveEnabled)
+        resultDict["socket.nagle.disable"] = String(socket.isNagleDisabled)
+        resultDict["socket.max.fails"] = String(socket.maxFails.rawValue)
+        resultDict["socket.connection.setup.timeout.ms"] = String(socket.connectionSetupTimeout.inMilliseconds)
+        resultDict["broker.address.ttl"] = String(broker.addressTTL.inMilliseconds)
         resultDict["broker.address.family"] = broker.addressFamily.description
-        resultDict["reconnect.backoff.ms"] = String(reconnect.backoffMilliseconds)
-        resultDict["reconnect.backoff.max.ms"] = String(reconnect.backoffMaxMilliseconds)
+        resultDict["reconnect.backoff.ms"] = String(reconnect.backoff.rawValue)
+        resultDict["reconnect.backoff.max.ms"] = String(reconnect.backoffMax.inMilliseconds)
 
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(securityProtocol.dictionary) { _, _ in
@@ -185,13 +213,19 @@ extension KafkaConsumerConfiguration: Sendable {}
 extension KafkaConfiguration {
     /// Client group session options.
     public struct SessionOptions: Sendable, Hashable {
-        /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
-        /// Default: `45000`
-        public var timeoutMilliseconds: Int = 45000
-
-        public init(timeoutMilliseconds: Int = 45000) {
-            self.timeoutMilliseconds = timeoutMilliseconds
+        /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also, see max.poll.interval.ms.
+        /// (Lowest granularity is milliseconds)
+        /// Default: `.milliseconds(45000)`
+        public var timeout: Duration = .milliseconds(45000) {
+            didSet {
+                precondition(
+                    timeout.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
         }
+
+        public init() {}
     }
 
     /// A struct representing the different Kafka message consumption strategies.
@@ -213,8 +247,7 @@ extension KafkaConfiguration {
         /// - Parameters:
         ///     - partition: The partition of the topic to consume from.
         ///     - topic: The name of the Kafka topic.
-        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
-        ///       Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
+        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
         public static func partition(
             _ partition: KafkaPartition,
             topic: String,

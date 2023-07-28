@@ -113,7 +113,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumer
 
-/// Receive messages from the Kafka cluster.
+/// A ``KafkaConsumer `` can be used to consume messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     typealias Producer = NIOThrowingAsyncSequenceProducer<
         KafkaConsumerMessage,
@@ -128,7 +128,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// State of the `KafkaConsumer`.
     private let stateMachine: NIOLockedValueBox<StateMachine>
 
-    /// `AsyncSequence` that returns all ``KafkaConsumerMessage`` objects that the consumer receives.
+    /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
 
     // Private initializer, use factory method or convenience init to create KafkaConsumer
@@ -199,7 +199,7 @@ public final class KafkaConsumer: Sendable, Service {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
         // Only listen to offset commit events when autoCommit is false
-        if config.enableAutoCommit == false {
+        if config.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
 
@@ -222,7 +222,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// Use the asynchronous sequence to consume events.
     ///
-    /// - Important: When the asynchronous sequence is deinited the producer will be shutdown and disallow sending more messages.
+    /// - Important: When the asynchronous sequence is deinited the producer will be shut down and disallowed from sending more messages.
     /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
     ///
     /// - Parameters:
@@ -239,7 +239,7 @@ public final class KafkaConsumer: Sendable, Service {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
         // Only listen to offset commit events when autoCommit is false
-        if config.enableAutoCommit == false {
+        if config.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
 
@@ -306,9 +306,9 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Start polling Kafka for messages.
+    /// Start the ``KafkaConsumer``.
     ///
-    /// - Returns: An awaitable task representing the execution of the poll loop.
+    /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -351,19 +351,22 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Mark `message` in the topic as read and request the next message from the topic.
+    /// Mark all messages up to the passed message in the topic as read and request the next message from the topic.
+    ///
     /// This method is only used for manual offset management.
-    /// - Parameter message: Last received message that shall be marked as read.
-    /// - Throws: A ``KafkaError`` if committing failed.
+    ///
     /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
-    /// - Important: This method does not support `Task` cancellation.
+    ///
+    /// - Parameters:
+    ///     - message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
         let action = self.stateMachine.withLockedValue { $0.commitSync() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
         case .commitSync(let client):
-            guard self.config.enableAutoCommit == false else {
+            guard self.config.isAutoCommitEnabled == false else {
                 throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
             }
 

@@ -17,9 +17,20 @@ import NIOCore
 
 /// Message that is sent by the `KafkaProducer`
 public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
+    /// The topic to which the message will be sent.
     public var topic: String
+
+    /// The partition to which the message will be sent.
+    /// Defaults to ``KafkaPartition/unassigned``.
+    /// This means the message will be automatically assigned a partition using the topic's partitioner function.
     public var partition: KafkaPartition
+
+    /// The optional key associated with the message.
+    /// If the ``KafkaPartition`` is ``KafkaPartition/unassigned``, the ``KafkaProducerMessage/key`` is used to ensure
+    /// that two ``KafkaProducerMessage``s with the same key still get sent to the same ``KafkaPartition``.
     public var key: Key?
+
+    /// The value of the message to be sent.
     public var value: Value
 
     /// Create a new `KafkaProducerMessage` with a ``KafkaContiguousBytes`` key and value.
@@ -27,23 +38,18 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     /// - Parameters:
     ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
     ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
-    ///     - key: Used to guarantee that messages with the same key will be sent to the same partittion so that their order is preserved.
-    ///     - value: The message body.
+    ///     - key: Used to guarantee that messages with the same key will be sent to the same partition so that their order is preserved.
+    ///     - value: The message's value.
     public init(
         topic: String,
-        partition: KafkaPartition? = nil,
+        partition: KafkaPartition = .unassigned,
         key: Key,
         value: Value
     ) {
         self.topic = topic
         self.key = key
         self.value = value
-
-        if let partition = partition {
-            self.partition = partition
-        } else {
-            self.partition = .unassigned
-        }
+        self.partition = partition
     }
 }
 
@@ -52,21 +58,20 @@ extension KafkaProducerMessage where Key == Never {
     ///
     /// - Parameters:
     ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
-    ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partiotion will be assigned automatically.
+    ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
     ///     - value: The message body.
     public init(
         topic: String,
-        partition: KafkaPartition? = nil,
+        partition: KafkaPartition = .unassigned,
         value: Value
     ) {
         self.topic = topic
         self.value = value
         self.key = nil
-
-        if let partition = partition {
-            self.partition = partition
-        } else {
-            self.partition = .unassigned
-        }
+        self.partition = partition
     }
 }
+
+extension KafkaProducerMessage: Hashable {}
+
+extension KafkaProducerMessage: Sendable {}

@@ -13,14 +13,14 @@
 //===----------------------------------------------------------------------===//
 
 /// Conformance to this protocol gives users a way to provide their own "bag of bytes" types
-/// to be used for serialization of Kafka messages.
+/// to be used for the serialization of Kafka messages.
 /// It provides a general interface for bytes since the Swift Standard Library currently does not
 /// provide such a protocol.
 ///
 /// By conforming your own types to this protocol, you will be able to pass instances of said types
 /// directly to ``KafkaProducerMessage`` as key and value.
-public protocol KafkaContiguousBytes {
-    /// Calls the given closure with the contents of underlying storage.
+public protocol KafkaContiguousBytes: Sendable, Hashable {
+    /// Calls the given closure with the contents of the underlying storage.
     ///
     /// - note: Calling `withUnsafeBytes` multiple times does not guarantee that
     ///         the same buffer pointer will be passed in every time.

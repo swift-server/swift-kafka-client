@@ -31,19 +31,29 @@ final class RDKafkaTopicPartitionList {
 
     /// Add topic+partition pair to list.
     func add(topic: String, partition: KafkaPartition) {
+        precondition(
+            0...Int(Int32.max) ~= partition.rawValue || partition == .unassigned,
+            "Partition ID outside of valid range \(0...Int32.max)"
+        )
+
         rd_kafka_topic_partition_list_add(
             self._internal,
             topic,
-            partition.rawValue
+            Int32(partition.rawValue)
         )
     }
 
     /// Manually set read offset for a given topic+partition pair.
     func setOffset(topic: String, partition: KafkaPartition, offset: Int64) {
+        precondition(
+            0...Int(Int32.max) ~= partition.rawValue || partition == .unassigned,
+            "Partition ID outside of valid range \(0...Int32.max)"
+        )
+
         guard let partitionPointer = rd_kafka_topic_partition_list_add(
             self._internal,
             topic,
-            partition.rawValue
+            Int32(partition.rawValue)
         ) else {
             fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
         }

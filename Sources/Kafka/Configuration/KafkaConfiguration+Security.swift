@@ -17,7 +17,7 @@ extension KafkaConfiguration {
 
     /// Use to configure an TLS connection.
     public struct TLSConfiguration: Sendable, Hashable {
-        /// Certificate chain consisting of one leaf certificate and potenentially multiple intermediate certificates.
+        /// Certificate chain consisting of one leaf certificate and potentially multiple intermediate certificates.
         /// The public key of the leaf certificate will be used for authentication.
         public struct LeafAndIntermediates: Sendable, Hashable {
             internal enum _Key: Sendable, Hashable {
@@ -27,7 +27,7 @@ extension KafkaConfiguration {
 
             let _internal: _Key
 
-            /// Read certificate chain from file.
+            /// Read certificate chain from a file.
             public static func file(location: String) -> LeafAndIntermediates {
                 return LeafAndIntermediates(
                     _internal: .file(location: location)
@@ -42,32 +42,32 @@ extension KafkaConfiguration {
             }
         }
 
-        public struct RootCertificate: Sendable, Hashable {
-            internal enum _RootCertificate: Sendable, Hashable {
+        public struct Root: Sendable, Hashable {
+            internal enum _Root: Sendable, Hashable {
                 case probe
                 case disableBrokerVerification
                 case file(location: String)
                 case pem(String)
             }
 
-            let _internal: _RootCertificate
+            let _internal: _Root
 
             /// A list of standard paths will be probed and the first one found will be used as the default root certificate location path.
-            public static let probe = RootCertificate(_internal: .probe)
+            public static let probe = Root(_internal: .probe)
 
-            /// Disable OpenSSL's builtin broker (server) certificate verification.
-            public static let disableBrokerVerification = RootCertificate(_internal: .disableBrokerVerification)
+            /// Disable OpenSSL's built-in broker (server) certificate verification.
+            public static let disableBrokerVerification = Root(_internal: .disableBrokerVerification)
 
             /// File or directory path to root certificate(s) for verifying the broker's key.
-            public static func file(location: String) -> RootCertificate {
-                return RootCertificate(
+            public static func file(location: String) -> Root {
+                return Root(
                     _internal: .file(location: location)
                 )
             }
 
             /// Root certificate String for verifying the broker's key.
-            public static func pem(_ pem: String) -> RootCertificate {
-                return RootCertificate(
+            public static func pem(_ pem: String) -> Root {
+                return Root(
                     _internal: .pem(pem)
                 )
             }
@@ -126,12 +126,12 @@ extension KafkaConfiguration {
             case keyPair(
                 privateKey: PrivateKey,
                 publicKeyCertificate: LeafAndIntermediates,
-                caCertificate: RootCertificate,
+                caCertificate: Root,
                 crlLocation: String?
             )
             case keyStore(
                 keyStore: KeyStore,
-                caCertificate: RootCertificate,
+                caCertificate: Root,
                 crlLocation: String?
             )
         }
@@ -145,11 +145,11 @@ extension KafkaConfiguration {
         ///     - privateKey: The client's private key (PEM) used for authentication.
         ///     - publicKeyCertificate: The client's public key (PEM) used for authentication.
         ///     - caCertificate: File or directory path to CA certificate(s) for verifying the broker's key.
-        ///     - crlocation: Path to CRL for verifying broker's certificate validity.
+        ///     - crLocation: Path to CRL for verifying broker's certificate validity.
         public static func keyPair(
             privateKey: PrivateKey,
             publicKeyCertificate: LeafAndIntermediates,
-            caCertificate: RootCertificate = .probe,
+            caCertificate: Root = .probe,
             crlLocation: String?
         ) -> TLSConfiguration {
             return TLSConfiguration(
@@ -167,10 +167,10 @@ extension KafkaConfiguration {
         ///
         ///     - keyStore: The client's keystore (PKCS#12) used for authentication.
         ///     - caCertificate: File or directory path to CA certificate(s) for verifying the broker's key.
-        ///     - crlocation: Path to CRL for verifying broker's certificate validity.
+        ///     - crlLocation: Path to CRL for verifying broker's certificate validity.
         public static func keyStore(
             keyStore: KeyStore,
-            caCertificate: RootCertificate = .probe,
+            caCertificate: Root = .probe,
             crlLocation: String?
         ) -> TLSConfiguration {
             return TLSConfiguration(
@@ -240,7 +240,7 @@ extension KafkaConfiguration {
     public struct SASLMechanism: Sendable, Hashable {
         /// Used to configure Kerberos.
         public struct KerberosConfiguration: Sendable, Hashable {
-            /// Kerberos p rincipal name that Kafka runs as, not including `/hostname@REALM`.
+            /// Kerberos principal name that Kafka runs as, not including `/hostname@REALM`.
             /// Default: `"kafka"`
             public var serviceName: String = "kafka"
             /// This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal).
@@ -257,10 +257,33 @@ extension KafkaConfiguration {
             /// Path to Kerberos keytab file.
             /// This configuration property is only used as a variable in sasl.kerberos.kinit.cmd as  ... -t "%{sasl.kerberos.keytab}".
             public var keytab: String
-            /// Minimum time in milliseconds between key refresh attempts.
+
+            /// Minimum time between key refresh attempts.
+            public struct KeyRefreshAttempts: Sendable, Hashable {
+                internal let rawValue: UInt
+
+                private init(rawValue: UInt) {
+                    self.rawValue = rawValue
+                }
+
+                /// (Lowest granularity is milliseconds)
+                public static func value(_ value: Duration) -> KeyRefreshAttempts {
+                    precondition(
+                        value.canBeRepresentedAsMilliseconds,
+                        "Lowest granularity is milliseconds"
+                    )
+                    return .init(rawValue: UInt(value.inMilliseconds))
+                }
+
+                /// Disable automatic key refresh by setting this property.
+                public static let disable: KeyRefreshAttempts = .init(rawValue: 0)
+            }
+
+            /// Minimum time in between key refresh attempts.
             /// Disable automatic key refresh by setting this property to 0.
-            /// Default: `60000`
-            public var minTimeBeforeRelogin: Int = 60000
+            /// (Lowest granularity is milliseconds)
+            /// Default: `.value(.milliseconds(60000))`
+            public var minTimeBeforeRelogin: KeyRefreshAttempts = .value(.milliseconds(60000))
 
             public init(keytab: String) {
                 self.keytab = keytab
@@ -292,7 +315,7 @@ extension KafkaConfiguration {
             ///     The format is implementation-dependent and must be parsed accordingly.
             ///     The default unsecured token implementation (see https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes space-separated name=value pairs with valid names including principalClaimName, principal, scopeClaimName, scope, and lifeSeconds.
             ///     The default value for principalClaimName is "sub", the default value for scopeClaimName is "scope", and the default value for lifeSeconds is 3600.
-            ///     The scope value is CSV format with the default value being no/empty scope.
+            ///     The scope value is in CSV format with the default value being no/empty scope.
             ///     For example: `principalClaimName=azp principal=admin scopeClaimName=roles scope=role1,role2 lifeSeconds=600`.
             ///     In addition, SASL extensions can be communicated to the broker via `extension_NAME=value`.
             ///     For example: `principal=admin extension_traceId=123`
@@ -307,8 +330,8 @@ extension KafkaConfiguration {
             ///     - configuration: SASL/OAUTHBEARER configuration.
             ///         The format is implementation-dependent and must be parsed accordingly.
             ///         The default unsecured token implementation (see https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes space-separated    name=value pairs with valid names including principalClaimName, principal, scopeClaimName, scope, and lifeSeconds.
-            ///         The default value for principalClaimName is "sub", the default value for scopeClaimName is "scope", and the default value for   lifeSeconds is 3600.
-            ///         The scope value is CSV format with the default value being no/empty scope.
+            ///         The default value for principalClaimName is "sub", the default value for scopeClaimName is "scope", and the default value for lifeSeconds is 3600.
+            ///         The scope value is in CSV format with the default value being no/empty scope.
             ///         For example: `principalClaimName=azp principal=admin scopeClaimName=roles scope=role1,role2 lifeSeconds=600`.
             ///         In addition, SASL extensions can be communicated to the broker via `extension_NAME=value`.
             ///         For example: `principal=admin extension_traceId=123`
@@ -316,7 +339,7 @@ extension KafkaConfiguration {
             ///     - clientSecret: Client secret only known to the application and the authorization server.
             ///     This should be a sufficiently random string that is not guessable.
             ///     - tokenEndPointURL: OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token.
-            ///     - scope: Client use this to specify the scope of the access request to the broker.
+            ///     - scope: The client uses this to specify the scope of the access request to the broker.
             ///     - extensions: Allow additional information to be provided to the broker.
             ///     Comma-separated list of key=value pairs. E.g., "supportFeatureX=true,organizationId=sales-emea".
             public static func oidc(
@@ -397,7 +420,7 @@ extension KafkaConfiguration {
                 resultDict["sasl.kerberos.principal"] = kerberosConfiguration.principal
                 resultDict["sasl.kerberos.kinit.cmd"] = kerberosConfiguration.kinitCommand
                 resultDict["sasl.kerberos.keytab"] = kerberosConfiguration.keytab
-                resultDict["sasl.kerberos.min.time.before.relogin"] = String(kerberosConfiguration.minTimeBeforeRelogin)
+                resultDict["sasl.kerberos.min.time.before.relogin"] = String(kerberosConfiguration.minTimeBeforeRelogin.rawValue)
             case .plain(let username, let password):
                 resultDict["sasl.mechanism"] = "PLAIN"
                 resultDict["sasl.username"] = username

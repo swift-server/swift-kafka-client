@@ -14,23 +14,75 @@
 
 /// Used to configure new topics created by the ``KafkaProducer``.
 public struct KafkaTopicConfiguration {
-    /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request: 0=Broker does not send any response/ack to client, -1 or all=Broker will block until message is committed by all in sync replicas (ISRs). If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
-    /// Default: `-1`
-    public var acks: Int = -1
+    /// This number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
+    public struct NumberAcknowledgments: Sendable, Hashable {
+        internal let rawValue: Int
 
-    /// The ack timeout of the producer request in milliseconds. This value is only enforced by the broker and relies on request.required.acks being != 0.
-    /// Default: `30000`
-    public var requestTimeoutMilliseconds: Int = 30000
+        private init(rawValue: Int) {
+            self.rawValue = rawValue
+        }
 
-    /// Local message timeout. This value is only enforced locally and limits the time a produced message waits for successful delivery. A time of 0 is infinite. This is the maximum time librdkafka may use to deliver a message (including retries). Delivery error occurs when either the retry count or the message timeout are exceeded. The message timeout is automatically adjusted to transaction.timeout.ms if transactional.id is configured.
-    /// Default: `300_000`
-    public var messageTimeoutMilliseconds: Int = 300_000
+        public static func value(_ value: Int) -> NumberAcknowledgments {
+            return .init(rawValue: value)
+        }
 
-    /// Paritioner. See ``KafkaSharedConfiguration/Partitioner`` for more information.
+        /// Broker will block until the message is committed by all in-sync replicas (ISRs).
+        public static let all: NumberAcknowledgments = .init(rawValue: -1)
+
+        /// Broker does not send any response/ack to the client.
+        public static let noAcknowledgments: NumberAcknowledgments = .init(rawValue: 0)
+    }
+
+    /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
+    /// If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
+    /// Default: `.all`
+    public var acks: NumberAcknowledgments = .all
+
+    /// The ack timeout of the producer request. This value is only enforced by the broker and relies on request.required.acks being != 0.
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(30000)`
+    public var requestTimeout: Duration = .milliseconds(30000) {
+        didSet {
+            precondition(
+                self.requestTimeout.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
+
+    /// Local message timeout.
+    public struct MessageTimeout: Sendable, Hashable {
+        internal let rawValue: UInt
+
+        private init(rawValue: UInt) {
+            self.rawValue = rawValue
+        }
+
+        /// (Lowest granularity is milliseconds)
+        public static func value(_ value: Duration) -> MessageTimeout {
+            precondition(
+                value.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+            return .init(rawValue: value.inMilliseconds)
+        }
+
+        public static let infinite: MessageTimeout = .init(rawValue: 0)
+    }
+
+    /// Local message timeout.
+    /// This value is only enforced locally and limits the time a produced message waits for successful delivery.
+    /// This is the maximum time librdkafka may use to deliver a message (including retries).
+    /// Delivery error occurs when either the retry count or the message timeout is exceeded. The message timeout is automatically adjusted to transaction.timeout.ms if transactional.id is configured.
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.value(.milliseconds(300_000))`
+    public var messageTimeout: MessageTimeout = .value(.milliseconds(300_000))
+
+    /// Partitioner. See ``KafkaSharedConfiguration/Partitioner`` for more information.
     /// Default: `.consistentRandom`
     public var partitioner: KafkaConfiguration.Partitioner = .consistentRandom
 
-    /// Compression-related configuratoin options.
+    /// Compression-related configuration options.
     public var compression: KafkaConfiguration.Compression = .init()
 
     public init() {}
@@ -50,12 +102,12 @@ extension KafkaTopicConfiguration {
     internal var dictionary: [String: String] {
         var resultDict: [String: String] = [:]
 
-        resultDict["acks"] = String(self.acks)
-        resultDict["request.timeout.ms"] = String(self.requestTimeoutMilliseconds)
-        resultDict["message.timeout.ms"] = String(self.messageTimeoutMilliseconds)
+        resultDict["acks"] = String(self.acks.rawValue)
+        resultDict["request.timeout.ms"] = String(self.requestTimeout.inMilliseconds)
+        resultDict["message.timeout.ms"] = String(self.messageTimeout.rawValue)
         resultDict["partitioner"] = self.partitioner.description
         resultDict["compression.codec"] = self.compression.codec.description
-        resultDict["compression.level"] = String(self.compression.level)
+        resultDict["compression.level"] = String(self.compression.codec.level.rawValue)
 
         return resultDict
     }
@@ -70,15 +122,15 @@ extension KafkaConfiguration {
 
         /// Random distribution.
         public static let random = Partitioner(description: "random")
-        /// CRC32 hash of key (Empty and NULL keys are mapped to single partition).
+        /// CRC32 hash of key (Empty and NULL keys are mapped to a single partition).
         public static let consistent = Partitioner(description: "consistent")
         /// CRC32 hash of key (Empty and NULL keys are randomly partitioned).
         public static let consistentRandom = Partitioner(description: "consistent_random")
-        /// Java Producer compatible Murmur2 hash of key (NULL keys are mapped to single partition).
+        /// Java Producer compatible Murmur2 hash of key (NULL keys are mapped to a single partition).
         public static let murmur2 = Partitioner(description: "murmur2")
         /// Java Producer compatible Murmur2 hash of key (NULL keys are randomly partitioned. This is functionally equivalent to the default partitioner in the Java Producer).
         public static let murmur2Random = Partitioner(description: "murmur2_random")
-        /// FNV-1a hash of key (NULL keys are mapped to single partition).
+        /// FNV-1a hash of key (NULL keys are mapped to a single partition).
         public static let fnv1a = Partitioner(description: "fnv1a")
         /// FNV-1a hash of key (NULL keys are randomly partitioned).
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
@@ -86,30 +138,109 @@ extension KafkaConfiguration {
 
     /// Compression-related configuration options.
     public struct Compression: Sendable, Hashable {
+        /// Compression level parameter for algorithm selected by configuration property compression.codec.
+        /// Higher values will result in better compression at the cost of more CPU usage.
+        public struct Level: Sendable, Hashable {
+            internal let rawValue: Int
+
+            private init(rawValue: Int) {
+                self.rawValue = rawValue
+            }
+
+            public static func value(_ value: Int) -> Level {
+                return .init(rawValue: value)
+            }
+
+            /// Codec-dependent default compression level.
+            public static let codecDependent: Level = .init(rawValue: -1)
+        }
+
         /// Process to compress and decompress data.
         public struct Codec: Sendable, Hashable, CustomStringConvertible {
-            public let description: String
+            private enum _Codec: Sendable, Hashable, CustomStringConvertible {
+                case none
+                case gzip(compressionLevel: Level)
+                case snappy // only compression level is 0
+                case lz4(compressionLevel: Level)
+                case zstd(compressionLevel: Level)
+                case inherit
+
+                internal var description: String {
+                    switch self {
+                    case .none:
+                        return "none"
+                    case .gzip:
+                        return "gzip"
+                    case .snappy:
+                        return "snappy"
+                    case .lz4:
+                        return "lz4"
+                    case .zstd:
+                        return "zstd"
+                    case .inherit:
+                        return "inherit"
+                    }
+                }
+
+                internal var level: Level {
+                    switch self {
+                    case .none:
+                        return .codecDependent
+                    case .gzip(let compressionLevel):
+                        return compressionLevel
+                    case .snappy:
+                        return .codecDependent
+                    case .lz4(let compressionLevel):
+                        return compressionLevel
+                    case .zstd(let compressionLevel):
+                        return compressionLevel
+                    case .inherit:
+                        return .codecDependent
+                    }
+                }
+            }
+
+            private let _internal: _Codec
+
+            public var description: String {
+                self._internal.description
+            }
+
+            public var level: Level {
+                self._internal.level
+            }
 
             /// No compression.
-            public static let none = Codec(description: "none")
+            public static let none = Codec(_internal: .none)
+
             /// gzip compression.
-            public static let gzip = Codec(description: "gzip")
+            ///
+            /// Usable compression level range: `0-9`.
+            public static func gzip(compressionLevel: Level) -> Codec {
+                return Codec(_internal: .gzip(compressionLevel: compressionLevel))
+            }
+
             /// snappy compression.
-            public static let snappy = Codec(description: "snappy")
+            public static let snappy = Codec(_internal: .snappy)
+
             /// lz4 compression.
-            public static let lz4 = Codec(description: "lz4")
+            ///
+            /// Usable compression level range: `0-12`.
+            public func lz4(compressionLevel: Level) -> Codec {
+                return Codec(_internal: .lz4(compressionLevel: compressionLevel))
+            }
+
             /// zstd compression.
-            public static let zstd = Codec(description: "zstd")
+            public func zstd(compressionLevel: Level) -> Codec {
+                return Codec(_internal: .zstd(compressionLevel: compressionLevel))
+            }
+
             /// Inherit global compression.codec configuration.
-            public static let inherit = Codec(description: "inherit")
+            public static let inherit = Codec(_internal: .inherit)
         }
 
         /// Compression codec to use for compressing message sets.
         /// Default: `.inherit`
         public var codec: Codec = .inherit
-
-        /// Compression level parameter for algorithm selected by configuration property compression.codec. Higher values will result in better compression at the cost of more CPU usage. Usable range is algorithm-dependent: [0-9] for gzip; [0-12] for lz4; only 0 for snappy; -1 = codec-dependent default compression level.
-        /// Default: `-1`
-        public var level: Int = -1
     }
 }

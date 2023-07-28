@@ -15,6 +15,12 @@
 public struct KafkaProducerConfiguration {
     // MARK: - Kafka-specific Config properties
 
+    /// If the ``isAllowAutoCreateTopicsEnabled`` option is set to `true`,
+    /// the broker will automatically generate topics when producing data to non-existent topics.
+    /// The configuration specified in this ``KafkaTopicConfiguration`` will be applied to the newly created topic.
+    /// Default: See default values of ``KafkaTopicConfiguration``
+    public var topicConfiguration: KafkaTopicConfiguration = .init()
+
     /// The time between two consecutive polls.
     /// Effectively controls the rate at which incoming events are consumed.
     /// Default: `.milliseconds(100)`
@@ -33,21 +39,23 @@ public struct KafkaProducerConfiguration {
 
     // MARK: - Producer-specific Config Properties
 
-    /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), retries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantation will fail if user-supplied configuration is incompatible.
+    /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), messageSendMaxRetries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantiation will fail if the user-supplied configuration is incompatible.
     /// Default: `false`
-    public var enableIdempotence: Bool = false
+    public var isIdempotenceEnabled: Bool = false
 
     /// Producer queue options.
     public var queue: KafkaConfiguration.QueueOptions = .init()
 
-    /// How many times to retry sending a failing Message. Note: retrying may cause reordering unless enable.idempotence is set to true.
+    /// How many times to retry sending a failing Message.
+    ///
+    /// - Note: retrying may cause reordering unless enable.idempotence is set to true.
     /// Default: `2_147_483_647`
     public var messageSendMaxRetries: Int = 2_147_483_647
 
     /// Allow automatic topic creation on the broker when producing to non-existent topics.
     /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
     /// Default: `true`
-    public var allowAutoCreateTopics: Bool = true
+    public var isAllowAutoCreateTopicsEnabled: Bool = true
 
     // MARK: - Common Client Config Properties
 
@@ -57,22 +65,33 @@ public struct KafkaProducerConfiguration {
 
     /// Initial list of brokers.
     /// Default: `[]`
-    public var bootstrapServers: [KafkaConfiguration.Broker] = []
+    public var bootstrapServers: [KafkaConfiguration.BrokerAddress] = []
 
     /// Message options.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
-    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hickups. This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
+    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
+    /// This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
     /// Default: `100_000_000`
     public var receiveMessageMaxBytes: Int = 100_000_000
 
-    /// Maximum number of in-flight requests per broker connection. This is a generic property applied to all broker communication, however it is primarily relevant to produce requests. In particular, note that other mechanisms limit the number of outstanding consumer fetch request per broker to one.
+    /// Maximum number of in-flight requests per broker connection.
+    /// This is a generic property applied to all broker communication, however, it is primarily relevant to produce requests.
+    /// In particular, note that other mechanisms limit the number of outstanding consumer fetch requests per broker to one.
     /// Default: `1_000_000`
     public var maxInFlightRequestsPerConnection: Int = 1_000_000
 
     /// Metadata cache max age.
-    /// Default: `900_000`
-    public var metadataMaxAgeMilliseconds: Int = 900_000
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(900_000)`
+    public var metadataMaxAge: Duration = .milliseconds(900_000) {
+        didSet {
+            precondition(
+                self.metadataMaxAge.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
 
     /// Topic metadata options.
     public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
@@ -83,7 +102,7 @@ public struct KafkaProducerConfiguration {
 
     /// Debug options.
     /// Default: `[]`
-    public var debug: [KafkaConfiguration.DebugOption] = []
+    public var debugOptions: [KafkaConfiguration.DebugOption] = []
 
     /// Socket options.
     public var socket: KafkaConfiguration.SocketOptions = .init()
@@ -107,12 +126,12 @@ extension KafkaProducerConfiguration {
     internal var dictionary: [String: String] {
         var resultDict: [String: String] = [:]
 
-        resultDict["enable.idempotence"] = String(self.enableIdempotence)
-        resultDict["queue.buffering.max.messages"] = String(self.queue.bufferingMaxMessages)
-        resultDict["queue.buffering.max.kbytes"] = String(self.queue.bufferingMaxKBytes)
-        resultDict["queue.buffering.max.ms"] = String(self.queue.bufferingMaxMilliseconds)
+        resultDict["enable.idempotence"] = String(self.isIdempotenceEnabled)
+        resultDict["queue.buffering.max.messages"] = String(self.queue.maxMessages.rawValue)
+        resultDict["queue.buffering.max.kbytes"] = String(self.queue.maxBytes / 1024)
+        resultDict["queue.buffering.max.ms"] = String(self.queue.max.inMilliseconds)
         resultDict["message.send.max.retries"] = String(self.messageSendMaxRetries)
-        resultDict["allow.auto.create.topics"] = String(self.allowAutoCreateTopics)
+        resultDict["allow.auto.create.topics"] = String(self.isAllowAutoCreateTopicsEnabled)
 
         resultDict["client.id"] = self.clientID
         resultDict["bootstrap.servers"] = self.bootstrapServers.map(\.description).joined(separator: ",")
@@ -120,26 +139,26 @@ extension KafkaProducerConfiguration {
         resultDict["message.copy.max.bytes"] = String(self.message.copyMaxBytes)
         resultDict["receive.message.max.bytes"] = String(self.receiveMessageMaxBytes)
         resultDict["max.in.flight.requests.per.connection"] = String(self.maxInFlightRequestsPerConnection)
-        resultDict["metadata.max.age.ms"] = String(self.metadataMaxAgeMilliseconds)
-        resultDict["topic.metadata.refresh.interval.ms"] = String(self.topicMetadata.refreshIntervalMilliseconds)
-        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(self.topicMetadata.refreshFastIntervalMilliseconds)
-        resultDict["topic.metadata.refresh.sparse"] = String(self.topicMetadata.refreshSparse)
-        resultDict["topic.metadata.propagation.max.ms"] = String(self.topicMetadata.propagationMaxMilliseconds)
+        resultDict["metadata.max.age.ms"] = String(self.metadataMaxAge.inMilliseconds)
+        resultDict["topic.metadata.refresh.interval.ms"] = String(self.topicMetadata.refreshInterval.rawValue)
+        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(self.topicMetadata.refreshFastInterval.inMilliseconds)
+        resultDict["topic.metadata.refresh.sparse"] = String(self.topicMetadata.isRefreshSparseEnabled)
+        resultDict["topic.metadata.propagation.max.ms"] = String(self.topicMetadata.propagationMax.inMilliseconds)
         resultDict["topic.blacklist"] = self.topicDenylist.joined(separator: ",")
-        if !self.debug.isEmpty {
-            resultDict["debug"] = self.debug.map(\.description).joined(separator: ",")
+        if !self.debugOptions.isEmpty {
+            resultDict["debug"] = self.debugOptions.map(\.description).joined(separator: ",")
         }
-        resultDict["socket.timeout.ms"] = String(self.socket.timeoutMilliseconds)
-        resultDict["socket.send.buffer.bytes"] = String(self.socket.sendBufferBytes)
-        resultDict["socket.receive.buffer.bytes"] = String(self.socket.receiveBufferBytes)
-        resultDict["socket.keepalive.enable"] = String(self.socket.keepaliveEnable)
-        resultDict["socket.nagle.disable"] = String(self.socket.nagleDisable)
-        resultDict["socket.max.fails"] = String(self.socket.maxFails)
-        resultDict["socket.connection.setup.timeout.ms"] = String(self.socket.connectionSetupTimeoutMilliseconds)
-        resultDict["broker.address.ttl"] = String(self.broker.addressTTL)
+        resultDict["socket.timeout.ms"] = String(self.socket.timeout.inMilliseconds)
+        resultDict["socket.send.buffer.bytes"] = String(self.socket.sendBufferBytes.rawValue)
+        resultDict["socket.receive.buffer.bytes"] = String(self.socket.receiveBufferBytes.rawValue)
+        resultDict["socket.keepalive.enable"] = String(self.socket.isKeepaliveEnabled)
+        resultDict["socket.nagle.disable"] = String(self.socket.isNagleDisabled)
+        resultDict["socket.max.fails"] = String(self.socket.maxFails.rawValue)
+        resultDict["socket.connection.setup.timeout.ms"] = String(self.socket.connectionSetupTimeout.inMilliseconds)
+        resultDict["broker.address.ttl"] = String(self.broker.addressTTL.inMilliseconds)
         resultDict["broker.address.family"] = self.broker.addressFamily.description
-        resultDict["reconnect.backoff.ms"] = String(self.reconnect.backoffMilliseconds)
-        resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.backoffMaxMilliseconds)
+        resultDict["reconnect.backoff.ms"] = String(self.reconnect.backoff.rawValue)
+        resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.backoffMax.inMilliseconds)
 
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(self.securityProtocol.dictionary) { _, _ in
@@ -163,26 +182,43 @@ extension KafkaProducerConfiguration: Sendable {}
 extension KafkaConfiguration {
     /// Producer queue options.
     public struct QueueOptions: Sendable, Hashable {
-        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions. A value of 0 disables this limit.
-        /// Default: `100_000`
-        public var bufferingMaxMessages: Int = 100_000
+        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
+        public struct MaxMessages: Sendable, Hashable {
+            internal let rawValue: Int
+
+            private init(rawValue: Int) {
+                self.rawValue = rawValue
+            }
+
+            public static func value(_ value: Int) -> MaxMessages {
+                return .init(rawValue: value)
+            }
+
+            /// No limit for the maximum number of messages allowed on the producer queue.
+            public static let noLimit: MaxMessages = .init(rawValue: 0)
+        }
+
+        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
+        /// Default: `.value(100_000)`
+        public var maxMessages: MaxMessages = .value(100_000)
 
         /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions. This property has higher priority than queue.buffering.max.messages.
-        /// Default: `1_048_576`
-        public var bufferingMaxKBytes: Int = 1_048_576
+        /// Default: `1_048_576 * 1024`
+        public var maxBytes: Int = 1_048_576 * 1024
 
-        /// Delay in milliseconds to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers. A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
-        /// Default: `5`
-        public var bufferingMaxMilliseconds: Int = 5
-
-        public init(
-            bufferingMaxMessages: Int = 100_000,
-            bufferingMaxKBytes: Int = 1_048_576,
-            bufferingMaxMilliseconds: Int = 5
-        ) {
-            self.bufferingMaxMessages = bufferingMaxMessages
-            self.bufferingMaxKBytes = bufferingMaxKBytes
-            self.bufferingMaxMilliseconds = bufferingMaxMilliseconds
+        /// How long wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers.
+        /// A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
+        /// (Lowest granularity is milliseconds)
+        /// Default: `.milliseconds(5)`
+        public var max: Duration = .milliseconds(5) {
+            didSet {
+                precondition(
+                    self.max.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
         }
+
+        public init() {}
     }
 }
