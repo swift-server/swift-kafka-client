@@ -174,10 +174,6 @@ extension KafkaProducerConfiguration {
     }
 }
 
-// MARK: - KafkaProducerConfiguration + Hashable
-
-extension KafkaProducerConfiguration: Hashable {}
-
 // MARK: - KafkaProducerConfiguration + Sendable
 
 extension KafkaProducerConfiguration: Sendable {}

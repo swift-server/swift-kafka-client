@@ -198,10 +198,6 @@ extension KafkaConsumerConfiguration {
     }
 }
 
-// MARK: - KafkaConsumerConfiguration + Hashable
-
-extension KafkaConsumerConfiguration: Hashable {}
-
 // MARK: - KafkaConsumerConfiguration + Sendable
 
 extension KafkaConsumerConfiguration: Sendable {}

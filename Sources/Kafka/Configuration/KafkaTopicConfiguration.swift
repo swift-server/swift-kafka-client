@@ -88,10 +88,6 @@ public struct KafkaTopicConfiguration {
     public init() {}
 }
 
-// MARK: - KafkaTopicConfiguration + Hashable
-
-extension KafkaTopicConfiguration: Hashable {}
-
 // MARK: - KafkaTopicConfiguration + Sendable
 
 extension KafkaTopicConfiguration: Sendable {}
