@@ -169,6 +169,8 @@ final class RDKafkaClient: Sendable {
                 self.handleOffsetCommitEvent(event)
             case .statistics:
                 events.append(self.handleStatistics(event))
+            case .rebalance:
+                fatalError("Rebalance is triggered")
             case .none:
                 // Finished reading events, return early
                 return events
@@ -272,6 +274,15 @@ final class RDKafkaClient: Sendable {
         guard let opaquePointer = rd_kafka_event_opaque(event) else {
             fatalError("Could not resolve reference to catpured Swift callback instance")
         }
+        
+        /*
+         let opaquePointer = rd_kafka_event_opaque(event)
+         guard let opaquePointer else {
+             let count = rd_kafka_event_message_count(event)
+             let str = String(cString: rd_kafka_event_name(event))
+             fatalError("Could not resolve reference to catpured Swift callback instance for count \(count) in event \(str)")
+         }
+         */
         let opaque = Unmanaged<CapturedCommitCallback>.fromOpaque(opaquePointer).takeUnretainedValue()
         let actualCallback = opaque.closure
 

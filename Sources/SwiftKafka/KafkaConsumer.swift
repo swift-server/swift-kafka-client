@@ -124,7 +124,10 @@ public final class KafkaConsumer: Sendable, Service {
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: config.dictionary,
-            events: [.log, .fetch, .offsetCommit],
+            events:
+                [.log, .fetch]
+                + [.rebalance]
+                + (!config.enableAutoCommit ? [.offsetCommit] : [.none]),
             logger: logger
         )
 

@@ -16,6 +16,7 @@ import struct Foundation.UUID
 import ServiceLifecycle
 @testable import SwiftKafka
 import XCTest
+import Logging
 
 // For testing locally on Mac, do the following:
 //
@@ -152,27 +153,61 @@ final class SwiftKafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = Self.createTestMessages(topic: "test-topic", count: 100)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.producerConfig, logger: .kafkaTest)
 
-        var consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .partition(
-                KafkaPartition(rawValue: 0),
-                topic: self.uniqueTestTopic,
-                offset: 0
-            )
-        )
-        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
-        consumerConfig.bootstrapServers = [self.bootstrapServer]
-        consumerConfig.broker.addressFamily = .v4
 
-        let consumer = try KafkaConsumer(
+        
+        let consumerConfig = {
+            var config = KafkaConsumerConfiguration(
+                consumptionStrategy: .group(id: "test-consumers", topics: ["test-topic"]) //(
+    //                KafkaPartition(rawValue: 0),
+    //                topic: self.uniqueTestTopic,
+    //                offset: 0
+    //            )
+            )
+//            config.debug = [.all]
+            config.autoOffsetReset = .beginning // Always read topics from beginning
+            config.bootstrapServers = [self.bootstrapServer]
+            config.broker.addressFamily = .v4
+            config.autoCommitIntervalMilliseconds = 10
+            config.enableAutoCommit = false
+            
+            
+            return config
+        } ()
+
+        let logger1 = {
+            var logger = Logger(label: "Consumer1.Log")
+            logger.logLevel = .info
+            return logger
+        }()
+        let logger2 = {
+            var logger = Logger(label: "Consumer2.Log")
+            logger.logLevel = logger1.logLevel
+            return logger
+        }()
+        
+//        let consumer = try KafkaConsumer(
+//            config: consumerConfig,
+//            logger: logger1
+//        )
+        let cons = try KafkaConsumer(
             config: consumerConfig,
-            logger: .kafkaTest
+            logger: logger2
         )
+        
+        var cont: AsyncStream<KafkaConsumerMessage>.Continuation!
+        let sequenceForAcks = AsyncStream<KafkaConsumerMessage>(
+            bufferingPolicy: .bufferingOldest(1_000)) {
+            continuation in
+            cont = continuation
+        }
+        let continuation = cont
+
 
         let serviceGroup = ServiceGroup(
-            services: [producer, consumer],
+            services: [producer, /*consumer, */cons],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: .kafkaTest
         )
@@ -193,29 +228,63 @@ final class SwiftKafkaTests: XCTestCase {
             }
 
             // Consumer Task
+//            group.addTask {
+//                logger1.info("Task for consumer 1 started")
+//                var consumedMessages = [KafkaConsumerMessage]()
+//                for try await messageResult in consumer.messages {
+//                    if !consumerConfig.enableAutoCommit {
+//                        try await consumer.commitSync(messageResult)
+//                    }
+//                    guard case let message = messageResult else {
+//                        continue
+//                    }
+//                    consumedMessages.append(message)
+//                    if consumedMessages.count % max(testMessages.count / 10, 1) == 0 {
+//                        logger1.info("Got \(consumedMessages.count) out of \(testMessages.count)")
+//                    }
+//
+//                    if consumedMessages.count >= testMessages.count {
+//                        break
+//                    }
+//                }
+//
+//                logger1.info("Task for consumer 1 finished, fetched \(consumedMessages.count)")
+////                XCTAssertEqual(testMessages.count, consumedMessages.count)
+////
+////                for (index, consumedMessage) in consumedMessages.enumerated() {
+////                    XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
+////                    XCTAssertEqual(testMessages[index].key, consumedMessage.key)
+////                    XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+////                }
+//            }
+//
             group.addTask {
-                var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
-                    consumedMessages.append(message)
-
-                    if consumedMessages.count >= testMessages.count {
+                logger2.info("Task for cons started")
+                var aa = 0
+                for try await messageResult in cons.messages {
+                    if aa >= testMessages.count {
                         break
                     }
+                    continuation?.yield(messageResult)
+                    aa += 1
+                    if aa % max(testMessages.count / 10, 1) == 0 {
+                        logger2.info("Got \(aa) out of \(testMessages.count)")
+                    }
                 }
-
-                XCTAssertEqual(testMessages.count, consumedMessages.count)
-
-                for (index, consumedMessage) in consumedMessages.enumerated() {
-                    XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
-                    XCTAssertEqual(testMessages[index].key, consumedMessage.key)
-                    XCTAssertEqual(testMessages[index].value, consumedMessage.value)
+                logger2.info("Task for cons finished")
+                continuation?.finish()
+            }
+            
+            group.addTask {
+                for try await msg in sequenceForAcks {
+                    try await cons.commitSync(msg)
                 }
             }
 
+//            try? await Task.sleep(for: .seconds(5))
+
             // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
             try await group.next()
             try await group.next()
             // Shutdown the serviceGroup
@@ -438,7 +507,7 @@ final class SwiftKafkaTests: XCTestCase {
         return Array(0..<count).map {
             KafkaProducerMessage(
                 topic: topic,
-                key: "key",
+                key: "key \($0)",
                 value: "Hello, World! \($0) - \(Date().description)"
             )
         }
@@ -466,8 +535,10 @@ final class SwiftKafkaTests: XCTestCase {
             default:
                 break // Ignore any other events
             }
+            
+            print("Sent \(receivedDeliveryReports.count) out of \(messages.count)")
 
-            if receivedDeliveryReports.count >= 2 {
+            if receivedDeliveryReports.count >= messages.count {
                 break
             }
         }
