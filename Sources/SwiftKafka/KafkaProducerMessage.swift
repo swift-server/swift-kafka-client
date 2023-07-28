@@ -16,22 +16,24 @@ import Crdkafka
 import NIOCore
 
 /// Message that is sent by the `KafkaProducer`
-public struct KafkaProducerMessage {
+public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
     public var topic: String
     public var partition: KafkaPartition
-    public var key: ByteBuffer?
-    public var value: ByteBuffer
+    public var key: Key?
+    public var value: Value
 
-    /// Create a new `KafkaProducerMessage` with a `ByteBuffer` key and value
-    /// - Parameter topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
-    /// - Parameter partition: The topic partition the message will be sent to. If not set explicitly, the partiotion will be assigned automatically.
-    /// - Parameter key: Used to guarantee that messages with the same key will be sent to the same partittion so that their order is preserved.
-    /// - Parameter value: The message body.
+    /// Create a new `KafkaProducerMessage` with a ``KafkaContiguousBytes`` key and value.
+    ///
+    /// - Parameters:
+    ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
+    ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
+    ///     - key: Used to guarantee that messages with the same key will be sent to the same partittion so that their order is preserved.
+    ///     - value: The message body.
     public init(
         topic: String,
         partition: KafkaPartition? = nil,
-        key: ByteBuffer? = nil,
-        value: ByteBuffer
+        key: Key,
+        value: Value
     ) {
         self.topic = topic
         self.key = key
@@ -43,30 +45,28 @@ public struct KafkaProducerMessage {
             self.partition = .unassigned
         }
     }
+}
 
-    /// Create a new `KafkaProducerMessage` with a `String` key and value
-    /// - Parameter topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
-    /// - Parameter partition: The topic partition the message will be sent to. If not set explicitly, the partiotion will be assigned automatically.
-    /// - Parameter key: Used to guarantee that messages with the same key will be sent to the same partittion so that their order is preserved.
-    /// - Parameter value: The message body.
+extension KafkaProducerMessage where Key == Never {
+    /// Create a new `KafkaProducerMessage` with a ``KafkaContiguousBytes`` value.
+    ///
+    /// - Parameters:
+    ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
+    ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partiotion will be assigned automatically.
+    ///     - value: The message body.
     public init(
         topic: String,
         partition: KafkaPartition? = nil,
-        key: String? = nil,
-        value: String
+        value: Value
     ) {
-        let keyBuffer: ByteBuffer?
-        if let key = key {
-            keyBuffer = ByteBuffer(string: key)
-        } else {
-            keyBuffer = nil
-        }
+        self.topic = topic
+        self.value = value
+        self.key = nil
 
-        self.init(
-            topic: topic,
-            partition: partition,
-            key: keyBuffer,
-            value: ByteBuffer(string: value)
-        )
+        if let partition = partition {
+            self.partition = partition
+        } else {
+            self.partition = .unassigned
+        }
     }
 }

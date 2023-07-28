@@ -102,8 +102,8 @@ final class KafkaProducerTests: XCTestCase {
             }
 
             XCTAssertEqual(expectedTopic, receivedMessage.topic)
-            XCTAssertEqual(message.key, receivedMessage.key)
-            XCTAssertEqual(message.value, receivedMessage.value)
+            XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
+            XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -159,7 +159,6 @@ final class KafkaProducerTests: XCTestCase {
             }
 
             XCTAssertEqual(expectedTopic, receivedMessage.topic)
-            XCTAssertEqual(message.key, receivedMessage.key)
             XCTAssertEqual(message.value, receivedMessage.value)
 
             // Shutdown the serviceGroup
@@ -227,10 +226,10 @@ final class KafkaProducerTests: XCTestCase {
             XCTAssertEqual(2, acknowledgedMessages.count)
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message1.key }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == message2.key }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message1.value }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == message2.value }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message1.key!) }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message2.key!) }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message1.value) }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message2.value) }))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()

@@ -248,7 +248,7 @@ public final class KafkaProducer: Service, Sendable {
     /// of the corresponding ``KafkaAcknowledgedMessage``.
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
-    public func send(_ message: KafkaProducerMessage) throws -> KafkaProducerMessageID {
+    public func send<Key, Value>(_ message: KafkaProducerMessage<Key, Value>) throws -> KafkaProducerMessageID {
         let action = try self.stateMachine.withLockedValue { try $0.send() }
         switch action {
         case .send(let client, let newMessageID, let topicHandles):
