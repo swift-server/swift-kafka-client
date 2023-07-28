@@ -24,9 +24,7 @@ extension String: KafkaContiguousBytes {
             return read
         } else {
             // Slow path
-            return try ByteBuffer(string: self).withUnsafeReadableBytes { unsafeRawBufferPointer in
-                try body(unsafeRawBufferPointer)
-            }
+            return try ByteBuffer(string: self).withUnsafeBytes(body)
         }
     }
 }
