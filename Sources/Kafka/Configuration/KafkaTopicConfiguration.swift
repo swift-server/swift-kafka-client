@@ -78,7 +78,7 @@ public struct KafkaTopicConfiguration {
     /// Default: `.timeout(.milliseconds(300_000))`
     public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
 
-    /// Partitioner. See ``KafkaSharedConfiguration/Partitioner`` for more information.
+    /// Partitioner. See ``KafkaConfiguration/Partitioner`` for more information.
     /// Default: `.consistentRandom`
     public var partitioner: KafkaConfiguration.Partitioner = .consistentRandom
 

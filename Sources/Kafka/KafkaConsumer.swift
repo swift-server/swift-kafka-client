@@ -355,7 +355,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// This method is only used for manual offset management.
     ///
-    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true`.
+    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
     ///
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.

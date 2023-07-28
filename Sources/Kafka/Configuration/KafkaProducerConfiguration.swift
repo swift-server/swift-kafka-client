@@ -26,7 +26,7 @@ public struct KafkaProducerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// Maximum timeout for flushing outstanding produce requests when the ``KakfaProducer`` is shutting down.
+    /// Maximum timeout for flushing outstanding produce requests when the ``KafkaProducer`` is shutting down.
     /// Default: `10000`
     public var flushTimeoutMilliseconds: Int = 10000 {
         didSet {
