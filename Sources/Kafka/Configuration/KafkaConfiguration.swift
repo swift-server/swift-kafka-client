@@ -34,11 +34,11 @@ public enum KafkaConfiguration {
         /// Maximum Kafka protocol request message size. Due to differing framing overhead between protocol versions, the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests.
         /// The broker will enforce the topic's max.message.bytes limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
         /// Default: `1_000_000`
-        public var maxBytes: Int = 1_000_000
+        public var maximumBytes: Int = 1_000_000
 
         /// Maximum size for a message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs.
         /// Default: `65535`
-        public var copyMaxBytes: Int = 65535
+        public var maximumBytesToCopy: Int = 65535
 
         public init() {}
     }
@@ -54,7 +54,7 @@ public enum KafkaConfiguration {
             }
 
             /// (Lowest granularity is milliseconds)
-            public static func value(_ value: Duration) -> RefreshInterval {
+            public static func interval(_ value: Duration) -> RefreshInterval {
                 precondition(
                     value.canBeRepresentedAsMilliseconds,
                     "Lowest granularity is milliseconds"
@@ -68,8 +68,8 @@ public enum KafkaConfiguration {
 
         /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions or partition leader changes.
         /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
-        /// Default: `.value(.milliseconds(300_000))`
-        public var refreshInterval: RefreshInterval = .value(.milliseconds(300_000))
+        /// Default: `.interval(.milliseconds(300_000))`
+        public var refreshInterval: RefreshInterval = .interval(.milliseconds(300_000))
 
         /// When a topic loses its leader a new metadata request will be enqueued with this initial interval, exponentially increasing until the topic metadata has been refreshed. This is used to recover quickly from transitioning leader brokers.
         /// Default: `.milliseconds(250)`
@@ -84,14 +84,14 @@ public enum KafkaConfiguration {
 
         /// Sparse metadata requests (consumes less network bandwidth).
         /// Default: `true`
-        public var isRefreshSparseEnabled: Bool = true
+        public var isSparseRefreshingEnabled: Bool = true
 
         /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic will seem to be non-existent and the client will mark the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as non-existent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, e.g., on `send()`.
         /// Default: `.milliseconds(30000)`
-        public var propagationMax: Duration = .milliseconds(30000) {
+        public var maximumPropagation: Duration = .milliseconds(30000) {
             didSet {
                 precondition(
-                    self.propagationMax.canBeRepresentedAsMilliseconds,
+                    self.maximumPropagation.canBeRepresentedAsMilliseconds,
                     "Lowest granularity is milliseconds"
                 )
             }
@@ -146,27 +146,27 @@ public enum KafkaConfiguration {
         public var isNagleDisabled: Bool = false
 
         /// Disconnect from the broker when this number of send failures (e.g., timed-out requests) is reached.
-        public struct MaxFails: Sendable, Hashable {
+        public struct MaximumFailures: Sendable, Hashable {
             internal let rawValue: Int
 
             private init(rawValue: Int) {
                 self.rawValue = rawValue
             }
 
-            public static func value(_ value: Int) -> MaxFails {
+            public static func failures(_ value: Int) -> MaximumFailures {
                 .init(rawValue: value)
             }
 
             /// Disable disconnecting from the broker on a number of send failures.
-            public static let disable: MaxFails = .init(rawValue: 0)
+            public static let disable: MaximumFailures = .init(rawValue: 0)
         }
 
         /// Disconnect from the broker when this number of send failures (e.g., timed-out requests) is reached.
         ///
         /// - Warning: It is highly recommended to leave this setting at its default value of 1 to avoid the client and broker becoming desynchronized in case of request timeouts.
         /// - Note: The connection is automatically re-established.
-        /// Default: `.value(1)`
-        public var maxFails: MaxFails = .value(1)
+        /// Default: `.failures(1)`
+        public var maximumFailures: MaximumFailures = .failures(1)
 
         /// Maximum time allowed for broker connection setup (TCP connection setup as well SSL and SASL handshake).
         /// If the connection to the broker is not fully functional after this the connection will be closed and retried.
@@ -181,10 +181,10 @@ public enum KafkaConfiguration {
         /// How long to cache the broker address resolving results.
         /// (Lowest granularity is milliseconds)
         /// Default: `.milliseconds(1000)`
-        public var addressTTL: Duration = .milliseconds(1000) {
+        public var addressTimeToLive: Duration = .milliseconds(1000) {
             didSet {
                 precondition(
-                    self.addressTTL.canBeRepresentedAsMilliseconds,
+                    self.addressTimeToLive.canBeRepresentedAsMilliseconds,
                     "Lowest granularity is milliseconds"
                 )
             }
@@ -208,7 +208,7 @@ public enum KafkaConfiguration {
             }
 
             /// (Lowest granularity is milliseconds)
-            public static func value(_ value: Duration) -> Backoff {
+            public static func backoff(_ value: Duration) -> Backoff {
                 precondition(
                     value.canBeRepresentedAsMilliseconds,
                     "Lowest granularity is milliseconds"
@@ -222,15 +222,15 @@ public enum KafkaConfiguration {
 
         /// The initial time to wait before reconnecting to a broker after the connection has been closed.
         /// The time is increased exponentially until reconnect.backoff.max.ms is reached. -25% to +50% jitter is applied to each reconnect backoff.
-        /// Default: `.value(.milliseconds(100))`
-        public var backoff: Backoff = .value(.milliseconds(100))
+        /// Default: `.backoff(.milliseconds(100))`
+        public var backoff: Backoff = .backoff(.milliseconds(100))
 
         /// The maximum time to wait before reconnecting to a broker after the connection has been closed.
         /// Default: `.milliseconds(10000)`
-        public var backoffMax: Duration = .milliseconds(10000) {
+        public var maximumBackoff: Duration = .milliseconds(10000) {
             didSet {
                 precondition(
-                    self.backoffMax.canBeRepresentedAsMilliseconds,
+                    self.maximumBackoff.canBeRepresentedAsMilliseconds,
                     "Lowest granularity is milliseconds"
                 )
             }

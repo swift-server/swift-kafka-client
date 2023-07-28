@@ -36,21 +36,21 @@ final class KafkaProducerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
-    var bootstrapServer: KafkaConfiguration.BrokerAddress!
+    var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
     var config: KafkaProducerConfiguration!
 
     override func setUpWithError() throws {
-        self.bootstrapServer = KafkaConfiguration.BrokerAddress()
-        self.bootstrapServer.host = self.kafkaHost
-        self.bootstrapServer.port = self.kafkaPort
+        self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress()
+        self.bootstrapBrokerAddress.host = self.kafkaHost
+        self.bootstrapBrokerAddress.port = self.kafkaPort
 
         self.config = KafkaProducerConfiguration()
-        self.config.bootstrapServers = [self.bootstrapServer]
+        self.config.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         self.config.broker.addressFamily = .v4
     }
 
     override func tearDownWithError() throws {
-        self.bootstrapServer = nil
+        self.bootstrapBrokerAddress = nil
         self.config = nil
     }
 
@@ -246,7 +246,7 @@ final class KafkaProducerTests: XCTestCase {
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
         var config = KafkaProducerConfiguration()
-        config.bootstrapServers = []
+        config.bootstrapBrokerAddresses = []
 
         let producer = try KafkaProducer(configuration: config, logger: mockLogger)
 
@@ -319,7 +319,7 @@ final class KafkaProducerTests: XCTestCase {
             // has been terminated
             XCTAssertThrowsError(try producer.send(message2)) { error in
                 let error = error as! KafkaError
-                XCTAssertEqual(KafkaError.ErrorCode.connectionClosed, error.code)
+                XCTAssertEqual(KafkaError.ErrorCode.shutdown, error.code)
             }
 
             // Shutdown the serviceGroup

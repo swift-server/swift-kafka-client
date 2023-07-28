@@ -15,28 +15,28 @@
 /// Used to configure new topics created by the ``KafkaProducer``.
 public struct KafkaTopicConfiguration {
     /// This number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
-    public struct NumberAcknowledgments: Sendable, Hashable {
+    public struct RequiredAcknowledgments: Sendable, Hashable {
         internal let rawValue: Int
 
         private init(rawValue: Int) {
             self.rawValue = rawValue
         }
 
-        public static func value(_ value: Int) -> NumberAcknowledgments {
+        public static func atLeast(_ value: Int) -> RequiredAcknowledgments {
             return .init(rawValue: value)
         }
 
         /// Broker will block until the message is committed by all in-sync replicas (ISRs).
-        public static let all: NumberAcknowledgments = .init(rawValue: -1)
+        public static let all: RequiredAcknowledgments = .init(rawValue: -1)
 
         /// Broker does not send any response/ack to the client.
-        public static let noAcknowledgments: NumberAcknowledgments = .init(rawValue: 0)
+        public static let noAcknowledgments: RequiredAcknowledgments = .init(rawValue: 0)
     }
 
     /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
     /// If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
     /// Default: `.all`
-    public var acks: NumberAcknowledgments = .all
+    public var requiredAcknowledgements: RequiredAcknowledgments = .all
 
     /// The ack timeout of the producer request. This value is only enforced by the broker and relies on request.required.acks being != 0.
     /// (Lowest granularity is milliseconds)
@@ -59,7 +59,7 @@ public struct KafkaTopicConfiguration {
         }
 
         /// (Lowest granularity is milliseconds)
-        public static func value(_ value: Duration) -> MessageTimeout {
+        public static func timeout(_ value: Duration) -> MessageTimeout {
             precondition(
                 value.canBeRepresentedAsMilliseconds,
                 "Lowest granularity is milliseconds"
@@ -75,8 +75,8 @@ public struct KafkaTopicConfiguration {
     /// This is the maximum time librdkafka may use to deliver a message (including retries).
     /// Delivery error occurs when either the retry count or the message timeout is exceeded. The message timeout is automatically adjusted to transaction.timeout.ms if transactional.id is configured.
     /// (Lowest granularity is milliseconds)
-    /// Default: `.value(.milliseconds(300_000))`
-    public var messageTimeout: MessageTimeout = .value(.milliseconds(300_000))
+    /// Default: `.timeout(.milliseconds(300_000))`
+    public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
 
     /// Partitioner. See ``KafkaSharedConfiguration/Partitioner`` for more information.
     /// Default: `.consistentRandom`
@@ -102,7 +102,7 @@ extension KafkaTopicConfiguration {
     internal var dictionary: [String: String] {
         var resultDict: [String: String] = [:]
 
-        resultDict["acks"] = String(self.acks.rawValue)
+        resultDict["acks"] = String(self.requiredAcknowledgements.rawValue)
         resultDict["request.timeout.ms"] = String(self.requestTimeout.inMilliseconds)
         resultDict["message.timeout.ms"] = String(self.messageTimeout.rawValue)
         resultDict["partitioner"] = self.partitioner.description
@@ -147,7 +147,7 @@ extension KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
-            public static func value(_ value: Int) -> Level {
+            public static func level(_ value: Int) -> Level {
                 return .init(rawValue: value)
             }
 

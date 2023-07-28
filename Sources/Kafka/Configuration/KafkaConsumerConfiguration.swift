@@ -53,10 +53,10 @@ public struct KafkaConsumerConfiguration {
     ///
     /// (Lowest granularity is milliseconds)
     /// Default: `.milliseconds(300_000)`
-    public var maxPollInverval: Duration = .milliseconds(300_000) {
+    public var maximumPollInterval: Duration = .milliseconds(300_000) {
         didSet {
             precondition(
-                maxPollInverval.canBeRepresentedAsMilliseconds,
+                maximumPollInterval.canBeRepresentedAsMilliseconds,
                 "Lowest granularity is milliseconds"
             )
         }
@@ -73,17 +73,17 @@ public struct KafkaConsumerConfiguration {
     /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
     /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
     /// Default: `false`
-    public var isAllowAutoCreateTopicsEnabled: Bool = false
+    public var isAutoCreateTopicsEnabled: Bool = false
 
     // MARK: - Common Client Config Properties
 
     /// Client identifier.
     /// Default: `"rdkafka"`
-    public var clientID: String = "rdkafka"
+    public var identifier: String = "rdkafka"
 
     /// Initial list of brokers.
     /// Default: `[]`
-    public var bootstrapServers: [KafkaConfiguration.BrokerAddress] = []
+    public var bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress] = []
 
     /// Message options.
     public var message: KafkaConfiguration.MessageOptions = .init()
@@ -91,21 +91,21 @@ public struct KafkaConsumerConfiguration {
     /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
     /// This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
     /// Default: `100_000_000`
-    public var receiveMessageMaxBytes: Int = 100_000_000
+    public var maximumReceiveMessageBytes: Int = 100_000_000
 
     /// Maximum number of in-flight requests per broker connection.
     /// This is a generic property applied to all broker communication, however, it is primarily relevant to produce requests.
     /// In particular, note that other mechanisms limit the number of outstanding consumer fetch requests per broker to one.
     /// Default: `1_000_000`
-    public var maxInFlightRequestsPerConnection: Int = 1_000_000
+    public var maximumInFlightRequestsPerConnection: Int = 1_000_000
 
     /// Metadata cache max age.
     /// (Lowest granularity is milliseconds)
     /// Default: `.milliseconds(900_000)`
-    public var metadataMaxAge: Duration = .milliseconds(900_000) {
+    public var maximumMetadataAge: Duration = .milliseconds(900_000) {
         didSet {
             precondition(
-                metadataMaxAge.canBeRepresentedAsMilliseconds,
+                maximumMetadataAge.canBeRepresentedAsMilliseconds,
                 "Lowest granularity is milliseconds"
             )
         }
@@ -159,22 +159,22 @@ extension KafkaConsumerConfiguration {
 
         resultDict["session.timeout.ms"] = String(session.timeout.inMilliseconds)
         resultDict["heartbeat.interval.ms"] = String(heartbeatInterval.inMilliseconds)
-        resultDict["max.poll.interval.ms"] = String(maxPollInverval.inMilliseconds)
+        resultDict["max.poll.interval.ms"] = String(maximumPollInterval.inMilliseconds)
         resultDict["enable.auto.commit"] = String(isAutoCommitEnabled)
         resultDict["auto.offset.reset"] = autoOffsetReset.description
-        resultDict["allow.auto.create.topics"] = String(isAllowAutoCreateTopicsEnabled)
+        resultDict["allow.auto.create.topics"] = String(isAutoCreateTopicsEnabled)
 
-        resultDict["client.id"] = clientID
-        resultDict["bootstrap.servers"] = bootstrapServers.map(\.description).joined(separator: ",")
-        resultDict["message.max.bytes"] = String(message.maxBytes)
-        resultDict["message.copy.max.bytes"] = String(message.copyMaxBytes)
-        resultDict["receive.message.max.bytes"] = String(receiveMessageMaxBytes)
-        resultDict["max.in.flight.requests.per.connection"] = String(maxInFlightRequestsPerConnection)
-        resultDict["metadata.max.age.ms"] = String(metadataMaxAge.inMilliseconds)
+        resultDict["client.id"] = identifier
+        resultDict["bootstrap.servers"] = bootstrapBrokerAddresses.map(\.description).joined(separator: ",")
+        resultDict["message.max.bytes"] = String(message.maximumBytes)
+        resultDict["message.copy.max.bytes"] = String(message.maximumBytesToCopy)
+        resultDict["receive.message.max.bytes"] = String(maximumReceiveMessageBytes)
+        resultDict["max.in.flight.requests.per.connection"] = String(maximumInFlightRequestsPerConnection)
+        resultDict["metadata.max.age.ms"] = String(maximumMetadataAge.inMilliseconds)
         resultDict["topic.metadata.refresh.interval.ms"] = String(topicMetadata.refreshInterval.rawValue)
         resultDict["topic.metadata.refresh.fast.interval.ms"] = String(topicMetadata.refreshFastInterval.inMilliseconds)
-        resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.isRefreshSparseEnabled)
-        resultDict["topic.metadata.propagation.max.ms"] = String(topicMetadata.propagationMax.inMilliseconds)
+        resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.isSparseRefreshingEnabled)
+        resultDict["topic.metadata.propagation.max.ms"] = String(topicMetadata.maximumPropagation.inMilliseconds)
         resultDict["topic.blacklist"] = topicDenylist.joined(separator: ",")
         if !debugOptions.isEmpty {
             resultDict["debug"] = debugOptions.map(\.description).joined(separator: ",")
@@ -184,12 +184,12 @@ extension KafkaConsumerConfiguration {
         resultDict["socket.receive.buffer.bytes"] = String(socket.receiveBufferBytes.rawValue)
         resultDict["socket.keepalive.enable"] = String(socket.isKeepaliveEnabled)
         resultDict["socket.nagle.disable"] = String(socket.isNagleDisabled)
-        resultDict["socket.max.fails"] = String(socket.maxFails.rawValue)
+        resultDict["socket.max.fails"] = String(socket.maximumFailures.rawValue)
         resultDict["socket.connection.setup.timeout.ms"] = String(socket.connectionSetupTimeout.inMilliseconds)
-        resultDict["broker.address.ttl"] = String(broker.addressTTL.inMilliseconds)
+        resultDict["broker.address.ttl"] = String(broker.addressTimeToLive.inMilliseconds)
         resultDict["broker.address.family"] = broker.addressFamily.description
         resultDict["reconnect.backoff.ms"] = String(reconnect.backoff.rawValue)
-        resultDict["reconnect.backoff.max.ms"] = String(reconnect.backoffMax.inMilliseconds)
+        resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
 
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(securityProtocol.dictionary) { _, _ in

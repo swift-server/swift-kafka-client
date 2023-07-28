@@ -44,7 +44,7 @@ final class KafkaConsumerTests: XCTestCase {
         var config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"])
         )
-        config.bootstrapServers = []
+        config.bootstrapBrokerAddresses = []
         config.securityProtocol = .plaintext
         config.debugOptions = [.all]
 

@@ -36,23 +36,23 @@ final class KafkaTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
-    var bootstrapServer: KafkaConfiguration.BrokerAddress!
+    var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
     var producerConfig: KafkaProducerConfiguration!
     var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
-        self.bootstrapServer = KafkaConfiguration.BrokerAddress()
-        self.bootstrapServer.host = self.kafkaHost
-        self.bootstrapServer.port = self.kafkaPort
+        self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress()
+        self.bootstrapBrokerAddress.host = self.kafkaHost
+        self.bootstrapBrokerAddress.port = self.kafkaPort
 
         self.producerConfig = KafkaProducerConfiguration()
-        self.producerConfig.bootstrapServers = [self.bootstrapServer]
+        self.producerConfig.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         self.producerConfig.broker.addressFamily = .v4
 
         var basicConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "no-group", topics: [])
         )
-        basicConfig.bootstrapServers = [self.bootstrapServer]
+        basicConfig.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         basicConfig.broker.addressFamily = .v4
 
         // TODO: ok to block here? How to make setup async?
@@ -69,7 +69,7 @@ final class KafkaTests: XCTestCase {
         var basicConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "no-group", topics: [])
         )
-        basicConfig.bootstrapServers = [self.bootstrapServer]
+        basicConfig.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         basicConfig.broker.addressFamily = .v4
 
         // TODO: ok to block here? Problem: Tests may finish before topic is deleted
@@ -81,7 +81,7 @@ final class KafkaTests: XCTestCase {
         )
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
 
-        self.bootstrapServer = nil
+        self.bootstrapBrokerAddress = nil
         self.producerConfig = nil
         self.uniqueTestTopic = nil
     }
@@ -94,7 +94,7 @@ final class KafkaTests: XCTestCase {
             consumptionStrategy: .group(id: "subscription-test-group-id", topics: [self.uniqueTestTopic])
         )
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
-        consumerConfig.bootstrapServers = [self.bootstrapServer]
+        consumerConfig.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -166,7 +166,7 @@ final class KafkaTests: XCTestCase {
             )
         )
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
-        consumerConfig.bootstrapServers = [self.bootstrapServer]
+        consumerConfig.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -235,7 +235,7 @@ final class KafkaTests: XCTestCase {
         )
         consumerConfig.isAutoCommitEnabled = false
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
-        consumerConfig.bootstrapServers = [self.bootstrapServer]
+        consumerConfig.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -307,7 +307,7 @@ final class KafkaTests: XCTestCase {
             )
         )
         consumer1Config.autoOffsetReset = .beginning // Read topic from beginning
-        consumer1Config.bootstrapServers = [self.bootstrapServer]
+        consumer1Config.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         consumer1Config.broker.addressFamily = .v4
 
         let consumer1 = try KafkaConsumer(
@@ -384,7 +384,7 @@ final class KafkaTests: XCTestCase {
             )
         )
         consumer2Config.autoOffsetReset = .largest
-        consumer2Config.bootstrapServers = [self.bootstrapServer]
+        consumer2Config.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
         consumer2Config.broker.addressFamily = .v4
 
         let consumer2 = try KafkaConsumer(

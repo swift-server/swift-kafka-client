@@ -59,7 +59,7 @@ public struct KafkaError: Error, CustomStringConvertible {
         let errorMessage = String(cString: rd_kafka_err2str(error))
         return KafkaError(
             backing: .init(
-                code: .rdKafkaError, reason: errorMessage, file: file, line: line
+                code: .underlying, reason: errorMessage, file: file, line: line
             )
         )
     }
@@ -89,7 +89,7 @@ public struct KafkaError: Error, CustomStringConvertible {
     ) -> KafkaError {
         return KafkaError(
             backing: .init(
-                code: .client, reason: reason, file: file, line: line
+                code: .connectionFailed, reason: reason, file: file, line: line
             )
         )
     }
@@ -99,7 +99,7 @@ public struct KafkaError: Error, CustomStringConvertible {
     ) -> KafkaError {
         return KafkaError(
             backing: .init(
-                code: .connectionClosed, reason: reason, file: file, line: line
+                code: .shutdown, reason: reason, file: file, line: line
             )
         )
     }
@@ -109,7 +109,7 @@ public struct KafkaError: Error, CustomStringConvertible {
     ) -> KafkaError {
         return KafkaError(
             backing: .init(
-                code: .messageConsumption, reason: reason, file: file, line: line
+                code: .messageConsumptionFailed, reason: reason, file: file, line: line
             )
         )
     }
@@ -119,7 +119,7 @@ public struct KafkaError: Error, CustomStringConvertible {
     ) -> KafkaError {
         return KafkaError(
             backing: .init(
-                code: .topicCreation, reason: reason, file: file, line: line
+                code: .topicCreationFailed, reason: reason, file: file, line: line
             )
         )
     }
@@ -129,7 +129,7 @@ public struct KafkaError: Error, CustomStringConvertible {
     ) -> KafkaError {
         return KafkaError(
             backing: .init(
-                code: .topicDeletion, reason: reason, file: file, line: line
+                code: .topicDeletionFailed, reason: reason, file: file, line: line
             )
         )
     }
@@ -159,22 +159,22 @@ extension KafkaError {
             self.backingCode = backingCode
         }
 
-        /// Errors caused by the underlying `librdkafka` library.
-        public static let rdKafkaError = ErrorCode(.rdKafkaError)
+        /// Errors caused in the underlying transport.
+        public static let underlying = ErrorCode(.rdKafkaError)
         /// There is an error in the Kafka client configuration.
         public static let config = ErrorCode(.config)
         /// There is an error in the Kafka topic configuration.
         public static let topicConfig = ErrorCode(.topicConfig)
-        /// Something or somebody tried to access a client that ended its connection to Kafka.
-        public static let connectionClosed = ErrorCode(.connectionClosed)
+        /// The Kafka connection is already shutdown.
+        public static let shutdown = ErrorCode(.connectionClosed)
         /// Establishing a connection to Kafka failed.
-        public static let client = ErrorCode(.client)
+        public static let connectionFailed = ErrorCode(.client)
         /// Consuming a message failed.
-        public static let messageConsumption = ErrorCode(.messageConsumption)
+        public static let messageConsumptionFailed = ErrorCode(.messageConsumption)
         /// Creating a topic failed.
-        public static let topicCreation = ErrorCode(.topicCreation)
+        public static let topicCreationFailed = ErrorCode(.topicCreation)
         /// Deleting a topic failed.
-        public static let topicDeletion = ErrorCode(.topicDeletion)
+        public static let topicDeletionFailed = ErrorCode(.topicDeletion)
 
         public var description: String {
             return String(describing: self.backingCode)
