@@ -78,40 +78,6 @@ public struct KafkaTopicConfiguration {
     /// Default: `.timeout(.milliseconds(300_000))`
     public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
 
-    /// Partitioner. See ``KafkaConfiguration/Partitioner`` for more information.
-    /// Default: `.consistentRandom`
-    public var partitioner: KafkaConfiguration.Partitioner = .consistentRandom
-
-    /// Compression-related configuration options.
-    public var compression: KafkaConfiguration.Compression = .init()
-
-    public init() {}
-}
-
-// MARK: - KafkaTopicConfiguration + Sendable
-
-extension KafkaTopicConfiguration: Sendable {}
-
-// MARK: - KafkaTopicConfiguration + Dictionary
-
-extension KafkaTopicConfiguration {
-    internal var dictionary: [String: String] {
-        var resultDict: [String: String] = [:]
-
-        resultDict["acks"] = String(self.requiredAcknowledgements.rawValue)
-        resultDict["request.timeout.ms"] = String(self.requestTimeout.inMilliseconds)
-        resultDict["message.timeout.ms"] = String(self.messageTimeout.rawValue)
-        resultDict["partitioner"] = self.partitioner.description
-        resultDict["compression.codec"] = self.compression.codec.description
-        resultDict["compression.level"] = String(self.compression.codec.level.rawValue)
-
-        return resultDict
-    }
-}
-
-// MARK: - KafkaConfiguration + Additions
-
-extension KafkaConfiguration {
     /// Partitioner. Computes the partition that a message is stored in.
     public struct Partitioner: Sendable, Hashable, CustomStringConvertible {
         public let description: String
@@ -131,6 +97,10 @@ extension KafkaConfiguration {
         /// FNV-1a hash of key (NULL keys are randomly partitioned).
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
     }
+
+    /// Partitioner. See ``KafkaConfiguration/Partitioner`` for more information.
+    /// Default: `.consistentRandom`
+    public var partitioner: Partitioner = .consistentRandom
 
     /// Compression-related configuration options.
     public struct Compression: Sendable, Hashable {
@@ -246,5 +216,31 @@ extension KafkaConfiguration {
         /// Compression codec to use for compressing message sets.
         /// Default: `.inherit`
         public var codec: Codec = .inherit
+    }
+
+    /// Compression-related configuration options.
+    public var compression: Compression = .init()
+
+    public init() {}
+}
+
+// MARK: - KafkaTopicConfiguration + Sendable
+
+extension KafkaTopicConfiguration: Sendable {}
+
+// MARK: - KafkaTopicConfiguration + Dictionary
+
+extension KafkaTopicConfiguration {
+    internal var dictionary: [String: String] {
+        var resultDict: [String: String] = [:]
+
+        resultDict["acks"] = String(self.requiredAcknowledgements.rawValue)
+        resultDict["request.timeout.ms"] = String(self.requestTimeout.inMilliseconds)
+        resultDict["message.timeout.ms"] = String(self.messageTimeout.rawValue)
+        resultDict["partitioner"] = self.partitioner.description
+        resultDict["compression.codec"] = self.compression.codec.description
+        resultDict["compression.level"] = String(self.compression.codec.level.rawValue)
+
+        return resultDict
     }
 }

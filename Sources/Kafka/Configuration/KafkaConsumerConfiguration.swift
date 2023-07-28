@@ -23,14 +23,72 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
+    /// A struct representing the different Kafka message consumption strategies.
+    public struct ConsumptionStrategy: Sendable, Hashable {
+        enum _ConsumptionStrategy: Sendable, Hashable {
+            case partition(topic: String, partition: KafkaPartition, offset: KafkaOffset)
+            case group(groupID: String, topics: [String])
+        }
+
+        let _internal: _ConsumptionStrategy
+
+        private init(consumptionStrategy: _ConsumptionStrategy) {
+            self._internal = consumptionStrategy
+        }
+
+        /// A consumption strategy based on partition assignment.
+        /// The consumer reads from a specific partition of a topic at a given offset.
+        ///
+        /// - Parameters:
+        ///     - partition: The partition of the topic to consume from.
+        ///     - topic: The name of the Kafka topic.
+        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
+        public static func partition(
+            _ partition: KafkaPartition,
+            topic: String,
+            offset: KafkaOffset = .end
+        ) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
+        }
+
+        /// A consumption strategy based on consumer group membership.
+        /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
+        ///
+        /// - Parameters:
+        ///     - id: The ID of the consumer group to join.
+        ///     - topics: An array of topic names to consume from.
+        public static func group(id groupID: String, topics: [String]) -> ConsumptionStrategy {
+            return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
+        }
+    }
+
     /// The strategy used for consuming messages.
     /// See ``KafkaConfiguration/ConsumptionStrategy`` for more information.
-    public var consumptionStrategy: KafkaConfiguration.ConsumptionStrategy
+    public var consumptionStrategy: ConsumptionStrategy
 
     // MARK: - Consumer-specific Config Properties
 
     /// Client group session options.
-    public var session: KafkaConfiguration.SessionOptions = .init()
+    public struct SessionOptions: Sendable, Hashable {
+        /// Client group session and failure detection timeout.
+        /// The consumer sends periodic heartbeats (``KafkaConsumerConfiguration/heartbeatInterval``) to indicate its liveness to the broker.
+        /// If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance.
+        /// (Lowest granularity is milliseconds)
+        /// Default: `.milliseconds(45000)`
+        public var timeout: Duration = .milliseconds(45000) {
+            didSet {
+                precondition(
+                    timeout.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
+        }
+
+        public init() {}
+    }
+
+    /// Client group session options.
+    public var session: SessionOptions = .init()
 
     /// Group session keepalive heartbeat interval.
     /// (Lowest granularity is milliseconds)
@@ -65,9 +123,29 @@ public struct KafkaConsumerConfiguration {
     /// Default: `true`
     public var isAutoCommitEnabled: Bool = true
 
+    /// Available actions to take when there is no initial offset in offset store / offset is out of range.
+    public struct AutoOffsetReset: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        /// Automatically reset the offset to the smallest offset.
+        public static let smallest = AutoOffsetReset(description: "smallest")
+        /// Automatically reset the offset to the earliest offset.
+        public static let earliest = AutoOffsetReset(description: "earliest")
+        /// Automatically reset the offset to the beginning of a topic.
+        public static let beginning = AutoOffsetReset(description: "beginning")
+        /// Automatically reset the offset to the largest offset.
+        public static let largest = AutoOffsetReset(description: "largest")
+        /// Automatically reset the offset to the latest offset.
+        public static let latest = AutoOffsetReset(description: "latest")
+        /// Automatically reset the offset to the end offset.
+        public static let end = AutoOffsetReset(description: "end")
+        /// Trigger an error when there is no initial offset / offset is out of range.
+        public static let error = AutoOffsetReset(description: "error")
+    }
+
     /// Action to take when there is no initial offset in the offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
     /// Default: `.largest`
-    public var autoOffsetReset: KafkaConfiguration.AutoOffsetReset = .largest
+    public var autoOffsetReset: AutoOffsetReset = .largest
 
     /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
     /// The broker must also be configured with ``KafkaConsumerConfiguration/isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
@@ -133,7 +211,7 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
-    public init(consumptionStrategy: KafkaConfiguration.ConsumptionStrategy) {
+    public init(consumptionStrategy: ConsumptionStrategy) {
         self.consumptionStrategy = consumptionStrategy
     }
 }
@@ -201,85 +279,3 @@ extension KafkaConsumerConfiguration {
 // MARK: - KafkaConsumerConfiguration + Sendable
 
 extension KafkaConsumerConfiguration: Sendable {}
-
-// MARK: - KafkaConfiguration + Consumer Additions
-
-extension KafkaConfiguration {
-    /// Client group session options.
-    public struct SessionOptions: Sendable, Hashable {
-        /// Client group session and failure detection timeout.
-        /// The consumer sends periodic heartbeats (``KafkaConsumerConfiguration/heartbeatInterval``) to indicate its liveness to the broker.
-        /// If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance.
-        /// (Lowest granularity is milliseconds)
-        /// Default: `.milliseconds(45000)`
-        public var timeout: Duration = .milliseconds(45000) {
-            didSet {
-                precondition(
-                    timeout.canBeRepresentedAsMilliseconds,
-                    "Lowest granularity is milliseconds"
-                )
-            }
-        }
-
-        public init() {}
-    }
-
-    /// A struct representing the different Kafka message consumption strategies.
-    public struct ConsumptionStrategy: Sendable, Hashable {
-        enum _ConsumptionStrategy: Sendable, Hashable {
-            case partition(topic: String, partition: KafkaPartition, offset: KafkaOffset)
-            case group(groupID: String, topics: [String])
-        }
-
-        let _internal: _ConsumptionStrategy
-
-        private init(consumptionStrategy: _ConsumptionStrategy) {
-            self._internal = consumptionStrategy
-        }
-
-        /// A consumption strategy based on partition assignment.
-        /// The consumer reads from a specific partition of a topic at a given offset.
-        ///
-        /// - Parameters:
-        ///     - partition: The partition of the topic to consume from.
-        ///     - topic: The name of the Kafka topic.
-        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
-        public static func partition(
-            _ partition: KafkaPartition,
-            topic: String,
-            offset: KafkaOffset = .end
-        ) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
-        }
-
-        /// A consumption strategy based on consumer group membership.
-        /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
-        ///
-        /// - Parameters:
-        ///     - id: The ID of the consumer group to join.
-        ///     - topics: An array of topic names to consume from.
-        public static func group(id groupID: String, topics: [String]) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
-        }
-    }
-
-    /// Available actions to take when there is no initial offset in offset store / offset is out of range.
-    public struct AutoOffsetReset: Sendable, Hashable, CustomStringConvertible {
-        public let description: String
-
-        /// Automatically reset the offset to the smallest offset.
-        public static let smallest = AutoOffsetReset(description: "smallest")
-        /// Automatically reset the offset to the earliest offset.
-        public static let earliest = AutoOffsetReset(description: "earliest")
-        /// Automatically reset the offset to the beginning of a topic.
-        public static let beginning = AutoOffsetReset(description: "beginning")
-        /// Automatically reset the offset to the largest offset.
-        public static let largest = AutoOffsetReset(description: "largest")
-        /// Automatically reset the offset to the latest offset.
-        public static let latest = AutoOffsetReset(description: "latest")
-        /// Automatically reset the offset to the end offset.
-        public static let end = AutoOffsetReset(description: "end")
-        /// Trigger an error when there is no initial offset / offset is out of range.
-        public static let error = AutoOffsetReset(description: "error")
-    }
-}

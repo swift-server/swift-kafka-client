@@ -50,7 +50,50 @@ public struct KafkaProducerConfiguration {
     public var isIdempotenceEnabled: Bool = false
 
     /// Producer queue options.
-    public var queue: KafkaConfiguration.QueueOptions = .init()
+    public struct QueueConfiguration: Sendable, Hashable {
+        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
+        public struct MessageLimit: Sendable, Hashable {
+            internal let rawValue: Int
+
+            private init(rawValue: Int) {
+                self.rawValue = rawValue
+            }
+
+            public static func maximumLimit(_ value: Int) -> MessageLimit {
+                return .init(rawValue: value)
+            }
+
+            /// No limit for the maximum number of messages allowed on the producer queue.
+            public static let unlimited: MessageLimit = .init(rawValue: 0)
+        }
+
+        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
+        /// Default: `.maximumLimit(100_000)`
+        public var messageLimit: MessageLimit = .maximumLimit(100_000)
+
+        /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions.
+        /// This property has higher priority than ``KafkaConfiguration/QueueOptions/messageLimit``.
+        /// Default: `1_048_576 * 1024`
+        public var maximumMessageBytes: Int = 1_048_576 * 1024
+
+        /// How long wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers.
+        /// A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
+        /// (Lowest granularity is milliseconds)
+        /// Default: `.milliseconds(5)`
+        public var maximumMessageQueueTime: Duration = .milliseconds(5) {
+            didSet {
+                precondition(
+                    self.maximumMessageQueueTime.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
+        }
+
+        public init() {}
+    }
+
+    /// Producer queue options.
+    public var queue: QueueConfiguration = .init()
 
     /// How many times to retry sending a failing Message.
     ///
@@ -177,50 +220,3 @@ extension KafkaProducerConfiguration {
 // MARK: - KafkaProducerConfiguration + Sendable
 
 extension KafkaProducerConfiguration: Sendable {}
-
-// MARK: - KafkaConfiguration + Producer Additions
-
-extension KafkaConfiguration {
-    /// Producer queue options.
-    public struct QueueOptions: Sendable, Hashable {
-        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
-        public struct MessageLimit: Sendable, Hashable {
-            internal let rawValue: Int
-
-            private init(rawValue: Int) {
-                self.rawValue = rawValue
-            }
-
-            public static func maximumLimit(_ value: Int) -> MessageLimit {
-                return .init(rawValue: value)
-            }
-
-            /// No limit for the maximum number of messages allowed on the producer queue.
-            public static let unlimited: MessageLimit = .init(rawValue: 0)
-        }
-
-        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
-        /// Default: `.maximumLimit(100_000)`
-        public var messageLimit: MessageLimit = .maximumLimit(100_000)
-
-        /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions.
-        /// This property has higher priority than ``KafkaConfiguration/QueueOptions/messageLimit``.
-        /// Default: `1_048_576 * 1024`
-        public var maximumMessageBytes: Int = 1_048_576 * 1024
-
-        /// How long wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers.
-        /// A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
-        /// (Lowest granularity is milliseconds)
-        /// Default: `.milliseconds(5)`
-        public var maximumMessageQueueTime: Duration = .milliseconds(5) {
-            didSet {
-                precondition(
-                    self.maximumMessageQueueTime.canBeRepresentedAsMilliseconds,
-                    "Lowest granularity is milliseconds"
-                )
-            }
-        }
-
-        public init() {}
-    }
-}
