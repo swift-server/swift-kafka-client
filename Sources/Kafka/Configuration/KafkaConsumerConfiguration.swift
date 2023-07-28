@@ -47,7 +47,6 @@ public struct KafkaConsumerConfiguration {
     /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance to reassign the partitions to another consumer group member.
     ///
     /// - Warning: Offset commits may be not possible at this point.
-    /// - Note: It is recommended to set enable.auto.offset.store=false for long-time processing applications and then explicitly store offsets (using offsets_store()) after message processing, to make sure offsets are not auto-committed before processing has finished.
     ///
     /// The interval is checked two times per second. See KIP-62 for more information.
     ///
@@ -71,7 +70,7 @@ public struct KafkaConsumerConfiguration {
     public var autoOffsetReset: KafkaConfiguration.AutoOffsetReset = .largest
 
     /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
-    /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
+    /// The broker must also be configured with ``KafkaConsumerConfiguration/isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
     /// Default: `false`
     public var isAutoCreateTopicsEnabled: Bool = false
 
@@ -89,7 +88,6 @@ public struct KafkaConsumerConfiguration {
     public var message: KafkaConfiguration.MessageOptions = .init()
 
     /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
-    /// This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
     /// Default: `100_000_000`
     public var maximumReceiveMessageBytes: Int = 100_000_000
 
@@ -213,7 +211,9 @@ extension KafkaConsumerConfiguration: Sendable {}
 extension KafkaConfiguration {
     /// Client group session options.
     public struct SessionOptions: Sendable, Hashable {
-        /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also, see max.poll.interval.ms.
+        /// Client group session and failure detection timeout.
+        /// The consumer sends periodic heartbeats (``KafkaConsumerConfiguration/heartbeatInterval``) to indicate its liveness to the broker.
+        /// If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance.
         /// (Lowest granularity is milliseconds)
         /// Default: `.milliseconds(45000)`
         public var timeout: Duration = .milliseconds(45000) {

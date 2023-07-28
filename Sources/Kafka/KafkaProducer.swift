@@ -67,9 +67,8 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 // MARK: - KafkaProducer
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``triggerGracefulShutdown()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
-/// configuration object (only works if server has `auto.create.topics.enable` property set).
+/// configuration object (only works if server has ``KafkaProducerConfiguration/isAutoCreateTopicsEnabled`` property set to `true`).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
         KafkaProducerEvent,

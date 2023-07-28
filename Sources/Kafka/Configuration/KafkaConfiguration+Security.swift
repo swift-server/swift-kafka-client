@@ -247,7 +247,7 @@ extension KafkaConfiguration {
             /// Default: `"kafkaclient"`
             public var principal: String = "kafkaclient"
             /// Shell command to refresh or acquire the client's Kerberos ticket.
-            /// This command is executed on client creation and every sasl.kerberos.min.time.before.relogin (0=disable).
+            /// This command is executed on client creation and every ``KafkaConfiguration/SASLMechanism/KerberosConfiguration/minTimeBeforeRelogin``.
             /// %{config.prop.name} is replaced by corresponding config object value.
             /// Default: `kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"`.
             public var kinitCommand: String = """
@@ -255,7 +255,8 @@ extension KafkaConfiguration {
             kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"
             """
             /// Path to Kerberos keytab file.
-            /// This configuration property is only used as a variable in sasl.kerberos.kinit.cmd as  ... -t "%{sasl.kerberos.keytab}".
+            /// This configuration property is only used as a variable in ``KafkaConfiguration/SASLMechanism/KerberosConfiguration/kinitCommand``
+            /// as  ... -t "%{sasl.kerberos.keytab}".
             public var keytab: String
 
             /// Minimum time between key refresh attempts.

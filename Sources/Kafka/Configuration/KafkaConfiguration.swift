@@ -32,7 +32,7 @@ public enum KafkaConfiguration {
     /// Message options.
     public struct MessageOptions: Sendable, Hashable {
         /// Maximum Kafka protocol request message size. Due to differing framing overhead between protocol versions, the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests.
-        /// The broker will enforce the topic's max.message.bytes limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
+        /// The broker will enforce the topic's `max.message.bytes` limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
         /// Default: `1_000_000`
         public var maximumBytes: Int = 1_000_000
 
@@ -102,7 +102,8 @@ public enum KafkaConfiguration {
 
     /// Socket options.
     public struct SocketOptions: Sendable, Hashable {
-        /// Default timeout for network requests. Producer: ProduceRequests will use the lesser value of socket.timeout.ms and remaining message.timeout.ms for the first message in the batch. Consumer: FetchRequests will use fetch.wait.max.ms + socket.timeout.ms.
+        /// Default timeout for network requests. Producer: ProduceRequests will use the lesser value of ``KafkaConfiguration/SocketOptions/timeout``
+        /// and remaining ``KafkaTopicConfiguration/messageTimeout``for the first message in the batch.
         /// Default: `.milliseconds(60000)`
         public var timeout: Duration = .milliseconds(60000) {
             didSet {
@@ -221,7 +222,8 @@ public enum KafkaConfiguration {
         }
 
         /// The initial time to wait before reconnecting to a broker after the connection has been closed.
-        /// The time is increased exponentially until reconnect.backoff.max.ms is reached. -25% to +50% jitter is applied to each reconnect backoff.
+        /// The time is increased exponentially until ``KafkaConfiguration/ReconnectOptions/maximumBackoff``is reached.
+        /// -25% to +50% jitter is applied to each reconnect backoff.
         /// Default: `.backoff(.milliseconds(100))`
         public var backoff: Backoff = .backoff(.milliseconds(100))
 

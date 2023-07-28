@@ -34,11 +34,11 @@ public struct KafkaTopicConfiguration {
     }
 
     /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
-    /// If there are less than min.insync.replicas (broker configuration) in the ISR set the produce request will fail.
+    /// If there are less than `min.insync.replicas` (broker configuration) in the ISR set the produce request will fail.
     /// Default: `.all`
     public var requiredAcknowledgements: RequiredAcknowledgments = .all
 
-    /// The ack timeout of the producer request. This value is only enforced by the broker and relies on request.required.acks being != 0.
+    /// The ack timeout of the producer request. This value is only enforced by the broker and relies on ``requiredAcknowledgements`` being != 0.
     /// (Lowest granularity is milliseconds)
     /// Default: `.milliseconds(30000)`
     public var requestTimeout: Duration = .milliseconds(30000) {
@@ -73,7 +73,7 @@ public struct KafkaTopicConfiguration {
     /// Local message timeout.
     /// This value is only enforced locally and limits the time a produced message waits for successful delivery.
     /// This is the maximum time librdkafka may use to deliver a message (including retries).
-    /// Delivery error occurs when either the retry count or the message timeout is exceeded. The message timeout is automatically adjusted to transaction.timeout.ms if transactional.id is configured.
+    /// Delivery error occurs when either the retry count or the message timeout is exceeded.
     /// (Lowest granularity is milliseconds)
     /// Default: `.timeout(.milliseconds(300_000))`
     public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
@@ -138,7 +138,7 @@ extension KafkaConfiguration {
 
     /// Compression-related configuration options.
     public struct Compression: Sendable, Hashable {
-        /// Compression level parameter for algorithm selected by configuration property compression.codec.
+        /// Compression level parameter for algorithm selected by configuration property ``codec-swift.property``.
         /// Higher values will result in better compression at the cost of more CPU usage.
         public struct Level: Sendable, Hashable {
             internal let rawValue: Int
@@ -243,7 +243,7 @@ extension KafkaConfiguration {
                 return Codec(_internal: .zstd(compressionLevel: compressionLevel))
             }
 
-            /// Inherit global compression.codec configuration.
+            /// Inherit global `compression.codec` configuration.
             public static let inherit = Codec(_internal: .inherit)
         }
 

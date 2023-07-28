@@ -355,7 +355,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// This method is only used for manual offset management.
     ///
-    /// - Warning: This method fails if the `enable.auto.commit` configuration property is set to `true`.
+    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true`.
     ///
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.
@@ -367,7 +367,7 @@ public final class KafkaConsumer: Sendable, Service {
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
         case .commitSync(let client):
             guard self.config.isAutoCommitEnabled == false else {
-                throw KafkaError.config(reason: "Committing manually only works if enable.auto.commit is set to false")
+                throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
 
             try await client.commitSync(message)

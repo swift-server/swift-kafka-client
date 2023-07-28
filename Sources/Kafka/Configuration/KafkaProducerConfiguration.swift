@@ -39,7 +39,13 @@ public struct KafkaProducerConfiguration {
 
     // MARK: - Producer-specific Config Properties
 
-    /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), messageSendMaxRetries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantiation will fail if the user-supplied configuration is incompatible.
+    /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order.
+    /// The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled:
+    /// ``KafkaProducerConfiguration/maximumInFlightRequestsPerConnection`` = `5` (must be less than or equal to 5),
+    /// ``KafkaProducerConfiguration/maximumMessageSendRetries`` = `UInt32.max` (must be greater than 0),
+    /// ``KafkaTopicConfiguration/requiredAcknowledgements`` = ``KafkaTopicConfiguration/RequiredAcknowledgments/all``,
+    /// queuing strategy = FIFO.
+    /// Producer instantiation will fail if the user-supplied configuration is incompatible.
     /// Default: `false`
     public var isIdempotenceEnabled: Bool = false
 
@@ -48,12 +54,12 @@ public struct KafkaProducerConfiguration {
 
     /// How many times to retry sending a failing Message.
     ///
-    /// - Note: retrying may cause reordering unless enable.idempotence is set to true.
+    /// - Note: retrying may cause reordering unless ``KafkaProducerConfiguration/isIdempotenceEnabled`` is set to `true`.
     /// Default: `2_147_483_647`
     public var maximumMessageSendRetries: Int = 2_147_483_647
 
     /// Allow automatic topic creation on the broker when producing to non-existent topics.
-    /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
+    /// The broker must also be configured with ``isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
     /// Default: `true`
     public var isAutoCreateTopicsEnabled: Bool = true
 
@@ -71,7 +77,6 @@ public struct KafkaProducerConfiguration {
     public var message: KafkaConfiguration.MessageOptions = .init()
 
     /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
-    /// This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
     /// Default: `100_000_000`
     public var maximumReceiveMessageBytes: Int = 100_000_000
 
@@ -202,7 +207,8 @@ extension KafkaConfiguration {
         /// Default: `.maximumLimit(100_000)`
         public var messageLimit: MessageLimit = .maximumLimit(100_000)
 
-        /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions. This property has higher priority than queue.buffering.max.messages.
+        /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions.
+        /// This property has higher priority than ``KafkaConfiguration/QueueOptions/messageLimit``.
         /// Default: `1_048_576 * 1024`
         public var maximumMessageBytes: Int = 1_048_576 * 1024
 
