@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import BlockingCallWrapper
+import Dispatch
 import Dispatch
 import Logging
 
@@ -36,6 +36,12 @@ final class RDKafkaClient: Sendable {
 
     /// `librdkafka`'s main `rd_kafka_queue_t`.
     private let mainQueue: OpaquePointer
+    
+    /// Queue for blocking calls outside of cooperative thread pool
+    private var queue: DispatchQueue {
+        // global concurrent queue
+        .global(qos: .default)
+    }
 
     // Use factory method to initialize
     private init(
@@ -459,7 +465,11 @@ final class RDKafkaClient: Sendable {
     }
     
     func initTransactions(timeout: Duration) async throws {
-        let result = await forBlockingFunc {
+        rd_kafka_conf_set_dr_msg_cb(self.kafkaHandle, {_,_,_ in
+            print("test")
+        })
+        
+        let result = await performBlockingCall(queue: queue) {
             rd_kafka_init_transactions(self.kafkaHandle, timeout.totalMilliseconds)
         }
         
@@ -491,7 +501,7 @@ final class RDKafkaClient: Sendable {
                 
                 // TODO: actually it should be withing some timeout (like transaction timeout or session timeout)
                 for idx in 0..<attempts {
-                    let error = await forBlockingFunc {
+                    let error = await performBlockingCall(queue: queue) {
                         rd_kafka_send_offsets_to_transaction(self.kafkaHandle, topicPartitionList,
                                                              consumerMetadata, timeout.totalMillisecondsOrMinusOne)
                     }
@@ -520,13 +530,13 @@ final class RDKafkaClient: Sendable {
                     let isFatal = (rd_kafka_error_is_fatal(error) == 1) // fatal when Producer/Consumer must be restarted
                     throw KafkaError.rdKafkaError(wrapping: rd_kafka_error_code(error), isFatal: isFatal)
                 }
+                throw KafkaError.transactionOutOfAttempts(numOfAttempts: attempts)
             }
-            throw KafkaError.transactionOutOfAttempts(numOfAttempts: attempts)
         }
     
     func abortTransaction(attempts: UInt64, timeout: Duration) async throws {
         for _ in 0..<attempts {
-            let error = await forBlockingFunc {
+            let error = await performBlockingCall(queue: queue) {
                 rd_kafka_abort_transaction(self.kafkaHandle, timeout.totalMillisecondsOrMinusOne)
             }
             /* check if transaction abort is completed successfully  */
@@ -547,7 +557,7 @@ final class RDKafkaClient: Sendable {
     
     func commitTransaction(attempts: UInt64, timeout: Duration) async throws {
         for idx in 0..<attempts {
-            let error = await forBlockingFunc {
+            let error = await performBlockingCall(queue: queue) {
                 rd_kafka_commit_transaction(self.kafkaHandle, timeout.totalMillisecondsOrMinusOne)
             }
             /* check if transaction is completed successfully  */
@@ -580,11 +590,11 @@ final class RDKafkaClient: Sendable {
 
 extension Duration {
     // Internal usage only: librdkafka accepts Int32 as timeouts
-    var totalMilliseconds: Int32 {
+    internal var totalMilliseconds: Int32 {
         return Int32(self.components.seconds * 1000 + self.components.attoseconds / 1_000_000_000_000_000)
     }
     
-    var totalMillisecondsOrMinusOne: Int32 {
+    internal var totalMillisecondsOrMinusOne: Int32 {
         return max(totalMilliseconds, -1)
     }
     

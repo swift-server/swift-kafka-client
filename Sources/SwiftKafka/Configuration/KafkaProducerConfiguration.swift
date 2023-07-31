@@ -36,8 +36,6 @@ public struct KafkaProducerConfiguration {
     /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), retries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantation will fail if user-supplied configuration is incompatible.
     /// Default: `false`
     public var enableIdempotence: Bool = false
-    
-    public var transactionalId: String?
 
     /// Producer queue options.
     public var queue: KafkaConfiguration.QueueOptions = .init()
@@ -99,6 +97,8 @@ public struct KafkaProducerConfiguration {
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
+    
+    internal var transactionalId: String?
 
     public init() {}
 }
@@ -112,6 +112,9 @@ extension KafkaProducerConfiguration {
         resultDict["enable.idempotence"] = String(self.enableIdempotence)
         if let transactionalId {
             resultDict["transactional.id"] = transactionalId
+            resultDict["transaction.timeout.ms"] = "60000"
+            resultDict["message.timeout.ms"] = "60000"
+            
         }
         resultDict["queue.buffering.max.messages"] = String(self.queue.bufferingMaxMessages)
         resultDict["queue.buffering.max.kbytes"] = String(self.queue.bufferingMaxKBytes)
@@ -191,3 +194,38 @@ extension KafkaConfiguration {
         }
     }
 }
+
+// FIXME: should we really duplicate `KafkaProducerConfiguration`
+// FIXME: after public api updated?
+public struct KafkaTransactionalProducerConfiguration {
+    var transactionalId: String
+    var transactionsTimeout: Duration
+    
+    var producerConfiguration: KafkaProducerConfiguration {
+        set {
+            self.producerConfiguration_ = newValue
+        }
+        get {
+            var conf = self.producerConfiguration_
+            conf.transactionalId = self.transactionalId
+            conf.enableIdempotence = true
+            conf.maxInFlightRequestsPerConnection = min(conf.maxInFlightRequestsPerConnection, 5)
+            return conf
+        }
+    }
+    
+    private var producerConfiguration_: KafkaProducerConfiguration = .init()
+    
+    public init(transactionalId: String, transactionsTimeout: Duration = .kafkaUntilEndOfTransactionTimeout, producerConfiguration: KafkaProducerConfiguration = .init()) {
+        self.transactionalId = transactionalId
+        self.transactionsTimeout = transactionsTimeout
+        self.producerConfiguration = producerConfiguration
+    }
+}
+// MARK: - KafkaProducerConfiguration + Hashable
+
+extension KafkaTransactionalProducerConfiguration: Hashable {}
+
+// MARK: - KafkaProducerConfiguration + Sendable
+
+extension KafkaTransactionalProducerConfiguration: Sendable {}

@@ -17,6 +17,7 @@ import NIOCore
 import ServiceLifecycle
 @testable import SwiftKafka
 import XCTest
+import Logging // TODO: remove
 
 // For testing locally on Mac, do the following:
 //
@@ -39,6 +40,7 @@ final class SwiftKafkaTests: XCTestCase {
     var bootstrapServer: KafkaConfiguration.Broker!
     var producerConfig: KafkaProducerConfiguration!
     var uniqueTestTopic: String!
+    var uniqueTestTopic2: String!
 
     override func setUpWithError() throws {
         self.bootstrapServer = KafkaConfiguration.Broker(host: self.kafkaHost, port: self.kafkaPort)
@@ -61,6 +63,7 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
         self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
+        self.uniqueTestTopic2 = try client._createUniqueTopic(timeout: 10 * 1000)
     }
 
     override func tearDownWithError() throws {
@@ -78,6 +81,7 @@ final class SwiftKafkaTests: XCTestCase {
             logger: .kafkaTest
         )
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
+        try client._deleteTopic(self.uniqueTestTopic2, timeout: 10 * 1000)
 
         self.bootstrapServer = nil
         self.producerConfig = nil
@@ -465,10 +469,11 @@ final class SwiftKafkaTests: XCTestCase {
                     receivedDeliveryReports.insert(deliveryReport)
                 }
             default:
-                break // Ignore any other events
+                continue
+//                break // Ignore any other events
             }
 
-            if receivedDeliveryReports.count >= 2 {
+            if receivedDeliveryReports.count >= messages.count {
                 break
             }
         }
@@ -487,6 +492,122 @@ final class SwiftKafkaTests: XCTestCase {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
+        }
+    }
+    
+    func testProduceAndConsumeWithTransaction() async throws {
+        let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: 10)
+        
+        self.producerConfig.debug = [.all]
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.producerConfig, logger: .kafkaTest)
+        
+        var transactionConfigProducer = self.producerConfig!
+        transactionConfigProducer.transactionalId = "234567"
+        transactionConfigProducer.bootstrapServers = [
+            .init(host: "linux-dev", port: 9092)
+        ]
+
+        var transactionalProducerConfig = KafkaTransactionalProducerConfiguration(
+            transactionalId: "1234",
+            producerConfiguration: transactionConfigProducer)
+
+        transactionalProducerConfig.transactionsTimeout = .seconds(20)
+        let transactionalProducer = try await KafkaTransactionalProducer(config: transactionalProducerConfig, logger: .kafkaTest)
+
+        let makeConsumerConfig = { (topic: String) -> KafkaConsumerConfiguration in
+            var consumerConfig = KafkaConsumerConfiguration(
+                consumptionStrategy: .group(id: "subscription-test-group-id", topics: [topic])
+            )
+            consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+            consumerConfig.bootstrapServers = [self.bootstrapServer]
+            consumerConfig.broker.addressFamily = .v4
+            consumerConfig.enableAutoCommit = false
+            return consumerConfig
+        }
+        
+        let consumer = try KafkaConsumer(
+            config: makeConsumerConfig(uniqueTestTopic),
+            logger: .kafkaTest
+        )
+        
+        let consumerAfterTransaction = try KafkaConsumer(
+            config: makeConsumerConfig(uniqueTestTopic2),
+            logger: .kafkaTest
+        )
+
+        let serviceGroup = ServiceGroup(
+            services: [
+                producer,
+                consumer,
+                transactionalProducer,
+                consumerAfterTransaction
+            ],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+                print("produced all messages")
+            }
+
+            // Consumer Task
+            group.addTask {
+                var count = 0
+                for try await messageResult in consumer.messages {
+                    guard case let message = messageResult else {
+                        continue
+                    }
+                    count += 1
+                    try await transactionalProducer.withTransaction { transaction in
+                        let newMessage = KafkaProducerMessage(
+                            topic: self.uniqueTestTopic2,
+                            value: message.value.description + "_updated")
+                        try transaction.send(newMessage)
+                        let partitionlist = RDKafkaTopicPartitionList()
+                        partitionlist.setOffset(topic: self.uniqueTestTopic, partition: message.partition, offset: Int64(message.offset))
+                        try await transaction.send(offsets: partitionlist, forConsumer: consumer)
+                    }
+
+                    if count >= testMessages.count {
+                        break
+                    }
+                }
+                print("Changed all messages \(count)")
+            }
+            
+            group.addTask {
+                var count = 0
+                for try await messageAfterTransaction in consumerAfterTransaction.messages {
+                    print("[\(count + 1)] Message after transaction recieved \(messageAfterTransaction)") // TODO: change
+
+                    count += 1
+                    if count >= testMessages.count {
+                        break
+                    }
+                }
+                print("Recieved all changed messages \(count)")
+            }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            try await group.next()
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 }
