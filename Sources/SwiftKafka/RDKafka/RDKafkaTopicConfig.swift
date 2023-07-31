@@ -48,7 +48,7 @@ struct RDKafkaTopicConfig {
 
         if configResult != RD_KAFKA_CONF_OK {
             let errorString = String(cString: errorChars)
-            throw KafkaError.config(reason: errorString)
+            throw KafkaError.topicConfig(reason: errorString)
         }
     }
 }

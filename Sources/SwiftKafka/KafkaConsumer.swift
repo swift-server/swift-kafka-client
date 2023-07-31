@@ -35,6 +35,29 @@ extension KafkaConsumerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
+// MARK: - KafkaConsumerEvents
+
+/// `AsyncSequence` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
+public struct KafkaConsumerEvents: Sendable, AsyncSequence {
+    public typealias Element = KafkaConsumerEvent
+    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerCloseOnTerminate>
+    let wrappedSequence: WrappedSequence
+
+    /// `AsynceIteratorProtocol` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
+    public struct AsyncIterator: AsyncIteratorProtocol {
+        var wrappedIterator: WrappedSequence.AsyncIterator
+
+        public mutating func next() async -> Element? {
+            await self.wrappedIterator.next()
+        }
+    }
+
+    public func makeAsyncIterator() -> AsyncIterator {
+        return AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+    }
+}
+
 // MARK: - KafkaConsumerMessages
 
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
@@ -52,7 +75,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
-    public struct ConsumerMessagesAsyncIterator: AsyncIteratorProtocol {
+    public struct AsyncIterator: AsyncIteratorProtocol {
         let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
         var wrappedIterator: WrappedSequence.AsyncIterator?
 
@@ -80,8 +103,8 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         }
     }
 
-    public func makeAsyncIterator() -> ConsumerMessagesAsyncIterator {
-        return ConsumerMessagesAsyncIterator(
+    public func makeAsyncIterator() -> AsyncIterator {
+        return AsyncIterator(
             stateMachine: self.stateMachine,
             wrappedIterator: self.wrappedSequence.makeAsyncIterator()
         )
@@ -108,27 +131,26 @@ public final class KafkaConsumer: Sendable, Service {
     /// `AsyncSequence` that returns all ``KafkaConsumerMessage`` objects that the consumer receives.
     public let messages: KafkaConsumerMessages
 
+    // Private initializer, use factory method or convenience init to create KafkaConsumer
     /// Initialize a new ``KafkaConsumer``.
     /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
-    /// - Parameter config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
-    /// - Parameter logger: A logger.
+    ///
+    /// - Parameters:
+    ///     - client: Client used for handling the connection to the Kafka cluster.
+    ///     - stateMachine: The state machine containing the state of the ``KafkaConsumer``.
+    ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
+    ///     - logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
-    public init(
+    private init(
+        client: RDKafkaClient,
+        stateMachine: NIOLockedValueBox<StateMachine>,
         config: KafkaConsumerConfiguration,
         logger: Logger
     ) throws {
         self.config = config
+        self.stateMachine = stateMachine
         self.logger = logger
-
-        let client = try RDKafkaClient.makeClient(
-            type: .consumer,
-            configDictionary: config.dictionary,
-            events: [.log, .fetch, .offsetCommit],
-            logger: logger
-        )
-
-        self.stateMachine = NIOLockedValueBox(StateMachine(logger: self.logger))
 
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerMessage.self,
@@ -158,6 +180,91 @@ public final class KafkaConsumer: Sendable, Service {
         case .group(groupID: _, topics: let topics):
             try self.subscribe(topics: topics)
         }
+    }
+
+    /// Initialize a new ``KafkaConsumer``.
+    ///
+    /// This creates a consumer without that does not listen to any events other than consumer messages.
+    ///
+    /// - Parameters:
+    ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
+    ///     - logger: A logger.
+    /// - Returns: The newly created ``KafkaConsumer``.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
+    public convenience init(
+        config: KafkaConsumerConfiguration,
+        logger: Logger
+    ) throws {
+        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
+
+        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
+        // Only listen to offset commit events when autoCommit is false
+        if config.enableAutoCommit == false {
+            subscribedEvents.append(.offsetCommit)
+        }
+
+        let client = try RDKafkaClient.makeClient(
+            type: .consumer,
+            configDictionary: config.dictionary,
+            events: subscribedEvents,
+            logger: logger
+        )
+
+        try self.init(
+            client: client,
+            stateMachine: stateMachine,
+            config: config,
+            logger: logger
+        )
+    }
+
+    /// Initialize a new ``KafkaConsumer`` and a ``KafkaConsumerEvents`` asynchronous sequence.
+    ///
+    /// Use the asynchronous sequence to consume events.
+    ///
+    /// - Important: When the asynchronous sequence is deinited the producer will be shutdown and disallow sending more messages.
+    /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
+    ///
+    /// - Parameters:
+    ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
+    ///     - logger: A logger.
+    /// - Returns: A tuple containing the created ``KafkaConsumer`` and the ``KafkaConsumerEvents``
+    /// `AsyncSequence` used for receiving message events.
+    /// - Throws: A ``KafkaError`` if the initialization failed.
+    public static func makeConsumerWithEvents(
+        config: KafkaConsumerConfiguration,
+        logger: Logger
+    ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
+        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
+
+        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
+        // Only listen to offset commit events when autoCommit is false
+        if config.enableAutoCommit == false {
+            subscribedEvents.append(.offsetCommit)
+        }
+
+        let client = try RDKafkaClient.makeClient(
+            type: .consumer,
+            configDictionary: config.dictionary,
+            events: subscribedEvents,
+            logger: logger
+        )
+
+        let consumer = try KafkaConsumer(
+            client: client,
+            stateMachine: stateMachine,
+            config: config,
+            logger: logger
+        )
+
+        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+            elementType: KafkaConsumerEvent.self,
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            delegate: KafkaConsumerCloseOnTerminate(stateMachine: stateMachine)
+        )
+
+        let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
+        return (consumer, eventsSequence)
     }
 
     /// Subscribe to the given list of `topics`.
