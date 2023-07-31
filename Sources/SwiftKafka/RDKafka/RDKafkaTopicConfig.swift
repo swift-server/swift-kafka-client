@@ -35,6 +35,27 @@ struct RDKafkaTopicConfig {
     /// - Parameter value: The new value of the configuration property to be changed.
     /// - Throws: A ``KafkaError`` if setting the value failed.
     static func set(configPointer: OpaquePointer, key: String, value: String) throws {
+        // librdkafka checks that values were modified from default (even if set to default)
+        // that may cause unexpected behaviour, so we should check that values are equal
+        var size = 0
+        let configValue = UnsafeMutablePointer<CChar>.allocate(capacity: size)
+        defer { configValue.deallocate() }
+
+        if RD_KAFKA_CONF_OK == rd_kafka_topic_conf_get(configPointer, key, configValue, &size) {
+            let sizeNoNullTerm = size - 1
+            let wasVal = String(unsafeUninitializedCapacity: size) {
+                let buf = UnsafeRawBufferPointer(
+                    UnsafeMutableRawBufferPointer(
+                        start: configValue,
+                        count: sizeNoNullTerm))
+                _ = $0.initialize(from: buf)
+               return sizeNoNullTerm
+            }
+            if wasVal == value {
+                return // Values are equal, avoid changing (don't mark config as modified)
+            }
+        }
+
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
