@@ -37,7 +37,7 @@ struct RDKafkaTopicConfig {
     static func set(configPointer: OpaquePointer, key: String, value: String) throws {
         // librdkafka checks that values were modified from default (even if set to default)
         // that may cause unexpected behaviour, so we should check that values are equal
-        var size = 0
+        var size = RDKafkaClient.stringSize
         let configValue = UnsafeMutablePointer<CChar>.allocate(capacity: size)
         defer { configValue.deallocate() }
 
