@@ -408,9 +408,9 @@ public final class KafkaConsumer: Sendable, Service {
             }
         }
     }
-    
+
     func client() throws -> RDKafkaClient {
-        return try stateMachine.withLockedValue { try $0.client() }
+        return try self.stateMachine.withLockedValue { try $0.client() }
     }
 }
 
@@ -659,7 +659,7 @@ extension KafkaConsumer {
                 return nil
             }
         }
-        
+
         func client() throws -> RDKafkaClient {
             switch self.state {
             case .uninitialized:

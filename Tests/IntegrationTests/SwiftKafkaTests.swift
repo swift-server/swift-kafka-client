@@ -13,11 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 import struct Foundation.UUID
+import Logging // TODO: remove
 import NIOCore
 import ServiceLifecycle
 @testable import SwiftKafka
 import XCTest
-import Logging // TODO: remove
 
 // For testing locally on Mac, do the following:
 //
@@ -494,26 +494,20 @@ final class SwiftKafkaTests: XCTestCase {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
         }
     }
-    
+
     func testProduceAndConsumeWithTransaction() async throws {
         let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: 10)
-        
+
         self.producerConfig.debug = [.all]
 
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.producerConfig, logger: .kafkaTest)
-        
-        var transactionConfigProducer = self.producerConfig!
-        transactionConfigProducer.transactionalId = "234567"
-        transactionConfigProducer.bootstrapServers = [
-            .init(host: "linux-dev", port: 9092)
-        ]
 
-        var transactionalProducerConfig = KafkaTransactionalProducerConfiguration(
-            transactionalId: "1234",
-            producerConfiguration: transactionConfigProducer)
+        var transactionConfigProducer = KafkaTransactionalProducerConfiguration(transactionalId: "1234")
 
-        transactionalProducerConfig.transactionsTimeout = .seconds(20)
-        let transactionalProducer = try await KafkaTransactionalProducer(config: transactionalProducerConfig, logger: .kafkaTest)
+        transactionConfigProducer.bootstrapServers = [self.bootstrapServer]
+        transactionConfigProducer.broker.addressFamily = .v4
+
+        let transactionalProducer = try await KafkaTransactionalProducer(config: transactionConfigProducer, logger: .kafkaTest)
 
         let makeConsumerConfig = { (topic: String) -> KafkaConsumerConfiguration in
             var consumerConfig = KafkaConsumerConfiguration(
@@ -525,12 +519,12 @@ final class SwiftKafkaTests: XCTestCase {
             consumerConfig.enableAutoCommit = false
             return consumerConfig
         }
-        
+
         let consumer = try KafkaConsumer(
             config: makeConsumerConfig(uniqueTestTopic),
             logger: .kafkaTest
         )
-        
+
         let consumerAfterTransaction = try KafkaConsumer(
             config: makeConsumerConfig(uniqueTestTopic2),
             logger: .kafkaTest
@@ -541,7 +535,7 @@ final class SwiftKafkaTests: XCTestCase {
                 producer,
                 consumer,
                 transactionalProducer,
-                consumerAfterTransaction
+                consumerAfterTransaction,
             ],
             configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
             logger: .kafkaTest
@@ -574,7 +568,8 @@ final class SwiftKafkaTests: XCTestCase {
                     try await transactionalProducer.withTransaction { transaction in
                         let newMessage = KafkaProducerMessage(
                             topic: self.uniqueTestTopic2,
-                            value: message.value.description + "_updated")
+                            value: message.value.description + "_updated"
+                        )
                         try transaction.send(newMessage)
                         let partitionlist = RDKafkaTopicPartitionList()
                         partitionlist.setOffset(topic: self.uniqueTestTopic, partition: message.partition, offset: Int64(message.offset))
@@ -587,7 +582,7 @@ final class SwiftKafkaTests: XCTestCase {
                 }
                 print("Changed all messages \(count)")
             }
-            
+
             group.addTask {
                 var count = 0
                 for try await messageAfterTransaction in consumerAfterTransaction.messages {

@@ -3,11 +3,9 @@ import ServiceLifecycle
 
 public final class KafkaTransactionalProducer: Service, Sendable {
     let producer: KafkaProducer
-    let config: KafkaTransactionalProducerConfiguration
-    
+
     private init(producer: KafkaProducer, config: KafkaTransactionalProducerConfiguration) async throws {
         self.producer = producer
-        self.config = config
         let client = try producer.client()
         try await client.initTransactions(timeout: config.transactionsTimeout)
     }
@@ -26,10 +24,10 @@ public final class KafkaTransactionalProducer: Service, Sendable {
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) async throws {
-        let producer = try KafkaProducer(config: config.producerConfiguration, topicConfig: topicConfig, logger: logger)
+        let producer = try KafkaProducer(config: config, topicConfig: topicConfig, logger: logger)
         try await self.init(producer: producer, config: config)
     }
-    
+
     /// Initialize a new ``KafkaTransactionalProducer`` and a ``KafkaProducerEvents`` asynchronous sequence.
     ///
     /// Use the asynchronous sequence to consume events.
@@ -48,10 +46,14 @@ public final class KafkaTransactionalProducer: Service, Sendable {
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) async throws -> (KafkaTransactionalProducer, KafkaProducerEvents) {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: config.producerConfiguration, topicConfig: topicConfig, logger: logger)
-        
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: config,
+            topicConfig: topicConfig,
+            logger: logger
+        )
+
         let transactionalProducer = try await KafkaTransactionalProducer(producer: producer, config: config)
-        
+
         return (transactionalProducer, events)
     }
 
@@ -59,9 +61,9 @@ public final class KafkaTransactionalProducer: Service, Sendable {
     public func withTransaction(_ body: @Sendable (KafkaTransaction) async throws -> Void) async throws {
         let transaction = try KafkaTransaction(
             client: try producer.client(),
-            producer: producer,
-            config: config)
-        
+            producer: self.producer
+        )
+
         do { // need to think here a little bit how to abort transaction
             try await body(transaction)
             try await transaction.commit()
@@ -76,8 +78,8 @@ public final class KafkaTransactionalProducer: Service, Sendable {
             throw error
         }
     }
-    
+
     public func run() async throws {
-        try await producer.run()
+        try await self.producer.run()
     }
 }

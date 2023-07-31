@@ -45,18 +45,19 @@ struct RDKafkaTopicConfig {
                 let buf = UnsafeRawBufferPointer(
                     UnsafeMutableRawBufferPointer(
                         start: configValue,
-                        count: sizeNoNullTerm))
+                        count: sizeNoNullTerm
+                    ))
                 _ = $0.initialize(from: buf)
-               return sizeNoNullTerm
+                return sizeNoNullTerm
             }
             if wasVal == value {
                 return // Values are equal, avoid changing (not mark config as modified)
             }
         }
-        
+
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
-        
+
         let configResult = rd_kafka_topic_conf_set(
             configPointer,
             key,

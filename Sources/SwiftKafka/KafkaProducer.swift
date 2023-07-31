@@ -80,8 +80,10 @@ public final class KafkaProducer: Service, Sendable {
     /// State of the ``KafkaProducer``.
     private let stateMachine: NIOLockedValueBox<StateMachine>
 
-    /// The configuration object of the producer client.
-    private let config: KafkaProducerConfiguration
+    /// Configured poll interval
+    private let pollInterval: Duration
+    /// Configured flush timeout
+    private let flushTimeout: Duration
     /// Topic configuration that is used when a new topic has to be created by the producer.
     private let topicConfig: KafkaTopicConfiguration
 
@@ -94,11 +96,16 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
-        config: KafkaProducerConfiguration,
+        config: any KafkaProducerSharedProperties,
         topicConfig: KafkaTopicConfiguration
     ) throws {
         self.stateMachine = stateMachine
-        self.config = config
+        self.pollInterval = config.pollInterval
+        precondition(
+            0...Int(Int32.max) ~= config.flushTimeoutMilliseconds,
+            "Flush timeout outside of valid range \(0...Int32.max)"
+        )
+        self.flushTimeout = .milliseconds(config.flushTimeoutMilliseconds)
         self.topicConfig = topicConfig
     }
 
@@ -113,6 +120,14 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public convenience init(
         config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
+        topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
+        logger: Logger
+    ) throws {
+        try self.init(config: config as (any KafkaProducerSharedProperties), topicConfig: topicConfig, logger: logger)
+    }
+
+    internal convenience init(
+        config: any KafkaProducerSharedProperties,
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) throws {
@@ -154,6 +169,14 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public static func makeProducerWithEvents(
         config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
+        topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
+        logger: Logger
+    ) throws -> (KafkaProducer, KafkaProducerEvents) {
+        return try self.makeProducerWithEvents(config: config as (any KafkaProducerSharedProperties), topicConfig: topicConfig, logger: logger)
+    }
+
+    internal static func makeProducerWithEvents(
+        config: any KafkaProducerSharedProperties,
         topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
@@ -215,13 +238,9 @@ public final class KafkaProducer: Service, Sendable {
                     // Ignore YieldResult as we don't support back pressure in KafkaProducer
                     _ = source?.yield(producerEvent)
                 }
-                try await Task.sleep(for: self.config.pollInterval)
+                try await Task.sleep(for: self.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
-                precondition(
-                    0...Int(Int32.max) ~= self.config.flushTimeoutMilliseconds,
-                    "Flush timeout outside of valid range \(0...Int32.max)"
-                )
-                try await client.flush(timeoutMilliseconds: Int32(self.config.flushTimeoutMilliseconds))
+                try await client.flush(timeoutMilliseconds: self.flushTimeout.totalMilliseconds)
                 source?.finish()
                 return
             case .terminatePollLoop:
@@ -453,7 +472,7 @@ extension KafkaProducer {
                 break
             }
         }
-        
+
         func client() throws -> RDKafkaClient {
             switch self.state {
             case .uninitialized:

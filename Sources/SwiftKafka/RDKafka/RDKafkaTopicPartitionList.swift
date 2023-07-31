@@ -15,7 +15,7 @@
 import Crdkafka
 
 /// Swift wrapper type for `rd_kafka_topic_partition_list_t`.
-final public class RDKafkaTopicPartitionList {
+public final class RDKafkaTopicPartitionList {
     private let _internal: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
 
     /// Create a new topic+partition list.
@@ -57,7 +57,7 @@ final public class RDKafkaTopicPartitionList {
     func withListPointer<T>(_ body: (UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws -> T) rethrows -> T {
         return try body(self._internal)
     }
-    
+
     /// Scoped accessor that enables safe access to the pointer of the underlying `rd_kafka_topic_partition_t`.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure will use the pointer.

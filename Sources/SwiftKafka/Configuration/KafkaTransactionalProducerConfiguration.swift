@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-public struct KafkaProducerConfiguration {
+// FIXME: should we really duplicate `KafkaProducerConfiguration`
+// FIXME: after public api updated?
+public struct KafkaTransactionalProducerConfiguration {
     // MARK: - SwiftKafka-specific Config properties
 
     /// The time between two consecutive polls.
@@ -35,7 +37,7 @@ public struct KafkaProducerConfiguration {
 
     /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order. The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled: max.in.flight.requests.per.connection=5 (must be less than or equal to 5), retries=INT32_MAX (must be greater than 0), acks=all, queuing.strategy=fifo. Producer instantation will fail if user-supplied configuration is incompatible.
     /// Default: `false`
-    public var enableIdempotence: Bool = false
+    internal let enableIdempotence: Bool = true
 
     /// Producer queue options.
     public var queue: KafkaConfiguration.QueueOptions = .init()
@@ -68,7 +70,14 @@ public struct KafkaProducerConfiguration {
 
     /// Maximum number of in-flight requests per broker connection. This is a generic property applied to all broker communication, however it is primarily relevant to produce requests. In particular, note that other mechanisms limit the number of outstanding consumer fetch request per broker to one.
     /// Default: `1_000_000`
-    public var maxInFlightRequestsPerConnection: Int = 1_000_000
+    public var maxInFlightRequestsPerConnection: Int = 5 {
+        didSet {
+            precondition(
+                0...5 ~= self.maxInFlightRequestsPerConnection,
+                "Transactional producer can have no more than 5 in flight requests"
+            )
+        }
+    }
 
     /// Metadata cache max age.
     /// Default: `900_000`
@@ -98,52 +107,28 @@ public struct KafkaProducerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
-    public init() {}
-}
+    // TODO: add Docc
+    var transactionalId: String
+    var transactionsTimeout: Duration = .seconds(60) // equal to socket TODO: add didSet
 
-// MARK: - KafkaProducerConfiguration + Dictionary
-
-extension KafkaProducerConfiguration {
-    internal var dictionary: [String: String] {
-        sharedPropsDictionary
+    public init(transactionalId: String) {
+        self.transactionalId = transactionalId
     }
 }
 
 // MARK: - KafkaProducerConfiguration + Hashable
 
-extension KafkaProducerConfiguration: Hashable {}
+extension KafkaTransactionalProducerConfiguration: Hashable {}
 
 // MARK: - KafkaProducerConfiguration + Sendable
 
-extension KafkaProducerConfiguration: Sendable {}
+extension KafkaTransactionalProducerConfiguration: Sendable {}
 
-extension KafkaProducerConfiguration: KafkaProducerSharedProperties {}
-
-// MARK: - KafkaConfiguration + Producer Additions
-
-extension KafkaConfiguration {
-    /// Producer queue options.
-    public struct QueueOptions: Sendable, Hashable {
-        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions. A value of 0 disables this limit.
-        /// Default: `100_000`
-        public var bufferingMaxMessages: Int = 100_000
-
-        /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions. This property has higher priority than queue.buffering.max.messages.
-        /// Default: `1_048_576`
-        public var bufferingMaxKBytes: Int = 1_048_576
-
-        /// Delay in milliseconds to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers. A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
-        /// Default: `5`
-        public var bufferingMaxMilliseconds: Int = 5
-
-        public init(
-            bufferingMaxMessages: Int = 100_000,
-            bufferingMaxKBytes: Int = 1_048_576,
-            bufferingMaxMilliseconds: Int = 5
-        ) {
-            self.bufferingMaxMessages = bufferingMaxMessages
-            self.bufferingMaxKBytes = bufferingMaxKBytes
-            self.bufferingMaxMilliseconds = bufferingMaxMilliseconds
-        }
+extension KafkaTransactionalProducerConfiguration: KafkaProducerSharedProperties {
+    internal var dictionary: [String: String] {
+        var resultDict: [String: String] = sharedPropsDictionary
+        resultDict["transactional.id"] = self.transactionalId
+        resultDict["transaction.timeout.ms"] = String(self.transactionsTimeout.totalMilliseconds)
+        return resultDict
     }
 }

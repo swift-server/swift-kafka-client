@@ -133,7 +133,7 @@ public struct KafkaError: Error, CustomStringConvertible {
             )
         )
     }
-    
+
     static func transactionAborted(
         reason: String, file: String = #fileID, line: UInt = #line
     ) -> KafkaError {
@@ -143,7 +143,7 @@ public struct KafkaError: Error, CustomStringConvertible {
             )
         )
     }
-    
+
     static func transactionIncomplete(
         reason: String, file: String = #fileID, line: UInt = #line
     ) -> KafkaError {
@@ -153,7 +153,7 @@ public struct KafkaError: Error, CustomStringConvertible {
             )
         )
     }
-    
+
     static func transactionOutOfAttempts(
         numOfAttempts: UInt64, file: String = #fileID, line: UInt = #line
     ) -> KafkaError {
@@ -233,7 +233,7 @@ extension KafkaError {
         let file: String
 
         let line: UInt
-        
+
         let isFatal: Bool
 
         fileprivate init(
