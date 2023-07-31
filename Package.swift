@@ -39,6 +39,10 @@ let package = Package(
             name: "SwiftKafka",
             targets: ["SwiftKafka"]
         ),
+        .library(
+            name: "KafkaFoundationCompat",
+            targets: ["KafkaFoundationCompat"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.55.0"),
@@ -76,6 +80,12 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
+        .target(
+            name: "KafkaFoundationCompat",
+            dependencies: [
+                "SwiftKafka",
             ]
         ),
         .systemLibrary(
