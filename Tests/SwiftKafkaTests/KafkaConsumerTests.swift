@@ -86,22 +86,16 @@ final class KafkaConsumerTests: XCTestCase {
             )
         }
     }
-/*
+
     func testConsumerStatistics() async throws {
-        // Set no bootstrap servers to trigger librdkafka configuration warning
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"])
         )
-        config.statisticsInterval = Duration.milliseconds(100)
+        config.statisticsInterval = Duration.milliseconds(10)
 
-        let stringJson = NIOLockedValueBox<String>(String())
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
-
-        guard let statistics = consumer.statistics else {
-            XCTFail("Statistics was not instantiated")
-            return
-        }
+        let statistics = NIOLockedValueBox<KafkaStatistics?>(nil)
+        let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [consumer],
@@ -117,74 +111,28 @@ final class KafkaConsumerTests: XCTestCase {
 
             // check for librdkafka statistics
             group.addTask {
-                for try await stat in statistics {
-                    stringJson.withLockedValue {
-                        $0 = stat
+                for try await event in events {
+                    if case let .statistics(stat) = event {
+                        statistics.withLockedValue {
+                            $0 = stat
+                        }
+                        break
                     }
                 }
             }
 
-            // Sleep for 1s to let poll loop receive statistics callback
-            try! await Task.sleep(for: .milliseconds(500))
+            try await group.next()
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
-
-            try await group.next()
         }
 
-        let stats = stringJson.withLockedValue { $0 }
-        XCTAssertFalse(stats.isEmpty)
-    }
-
-    func testConsumerStatisticsJson() async throws {
-        // Set no bootstrap servers to trigger librdkafka configuration warning
-        let uniqueGroupID = UUID().uuidString
-        var config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"])
-        )
-        config.statisticsInterval = Duration.milliseconds(100)
-
-        let stringJson = NIOLockedValueBox<KafkaStatisticsJson?>(nil)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
-
-        guard let statistics = consumer.statistics else {
-            XCTFail("Statistics was not instantiated")
+        let stats = statistics.withLockedValue { $0 }
+        guard let stats else {
+            XCTFail("stats are not occurred")
             return
         }
-
-        let serviceGroup = ServiceGroup(
-            services: [consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
-            group.addTask {
-                try await serviceGroup.run()
-            }
-
-            // check for librdkafka statistics
-            group.addTask {
-                for try await stat in KafkaStatisticsJsonSequence(wrappedSequence: statistics) {
-                    stringJson.withLockedValue {
-                        $0 = stat
-                    }
-                }
-            }
-
-            // Sleep for 1s to let poll loop receive statistics callback
-            try! await Task.sleep(for: .milliseconds(500))
-
-            // Shutdown the serviceGroup
-            await serviceGroup.triggerGracefulShutdown()
-
-            try await group.next()
-        }
-
-        let stats = stringJson.withLockedValue { $0 }
-        XCTAssertNotNil(stats)
+        XCTAssertFalse(stats.jsonString.isEmpty)
+        XCTAssertNoThrow(try stats.json)
     }
- */
 }

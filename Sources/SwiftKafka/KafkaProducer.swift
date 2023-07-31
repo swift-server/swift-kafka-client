@@ -118,10 +118,16 @@ public final class KafkaProducer: Service, Sendable {
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
+        var subscribedEvents: [RDKafkaEvent] = [.log] // No .deliveryReport here!
+        // Listen to statistics events when statistics enabled
+        if config.statisticsInterval != .zero {
+            subscribedEvents.append(.statistics)
+        }
+
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: config.dictionary,
-            events: [.log], // No .deliveryReport here!
+            events: subscribedEvents,
             logger: logger
         )
 
@@ -165,11 +171,17 @@ public final class KafkaProducer: Service, Sendable {
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
         let source = sourceAndSequence.source
+        
+        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
+        // Listen to statistics events when statistics enabled
+        if config.statisticsInterval != .zero {
+            subscribedEvents.append(.statistics)
+        }
 
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: config.dictionary,
-            events: [.log, .deliveryReport],
+            events: subscribedEvents,
             logger: logger
         )
 

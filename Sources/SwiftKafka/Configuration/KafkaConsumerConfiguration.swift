@@ -23,6 +23,18 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
+    /// Interval for librdkafka statistics reports
+    /// 0ms - disabled
+    /// >= 1ms - statistics provided every specified interval
+    public var statisticsInterval: Duration = .zero {
+        didSet {
+            precondition(
+                self.statisticsInterval.totalMilliseconds > 0 || self.statisticsInterval == .zero /*self.statisticsInterval.canBeRepresentedAsMilliseconds*/,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
+
     /// The strategy used for consuming messages.
     /// See ``KafkaConfiguration/ConsumptionStrategy`` for more information.
     public var consumptionStrategy: KafkaConfiguration.ConsumptionStrategy
@@ -128,6 +140,7 @@ extension KafkaConsumerConfiguration {
             resultDict["group.id"] = groupID
         }
 
+        resultDict["statistics.interval.ms"] = String(self.statisticsInterval.totalMilliseconds)
         resultDict["session.timeout.ms"] = String(session.timeoutMilliseconds)
         resultDict["heartbeat.interval.ms"] = String(heartbeatIntervalMilliseconds)
         resultDict["max.poll.interval.ms"] = String(maxPollInvervalMilliseconds)

@@ -358,7 +358,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testProducerStatistics() async throws {
-        self.config.statisticsInterval = Duration.milliseconds(100)
+        self.config.statisticsInterval = Duration.milliseconds(10)
         self.config.debug = [.all]
 
         let statistics = NIOLockedValueBox<KafkaStatistics?>(nil)
@@ -382,24 +382,18 @@ final class KafkaProducerTests: XCTestCase {
             // check for librdkafka statistics
             group.addTask {
                 for try await e in events {
-                    switch e {
-                    case .statistics(let stat):
+                    if case let .statistics(stat) = e {
                         statistics.withLockedValue {
                             $0 = stat
                         }
-                    default:
                         break
                     }
                 }
             }
 
-            // Sleep for 1s to let poll loop receive statistics callback
-            try! await Task.sleep(for: .milliseconds(500))
-
+            try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
-
-            try await group.next()
         }
         let stats = statistics.withLockedValue { $0 }
         guard let stats else {
