@@ -19,7 +19,7 @@
 ///
 /// By conforming your own types to this protocol, you will be able to pass instances of said types
 /// directly to ``KafkaProducerMessage`` as key and value.
-public protocol KafkaContiguousBytes: Sendable, Hashable {
+public protocol KafkaContiguousBytes {
     /// Calls the given closure with the contents of the underlying storage.
     ///
     /// - note: Calling `withUnsafeBytes` multiple times does not guarantee that

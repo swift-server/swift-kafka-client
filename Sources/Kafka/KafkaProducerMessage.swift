@@ -72,6 +72,8 @@ extension KafkaProducerMessage where Key == Never {
     }
 }
 
-extension KafkaProducerMessage: Hashable {}
+extension KafkaProducerMessage: Hashable where Key: Hashable, Value: Hashable {}
 
-extension KafkaProducerMessage: Sendable {}
+extension KafkaProducerMessage: Equatable where Key: Equatable, Value: Equatable {}
+
+extension KafkaProducerMessage: Sendable where Key: Sendable, Value: Sendable {}
