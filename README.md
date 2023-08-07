@@ -1,29 +1,29 @@
-# 🚧WIP🚧: SwiftKafka
+# 🚧WIP🚧: Swift Kafka Client
 
-SwiftKafka is a Swift Package in development that provides a convenient way to communicate with [Apache Kafka](https://kafka.apache.org) servers. The main goal was to create an API that leverages [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). Under the hood, this package uses the [`librdkafka`](https://github.com/confluentinc/librdkafka) C library.
+Swift Kafka Client is a Swift Package in development that provides a convenient way to communicate with [Apache Kafka](https://kafka.apache.org) servers. The main goal was to create an API that leverages [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). Under the hood, this package uses the [`librdkafka`](https://github.com/confluentinc/librdkafka) C library.
 
-## Adding SwiftKafka as a Dependency
+## Adding Kafka as a Dependency
 
-To use the `SwiftKafka` library in a SwiftPM project,
+To use the `Kafka` library in a SwiftPM project,
 add the following line to the dependencies in your `Package.swift` file:
 
 ```swift
-.package(url: "https://github.com/swift-server/swift-kafka-gsoc", branch: "main")
+.package(url: "https://github.com/swift-server/swift-kafka-client", branch: "main")
 ```
 
-Include `"SwiftKafka"` as a dependency for your executable target:
+Include `"Kafka"` as a dependency for your executable target:
 
 ```swift
 .target(name: "<target>", dependencies: [
-    .product(name: "SwiftKafka", package: "swift-kafka-gsoc"),
+    .product(name: "Kafka", package: "swift-kafka-client"),
 ]),
 ```
 
-Finally, add `import SwiftKafka` to your source code.
+Finally, add `import Kafka` to your source code.
 
 ## Usage
 
-`SwiftKafka` should be used within a [`Swift Service Lifecycle`](https://github.com/swift-server/swift-service-lifecycle)
+`Kafka` should be used within a [`Swift Service Lifecycle`](https://github.com/swift-server/swift-service-lifecycle)
 [`ServiceGroup`](https://swiftpackageindex.com/swift-server/swift-service-lifecycle/main/documentation/servicelifecycle/servicegroup) for proper startup and shutdown handling.
 Both the `KafkaProducer` and the `KafkaConsumer` implement the [`Service`](https://swiftpackageindex.com/swift-server/swift-service-lifecycle/main/documentation/servicelifecycle/service) protocol.
 
@@ -116,7 +116,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 #### Consumer Groups
 
-SwiftKafka also allows users to subscribe to an array of topics as part of a consumer group.
+Kafka also allows users to subscribe to an array of topics as part of a consumer group.
 
 ```swift
 let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)

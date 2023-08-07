@@ -12,7 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
-import Kafka
-
-extension Data: KafkaContiguousBytes {}
+extension Never: KafkaContiguousBytes {
+    public func withUnsafeBytes<R>(_: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
+        fatalError("This statement should never be reached")
+    }
+}

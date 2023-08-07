@@ -1,13 +1,13 @@
 #!/bin/bash
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the swift-kafka-gsoc open source project
+## This source file is part of the swift-kafka-client open source project
 ##
-## Copyright (c) 2022 Apple Inc. and the swift-kafka-gsoc project authors
+## Copyright (c) 2022 Apple Inc. and the swift-kafka-client project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+## See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
@@ -63,7 +63,7 @@ else
 fi
 
 printf "=> Checking license headers... "
-tmp=$(mktemp /tmp/.swift-kafka-gsoc-soundness_XXXXXX)
+tmp=$(mktemp /tmp/.swift-kafka-client-soundness_XXXXXX)
 
 for language in swift-or-c bash dtrace python; do
   declare -a matching_files
@@ -78,13 +78,13 @@ for language in swift-or-c bash dtrace python; do
         cat > "$tmp" <<"EOF"
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the swift-kafka-gsoc open source project
+// This source file is part of the swift-kafka-client open source project
 //
-// Copyright (c) YEARS Apple Inc. and the swift-kafka-gsoc project authors
+// Copyright (c) YEARS Apple Inc. and the swift-kafka-client project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+// See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -97,13 +97,13 @@ EOF
 #!/bin/bash
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the swift-kafka-gsoc open source project
+## This source file is part of the swift-kafka-client open source project
 ##
-## Copyright (c) YEARS Apple Inc. and the swift-kafka-gsoc project authors
+## Copyright (c) YEARS Apple Inc. and the swift-kafka-client project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+## See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
@@ -116,13 +116,13 @@ EOF
 #!/usr/bin/env python3
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the swift-kafka-gsoc open source project
+## This source file is part of the swift-kafka-client open source project
 ##
-## Copyright (c) YEARS Apple Inc. and the swift-kafka-gsoc project authors
+## Copyright (c) YEARS Apple Inc. and the swift-kafka-client project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+## See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
@@ -135,13 +135,13 @@ EOF
 #!/usr/sbin/dtrace -q -s
 /*===----------------------------------------------------------------------===*
  *
- *  This source file is part of the swift-kafka-gsoc open source project
+ *  This source file is part of the swift-kafka-client open source project
  *
- *  Copyright (c) YEARS Apple Inc. and the swift-kafka-gsoc project authors
+ *  Copyright (c) YEARS Apple Inc. and the swift-kafka-client project authors
  *  Licensed under Apache License v2.0
  *
  *  See LICENSE.txt for license information
- *  See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+ *  See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
  *
  *  SPDX-License-Identifier: Apache-2.0
  *
