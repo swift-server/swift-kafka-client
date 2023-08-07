@@ -211,8 +211,12 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
-    public init(consumptionStrategy: ConsumptionStrategy) {
+    public init(
+        consumptionStrategy: ConsumptionStrategy,
+        bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
+    ) {
         self.consumptionStrategy = consumptionStrategy
+        self.bootstrapBrokerAddresses = bootstrapBrokerAddresses
     }
 }
 

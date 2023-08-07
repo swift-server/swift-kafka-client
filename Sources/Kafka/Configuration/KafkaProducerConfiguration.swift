@@ -165,7 +165,11 @@ public struct KafkaProducerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
-    public init() {}
+    public init(
+        bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
+    ) {
+        self.bootstrapBrokerAddresses = bootstrapBrokerAddresses
+    }
 }
 
 // MARK: - KafkaProducerConfiguration + Dictionary

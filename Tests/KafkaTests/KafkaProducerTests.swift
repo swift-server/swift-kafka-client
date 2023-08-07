@@ -45,8 +45,9 @@ final class KafkaProducerTests: XCTestCase {
             port: self.kafkaPort
         )
 
-        self.config = KafkaProducerConfiguration()
-        self.config.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]
+        self.config = KafkaProducerConfiguration(
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
         self.config.broker.addressFamily = .v4
     }
 
@@ -246,8 +247,7 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
-        var config = KafkaProducerConfiguration()
-        config.bootstrapBrokerAddresses = []
+        let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
 
         let producer = try KafkaProducer(configuration: config, logger: mockLogger)
 
