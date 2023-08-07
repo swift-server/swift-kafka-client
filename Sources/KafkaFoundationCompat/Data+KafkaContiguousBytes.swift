@@ -12,7 +12,15 @@
 //
 //===----------------------------------------------------------------------===//
 
+#if swift(<5.9)
+@preconcurrency import Foundation
+#else
 import Foundation
+#endif
 import Kafka
+
+#if swift(<5.9)
+extension Data: @unchecked Sendable {}
+#endif
 
 extension Data: KafkaContiguousBytes {}
