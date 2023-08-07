@@ -41,9 +41,10 @@ final class KafkaTests: XCTestCase {
     var uniqueTestTopic: String!
 
     override func setUpWithError() throws {
-        self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress()
-        self.bootstrapBrokerAddress.host = self.kafkaHost
-        self.bootstrapBrokerAddress.port = self.kafkaPort
+        self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
+            host: self.kafkaHost,
+            port: self.kafkaPort
+        )
 
         self.producerConfig = KafkaProducerConfiguration()
         self.producerConfig.bootstrapBrokerAddresses = [self.bootstrapBrokerAddress]

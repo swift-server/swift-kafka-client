@@ -17,16 +17,22 @@ public enum KafkaConfiguration {
     /// The address of a Kafka broker.
     public struct BrokerAddress: Sendable, Hashable, CustomStringConvertible {
         /// The host component of the broker address.
-        public var host: String = "localhost"
+        public var host: String
 
         /// The port to connect to.
-        public var port: Int = 9092
+        public var port: Int
 
         public var description: String {
             "\(self.host):\(self.port)"
         }
 
-        public init() {}
+        public init(
+            host: String,
+            port: Int
+        ) {
+            self.host = host
+            self.port = port
+        }
     }
 
     /// Message options.
