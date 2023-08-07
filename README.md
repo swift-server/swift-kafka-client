@@ -1,6 +1,6 @@
-# 🚧WIP🚧: Swift Kafka Client
+# Swift Kafka Client
 
-Swift Kafka Client is a Swift Package in development that provides a convenient way to communicate with [Apache Kafka](https://kafka.apache.org) servers. The main goal was to create an API that leverages [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). Under the hood, this package uses the [`librdkafka`](https://github.com/confluentinc/librdkafka) C library.
+The Swift Kafka Client library provides a convenient way to interact with [Apache Kafka](https://kafka.apache.org) by leveraging [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). This package wraps the native [`librdkafka`](https://github.com/confluentinc/librdkafka) library.
 
 ## Adding Kafka as a Dependency
 
@@ -32,12 +32,11 @@ Both the `KafkaProducer` and the `KafkaConsumer` implement the [`Service`](https
 The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `events` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
 
 ```swift
-let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
-var config = KafkaProducerConfiguration()
-config.bootstrapBrokerAddresses = [broker]
+let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
+let configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [brokerAddress])
 
 let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-    config: config,
+    configuration: configuration,
     logger: logger
 )
 
@@ -79,17 +78,17 @@ await withThrowingTaskGroup(of: Void.self) { group in
 After initializing the `KafkaConsumer` with a topic-partition pair to read from, messages can be consumed using the `messages` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence).
 
 ```swift
-let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
-var config = KafkaConsumerConfiguration(
+let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
+let configuration = KafkaConsumerConfiguration(
     consumptionStrategy: .partition(
         KafkaPartition(rawValue: 0),
         topic: "topic-name"
-    )
+    ),
+    bootstrapBrokerAddresses: [brokerAddress]
 )
-config.bootstrapBrokerAddresses = [broker]
 
 let consumer = try KafkaConsumer(
-    config: config,
+    configuration: configuration,
     logger: logger
 )
 
@@ -119,14 +118,14 @@ await withThrowingTaskGroup(of: Void.self) { group in
 Kafka also allows users to subscribe to an array of topics as part of a consumer group.
 
 ```swift
-let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
-var config = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"])
+let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
+let configuration = KafkaConsumerConfiguration(
+    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"]),
+    bootstrapBrokerAddresses: [brokerAddress]
 )
-config.bootstrapBrokerAddresses = [broker]
 
 let consumer = try KafkaConsumer(
-    config: config,
+    configuration: configuration,
     logger: logger
 )
 
@@ -156,15 +155,15 @@ await withThrowingTaskGroup(of: Void.self) { group in
 By default, the `KafkaConsumer` automatically commits message offsets after receiving the corresponding message. However, we allow users to disable this setting and commit message offsets manually.
 
 ```swift
-let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
-var config = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"])
+let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
+var configuration = KafkaConsumerConfiguration(
+    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"]),
+    bootstrapBrokerAddresses: [brokerAddress]
 )
-config.enableAutoCommit = false,
-config.bootstrapBrokerAddresses = [broker]
+configuration.isAutoCommitEnabled = false
 
 let consumer = try KafkaConsumer(
-    config: config,
+    configuration: configuration,
     logger: logger
 )
 
@@ -189,6 +188,82 @@ await withThrowingTaskGroup(of: Void.self) { group in
         }
     }
 }
+```
+
+### Security Mechanisms
+
+Both the `KafkaProducer` and the `KafkaConsumer` can be configured to use different security mechanisms.
+
+#### Plaintext
+
+```swift
+var configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+configuration.securityProtocol = .plaintext
+```
+
+#### TLS
+
+```swift
+let leafCert = KafkaConfiguration.TLSConfiguration.LeafAndIntermediates.pem("YOUR_LEAF_CERTIFICATE")
+let rootCert = KafkaConfiguration.TLSConfiguration.Root.pem("YOUR_ROOT_CERTIFICATE")
+
+let privateKey = KafkaConfiguration.TLSConfiguration.PrivateKey(
+    location: .file(location: "KEY_FILE"),
+    password: ""
+)
+
+let tlsConfig = KafkaConfiguration.TLSConfiguration.keyPair(
+    privateKey: privateKey,
+    publicKeyCertificate: leafCert,
+    caCertificate: rootCert,
+    crlLocation: nil
+)
+
+var configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+configuration.securityProtocol = .tls(configuration: tlsConfig)
+```
+
+#### SASL
+
+```swift
+let kerberosConfiguration = KafkaConfiguration.SASLMechanism.KerberosConfiguration(
+    keytab: "KEYTAB_FILE"
+)
+
+var config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+config.securityProtocol = .saslPlaintext(
+    mechanism: .gssapi(kerberosConfiguration: kerberosConfiguration)
+)
+```
+
+#### SASL + TLS
+
+```swift
+let leafCert = KafkaConfiguration.TLSConfiguration.LeafAndIntermediates.pem("YOUR_LEAF_CERTIFICATE")
+let rootCert = KafkaConfiguration.TLSConfiguration.Root.pem("YOUR_ROOT_CERTIFICATE")
+
+let privateKey = KafkaConfiguration.TLSConfiguration.PrivateKey(
+    location: .file(location: "KEY_FILE"),
+    password: ""
+)
+
+let tlsConfig = KafkaConfiguration.TLSConfiguration.keyPair(
+    privateKey: privateKey,
+    publicKeyCertificate: leafCert,
+    caCertificate: rootCert,
+    crlLocation: nil
+)
+
+let saslMechanism = KafkaConfiguration.SASLMechanism.scramSHA256(
+    username: "USERNAME",
+    password: "PASSWORD"
+)
+
+var config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+config.securityProtocol = .saslTLS(
+    saslMechanism: saslMechanism,
+    tlsConfiguaration: tlsConfig
+)
 ```
 
 ## librdkafka
