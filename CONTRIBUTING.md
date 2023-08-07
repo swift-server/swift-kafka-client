@@ -10,8 +10,8 @@ that your contributions are licensed under the Apache 2.0 license (see
 
 Please ensure to specify the following:
 
-* swift-kafka-gsoc commit hash
-* Contextual information (e.g. what you were trying to achieve with swift-kafka-gsoc)
+* swift-kafka-client commit hash
+* Contextual information (e.g. what you were trying to achieve with swift-kafka-client)
 * Simplest possible steps to reproduce
   * More complex the steps are, lower the priority will be.
   * A pull request with failing test case is preferred, but it's just fine to paste the test case into the issue description.
@@ -24,10 +24,10 @@ Please ensure to specify the following:
 ### Example
 
 ```
-swift-kafka-gsoc commit hash: 22ec043dc9d24bb011b47ece4f9ee97ee5be2757
+swift-kafka-client commit hash: 22ec043dc9d24bb011b47ece4f9ee97ee5be2757
 
 Context:
-While load testing my program written with swift-kafka-gsoc, I noticed
+While load testing my program written with swift-kafka-client, I noticed
 that one file descriptor is leaked per request.
 
 Steps to reproduce:
@@ -50,7 +50,7 @@ My system has IPv6 disabled.
 
 ## Writing a Patch
 
-A good swift-kafka-gsoc patch is:
+A good swift-kafka-client patch is:
 
 1. Concise, and contains as few changes as needed to achieve the end result.
 2. Tested, ensuring that any tests provided failed before the patch and pass after it.
@@ -65,4 +65,4 @@ We require that your commit messages match our template. The easiest way to do t
 
 ## How to contribute your work
 
-Please open a pull request at https://github.com/swift-server/swift-kafka-gsoc. Make sure the CI passes, and then wait for code review.
+Please open a pull request at https://github.com/swift-server/swift-kafka-client. Make sure the CI passes, and then wait for code review.

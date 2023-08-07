@@ -12,7 +12,4 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
-import Kafka
-
-extension Data: KafkaContiguousBytes {}
+extension Array: KafkaContiguousBytes where Array.Element == UInt8 {}

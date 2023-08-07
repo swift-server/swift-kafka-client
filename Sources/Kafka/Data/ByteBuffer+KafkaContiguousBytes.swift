@@ -12,7 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Foundation
-import Kafka
+import NIOCore
 
-extension Data: KafkaContiguousBytes {}
+extension ByteBuffer: KafkaContiguousBytes {
+    public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
+        try self.withUnsafeReadableBytes {
+            try body($0)
+        }
+    }
+}
