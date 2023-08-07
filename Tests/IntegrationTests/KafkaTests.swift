@@ -98,7 +98,7 @@ final class KafkaTests: XCTestCase {
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
-            config: consumerConfig,
+            configuration: consumerConfig,
             logger: .kafkaTest
         )
 
@@ -170,7 +170,7 @@ final class KafkaTests: XCTestCase {
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
-            config: consumerConfig,
+            configuration: consumerConfig,
             logger: .kafkaTest
         )
 
@@ -239,7 +239,7 @@ final class KafkaTests: XCTestCase {
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
-            config: consumerConfig,
+            configuration: consumerConfig,
             logger: .kafkaTest
         )
 
@@ -311,7 +311,7 @@ final class KafkaTests: XCTestCase {
         consumer1Config.broker.addressFamily = .v4
 
         let consumer1 = try KafkaConsumer(
-            config: consumer1Config,
+            configuration: consumer1Config,
             logger: .kafkaTest
         )
 
@@ -388,7 +388,7 @@ final class KafkaTests: XCTestCase {
         consumer2Config.broker.addressFamily = .v4
 
         let consumer2 = try KafkaConsumer(
-            config: consumer2Config,
+            configuration: consumer2Config,
             logger: .kafkaTest
         )
 

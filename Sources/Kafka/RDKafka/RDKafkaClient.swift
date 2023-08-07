@@ -95,12 +95,12 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     /// - Parameter newMessageID: ID that was assigned to the `message`.
-    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
     func produce<Key, Value>(
         message: KafkaProducerMessage<Key, Value>,
         newMessageID: UInt,
-        topicConfig: KafkaTopicConfiguration,
+        topicConfiguration: KafkaTopicConfiguration,
         topicHandles: RDKafkaTopicHandles
     ) throws {
         precondition(
@@ -109,7 +109,7 @@ final class RDKafkaClient: Sendable {
         )
 
         let responseCode = try message.value.withUnsafeBytes { valueBuffer in
-            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfig: topicConfig) { topicHandle in
+            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfiguration: topicConfiguration) { topicHandle in
                 if let key = message.key {
                     // Key available, we can use scoped accessor to safely access its rawBufferPointer.
                     // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.

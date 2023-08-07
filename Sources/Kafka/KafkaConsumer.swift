@@ -122,7 +122,7 @@ public final class KafkaConsumer: Sendable, Service {
         KafkaConsumerCloseOnTerminate
     >
     /// The configuration object of the consumer client.
-    private let config: KafkaConsumerConfiguration
+    private let configuration: KafkaConsumerConfiguration
     /// A logger.
     private let logger: Logger
     /// State of the `KafkaConsumer`.
@@ -139,16 +139,16 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - client: Client used for handling the connection to the Kafka cluster.
     ///     - stateMachine: The state machine containing the state of the ``KafkaConsumer``.
-    ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
+    ///     - configuration: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
     ///     - logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     private init(
         client: RDKafkaClient,
         stateMachine: NIOLockedValueBox<StateMachine>,
-        config: KafkaConsumerConfiguration,
+        configuration: KafkaConsumerConfiguration,
         logger: Logger
     ) throws {
-        self.config = config
+        self.configuration = configuration
         self.stateMachine = stateMachine
         self.logger = logger
 
@@ -174,7 +174,7 @@ public final class KafkaConsumer: Sendable, Service {
         // are now triggered by ``RDKafkaClient/consumerPoll``.
         try client.pollSetConsumer()
 
-        switch config.consumptionStrategy._internal {
+        switch configuration.consumptionStrategy._internal {
         case .partition(topic: let topic, partition: let partition, offset: let offset):
             try self.assign(topic: topic, partition: partition, offset: offset)
         case .group(groupID: _, topics: let topics):
@@ -187,25 +187,25 @@ public final class KafkaConsumer: Sendable, Service {
     /// This creates a consumer without that does not listen to any events other than consumer messages.
     ///
     /// - Parameters:
-    ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
+    ///     - configuration: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
     ///     - logger: A logger.
     /// - Returns: The newly created ``KafkaConsumer``.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public convenience init(
-        config: KafkaConsumerConfiguration,
+        configuration: KafkaConsumerConfiguration,
         logger: Logger
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
         // Only listen to offset commit events when autoCommit is false
-        if config.isAutoCommitEnabled == false {
+        if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
-            configDictionary: config.dictionary,
+            configDictionary: configuration.dictionary,
             events: subscribedEvents,
             logger: logger
         )
@@ -213,7 +213,7 @@ public final class KafkaConsumer: Sendable, Service {
         try self.init(
             client: client,
             stateMachine: stateMachine,
-            config: config,
+            configuration: configuration,
             logger: logger
         )
     }
@@ -226,26 +226,26 @@ public final class KafkaConsumer: Sendable, Service {
     /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
     ///
     /// - Parameters:
-    ///     - config: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
+    ///     - configuration: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
     ///     - logger: A logger.
     /// - Returns: A tuple containing the created ``KafkaConsumer`` and the ``KafkaConsumerEvents``
     /// `AsyncSequence` used for receiving message events.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public static func makeConsumerWithEvents(
-        config: KafkaConsumerConfiguration,
+        configuration: KafkaConsumerConfiguration,
         logger: Logger
     ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
         // Only listen to offset commit events when autoCommit is false
-        if config.isAutoCommitEnabled == false {
+        if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
-            configDictionary: config.dictionary,
+            configDictionary: configuration.dictionary,
             events: subscribedEvents,
             logger: logger
         )
@@ -253,7 +253,7 @@ public final class KafkaConsumer: Sendable, Service {
         let consumer = try KafkaConsumer(
             client: client,
             stateMachine: stateMachine,
-            config: config,
+            configuration: configuration,
             logger: logger
         )
 
@@ -338,13 +338,13 @@ public final class KafkaConsumer: Sendable, Service {
                         break // Ignore
                     }
                 }
-                try await Task.sleep(for: self.config.pollInterval)
+                try await Task.sleep(for: self.configuration.pollInterval)
             case .pollWithoutYield(let client):
                 // Ignore poll result.
                 // We are just polling to serve any remaining events queued inside of `librdkafka`.
                 // All remaining queued consumer messages will get dropped and not be committed (marked as read).
                 _ = client.eventPoll()
-                try await Task.sleep(for: self.config.pollInterval)
+                try await Task.sleep(for: self.configuration.pollInterval)
             case .terminatePollLoop:
                 return
             }
@@ -366,7 +366,7 @@ public final class KafkaConsumer: Sendable, Service {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
         case .commitSync(let client):
-            guard self.config.isAutoCommitEnabled == false else {
+            guard self.configuration.isAutoCommitEnabled == false else {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
 

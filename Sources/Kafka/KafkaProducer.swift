@@ -80,25 +80,25 @@ public final class KafkaProducer: Service, Sendable {
     private let stateMachine: NIOLockedValueBox<StateMachine>
 
     /// The configuration object of the producer client.
-    private let config: KafkaProducerConfiguration
+    private let configuration: KafkaProducerConfiguration
     /// Topic configuration that is used when a new topic has to be created by the producer.
-    private let topicConfig: KafkaTopicConfiguration
+    private let topicConfiguration: KafkaTopicConfiguration
 
     // Private initializer, use factory method or convenience init to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
     ///
     /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.///
-    /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
-        config: KafkaProducerConfiguration,
-        topicConfig: KafkaTopicConfiguration
+        configuration: KafkaProducerConfiguration,
+        topicConfiguration: KafkaTopicConfiguration
     ) throws {
         self.stateMachine = stateMachine
-        self.config = config
-        self.topicConfig = topicConfig
+        self.configuration = configuration
+        self.topicConfiguration = topicConfiguration
     }
 
     /// Initialize a new ``KafkaProducer``.
@@ -132,8 +132,8 @@ public final class KafkaProducer: Service, Sendable {
 
         try self.init(
             stateMachine: stateMachine,
-            config: configuration,
-            topicConfig: configuration.topicConfiguration
+            configuration: configuration,
+            topicConfiguration: configuration.topicConfiguration
         )
     }
 
@@ -172,8 +172,8 @@ public final class KafkaProducer: Service, Sendable {
 
         let producer = try KafkaProducer(
             stateMachine: stateMachine,
-            config: configuration,
-            topicConfig: configuration.topicConfiguration
+            configuration: configuration,
+            topicConfiguration: configuration.topicConfiguration
         )
 
         stateMachine.withLockedValue {
@@ -212,13 +212,13 @@ public final class KafkaProducer: Service, Sendable {
                     // Ignore YieldResult as we don't support back pressure in KafkaProducer
                     _ = source?.yield(producerEvent)
                 }
-                try await Task.sleep(for: self.config.pollInterval)
+                try await Task.sleep(for: self.configuration.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
                 precondition(
-                    0...Int(Int32.max) ~= self.config.flushTimeoutMilliseconds,
+                    0...Int(Int32.max) ~= self.configuration.flushTimeoutMilliseconds,
                     "Flush timeout outside of valid range \(0...Int32.max)"
                 )
-                try await client.flush(timeoutMilliseconds: Int32(self.config.flushTimeoutMilliseconds))
+                try await client.flush(timeoutMilliseconds: Int32(self.configuration.flushTimeoutMilliseconds))
                 source?.finish()
                 return
             case .terminatePollLoop:
@@ -253,7 +253,7 @@ public final class KafkaProducer: Service, Sendable {
             try client.produce(
                 message: message,
                 newMessageID: newMessageID,
-                topicConfig: self.topicConfig,
+                topicConfiguration: self.topicConfiguration,
                 topicHandles: topicHandles
             )
             return KafkaProducerMessageID(rawValue: newMessageID)
