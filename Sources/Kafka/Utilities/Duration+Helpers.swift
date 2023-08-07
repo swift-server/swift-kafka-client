@@ -12,7 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.Data
-import Kafka
+extension Duration {
+    internal var inMilliseconds: UInt {
+        let seconds = Double(components.seconds) * 1000.0
+        let attoseconds = Double(components.attoseconds) * 1e-15
+        return UInt(seconds + attoseconds)
+    }
 
-extension Data: KafkaContiguousBytes {}
+    internal var canBeRepresentedAsMilliseconds: Bool {
+        return self.inMilliseconds > 0
+    }
+}

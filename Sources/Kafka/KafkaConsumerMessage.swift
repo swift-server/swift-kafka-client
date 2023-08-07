@@ -26,11 +26,11 @@ public struct KafkaConsumerMessage {
     /// The body of the message.
     public var value: ByteBuffer
     /// The offset of the message in its partition.
-    public var offset: Int
+    public var offset: KafkaOffset
 
     /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
+    internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
         guard let valuePointer = rdKafkaMessage.payload else {
@@ -55,7 +55,7 @@ public struct KafkaConsumerMessage {
         }
         self.topic = topic
 
-        self.partition = KafkaPartition(rawValue: rdKafkaMessage.partition)
+        self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
 
         if let keyPointer = rdKafkaMessage.key {
             let keyBufferPointer = UnsafeRawBufferPointer(
@@ -69,7 +69,7 @@ public struct KafkaConsumerMessage {
 
         self.value = ByteBuffer(bytes: valueBufferPointer)
 
-        self.offset = Int(rdKafkaMessage.offset)
+        self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
     }
 }
 

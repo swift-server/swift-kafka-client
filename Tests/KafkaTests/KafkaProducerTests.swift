@@ -36,24 +36,28 @@ final class KafkaProducerTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
-    var bootstrapServer: KafkaConfiguration.Broker!
+    var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
     var config: KafkaProducerConfiguration!
 
     override func setUpWithError() throws {
-        self.bootstrapServer = KafkaConfiguration.Broker(host: self.kafkaHost, port: self.kafkaPort)
+        self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
+            host: self.kafkaHost,
+            port: self.kafkaPort
+        )
 
-        self.config = KafkaProducerConfiguration()
-        self.config.bootstrapServers = [self.bootstrapServer]
+        self.config = KafkaProducerConfiguration(
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
         self.config.broker.addressFamily = .v4
     }
 
     override func tearDownWithError() throws {
-        self.bootstrapServer = nil
+        self.bootstrapBrokerAddress = nil
         self.config = nil
     }
 
     func testSend() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -111,7 +115,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendEmptyMessage() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -167,7 +171,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendTwoTopics() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -243,10 +247,9 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
-        var config = KafkaProducerConfiguration()
-        config.bootstrapServers = []
+        let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
 
-        let producer = try KafkaProducer(config: config, logger: mockLogger)
+        let producer = try KafkaProducer(configuration: config, logger: mockLogger)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -281,7 +284,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendFailsAfterTerminatingAcknowledgementSequence() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
         let serviceGroup = ServiceGroup(
             services: [producer],
@@ -317,7 +320,7 @@ final class KafkaProducerTests: XCTestCase {
             // has been terminated
             XCTAssertThrowsError(try producer.send(message2)) { error in
                 let error = error as! KafkaError
-                XCTAssertEqual(KafkaError.ErrorCode.connectionClosed, error.code)
+                XCTAssertEqual(KafkaError.ErrorCode.shutdown, error.code)
             }
 
             // Shutdown the serviceGroup
@@ -328,7 +331,7 @@ final class KafkaProducerTests: XCTestCase {
     func testNoMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
         var events: KafkaProducerEvents?
-        (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
+        (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
         _ = events
 
         weak var producerCopy = producer

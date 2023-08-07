@@ -67,9 +67,8 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 // MARK: - KafkaProducer
 
 /// Send messages to the Kafka cluster.
-/// Please make sure to explicitly call ``triggerGracefulShutdown()`` when the ``KafkaProducer`` is not used anymore.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
-/// configuration object (only works if server has `auto.create.topics.enable` property set).
+/// configuration object (only works if server has ``KafkaProducerConfiguration/isAutoCreateTopicsEnabled`` property set to `true`).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
         KafkaProducerEvent,
@@ -81,46 +80,45 @@ public final class KafkaProducer: Service, Sendable {
     private let stateMachine: NIOLockedValueBox<StateMachine>
 
     /// The configuration object of the producer client.
-    private let config: KafkaProducerConfiguration
+    private let configuration: KafkaProducerConfiguration
     /// Topic configuration that is used when a new topic has to be created by the producer.
-    private let topicConfig: KafkaTopicConfiguration
+    private let topicConfiguration: KafkaTopicConfiguration
 
     // Private initializer, use factory method or convenience init to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
     ///
     /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.///
-    /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
-        config: KafkaProducerConfiguration,
-        topicConfig: KafkaTopicConfiguration
+        configuration: KafkaProducerConfiguration,
+        topicConfiguration: KafkaTopicConfiguration
     ) throws {
         self.stateMachine = stateMachine
-        self.config = config
-        self.topicConfig = topicConfig
+        self.configuration = configuration
+        self.topicConfiguration = topicConfiguration
     }
 
     /// Initialize a new ``KafkaProducer``.
     ///
     /// This creates a producer without listening for events.
     ///
-    /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
-    /// - Parameter logger: A logger.
+    /// - Parameters:
+    ///     - configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    ///     - logger: A logger.
     /// - Returns: The newly created ``KafkaProducer``.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public convenience init(
-        config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
-        topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
+        configuration: KafkaProducerConfiguration,
         logger: Logger
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         let client = try RDKafkaClient.makeClient(
             type: .producer,
-            configDictionary: config.dictionary,
+            configDictionary: configuration.dictionary,
             events: [.log], // No .deliveryReport here!
             logger: logger
         )
@@ -134,8 +132,8 @@ public final class KafkaProducer: Service, Sendable {
 
         try self.init(
             stateMachine: stateMachine,
-            config: config,
-            topicConfig: topicConfig
+            configuration: configuration,
+            topicConfiguration: configuration.topicConfiguration
         )
     }
 
@@ -143,18 +141,17 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// Use the asynchronous sequence to consume events.
     ///
-    /// - Important: When the asynchronous sequence is deinited the producer will be shutdown and disallow sending more messages.
+    /// - Important: When the asynchronous sequence is deinited the producer will be shut down and disallowed from sending more messages.
     /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
     ///
-    /// - Parameter config: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
-    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
-    /// - Parameter logger: A logger.
+    /// - Parameters:
+    ///     - configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    ///     - logger: A logger.
     /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaProducerEvents``
     /// `AsyncSequence` used for receiving message events.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public static func makeProducerWithEvents(
-        config: KafkaProducerConfiguration = KafkaProducerConfiguration(),
-        topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
+        configuration: KafkaProducerConfiguration,
         logger: Logger
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
@@ -168,15 +165,15 @@ public final class KafkaProducer: Service, Sendable {
 
         let client = try RDKafkaClient.makeClient(
             type: .producer,
-            configDictionary: config.dictionary,
+            configDictionary: configuration.dictionary,
             events: [.log, .deliveryReport],
             logger: logger
         )
 
         let producer = try KafkaProducer(
             stateMachine: stateMachine,
-            config: config,
-            topicConfig: topicConfig
+            configuration: configuration,
+            topicConfiguration: configuration.topicConfiguration
         )
 
         stateMachine.withLockedValue {
@@ -190,9 +187,9 @@ public final class KafkaProducer: Service, Sendable {
         return (producer, eventsSequence)
     }
 
-    /// Start polling Kafka for events.
+    /// Start the ``KafkaProducer``.
     ///
-    /// - Returns: An awaitable task representing the execution of the poll loop.
+    /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -215,13 +212,13 @@ public final class KafkaProducer: Service, Sendable {
                     // Ignore YieldResult as we don't support back pressure in KafkaProducer
                     _ = source?.yield(producerEvent)
                 }
-                try await Task.sleep(for: self.config.pollInterval)
+                try await Task.sleep(for: self.configuration.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
                 precondition(
-                    0...Int(Int32.max) ~= self.config.flushTimeoutMilliseconds,
+                    0...Int(Int32.max) ~= self.configuration.flushTimeoutMilliseconds,
                     "Flush timeout outside of valid range \(0...Int32.max)"
                 )
-                try await client.flush(timeoutMilliseconds: Int32(self.config.flushTimeoutMilliseconds))
+                try await client.flush(timeoutMilliseconds: Int32(self.configuration.flushTimeoutMilliseconds))
                 source?.finish()
                 return
             case .terminatePollLoop:
@@ -238,12 +235,15 @@ public final class KafkaProducer: Service, Sendable {
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
-    /// Send messages to the Kafka cluster asynchronously. This method is non-blocking.
-    /// Message send results shall be handled through the ``KafkaMessageAcknowledgements`` `AsyncSequence`.
+    /// Send a ``KafkaProducerMessage`` to the Kafka cluster.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
-    /// - Returns: Unique ``KafkaProducerMessageID``matching the ``KafkaAcknowledgedMessage/id`` property
-    /// of the corresponding ``KafkaAcknowledgedMessage``.
+    /// This method does not wait until the message is sent and acknowledged by the cluster.
+    /// Instead, it buffers the message and returns immediately.
+    /// The message will be sent out with the next batch of messages.
+    ///
+    /// - Parameter message: The ``KafkaProducerMessage`` to send.
+    /// - Returns: Unique ``KafkaProducerMessageID``matching the ``KafkaDeliveryReport/id`` property
+    /// of the corresponding ``KafkaDeliveryReport``.
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
     public func send<Key, Value>(_ message: KafkaProducerMessage<Key, Value>) throws -> KafkaProducerMessageID {
@@ -253,7 +253,7 @@ public final class KafkaProducer: Service, Sendable {
             try client.produce(
                 message: message,
                 newMessageID: newMessageID,
-                topicConfig: self.topicConfig,
+                topicConfiguration: self.topicConfiguration,
                 topicHandles: topicHandles
             )
             return KafkaProducerMessageID(rawValue: newMessageID)

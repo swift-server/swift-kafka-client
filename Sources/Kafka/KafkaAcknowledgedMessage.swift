@@ -15,7 +15,7 @@
 import Crdkafka
 import NIOCore
 
-/// A message produced by the client and acknowledged by the Kafka cluster.
+/// A message acknowledged by the Kafka cluster.
 public struct KafkaAcknowledgedMessage {
     /// The topic that the message was sent to.
     public var topic: String
@@ -26,11 +26,11 @@ public struct KafkaAcknowledgedMessage {
     /// The body of the message.
     public var value: ByteBuffer
     /// The offset of the message in its partition.
-    public var offset: Int
+    public var offset: KafkaOffset
 
     /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
-    init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
+    internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
         let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
@@ -45,7 +45,7 @@ public struct KafkaAcknowledgedMessage {
         }
         self.topic = topic
 
-        self.partition = KafkaPartition(rawValue: rdKafkaMessage.partition)
+        self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
 
         if let keyPointer = rdKafkaMessage.key {
             let keyBufferPointer = UnsafeRawBufferPointer(
@@ -57,7 +57,7 @@ public struct KafkaAcknowledgedMessage {
             self.key = nil
         }
 
-        self.offset = Int(rdKafkaMessage.offset)
+        self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
     }
 }
 

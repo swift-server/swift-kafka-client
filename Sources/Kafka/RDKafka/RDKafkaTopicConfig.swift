@@ -17,12 +17,12 @@ import Crdkafka
 /// A collection of helper functions wrapping common `rd_kafka_topic_conf_*` functions in Swift.
 struct RDKafkaTopicConfig {
     /// Create a new `rd_kafka_topic_conf_t` object in memory and initialize it with the given configuration properties.
-    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used to initialize the `rd_kafka_topic_conf_t` object.
+    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used to initialize the `rd_kafka_topic_conf_t` object.
     /// - Returns: An `OpaquePointer` pointing to the newly created `rd_kafka_topic_conf_t` object in memory.
     /// - Throws: A ``KafkaError`` if setting a config value failed.
-    static func createFrom(topicConfig: KafkaTopicConfiguration) throws -> OpaquePointer {
+    static func createFrom(topicConfiguration: KafkaTopicConfiguration) throws -> OpaquePointer {
         let configPointer: OpaquePointer = rd_kafka_topic_conf_new()
-        try topicConfig.dictionary.forEach { key, value in
+        try topicConfiguration.dictionary.forEach { key, value in
             try Self.set(configPointer: configPointer, key: key, value: value)
         }
 

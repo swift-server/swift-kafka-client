@@ -95,16 +95,21 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     /// - Parameter newMessageID: ID that was assigned to the `message`.
-    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
     func produce<Key, Value>(
         message: KafkaProducerMessage<Key, Value>,
         newMessageID: UInt,
-        topicConfig: KafkaTopicConfiguration,
+        topicConfiguration: KafkaTopicConfiguration,
         topicHandles: RDKafkaTopicHandles
     ) throws {
+        precondition(
+            0...Int(Int32.max) ~= message.partition.rawValue || message.partition == .unassigned,
+            "Partition ID outside of valid range \(0...Int32.max)"
+        )
+
         let responseCode = try message.value.withUnsafeBytes { valueBuffer in
-            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfig: topicConfig) { topicHandle in
+            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfiguration: topicConfiguration) { topicHandle in
                 if let key = message.key {
                     // Key available, we can use scoped accessor to safely access its rawBufferPointer.
                     // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
@@ -112,7 +117,7 @@ final class RDKafkaClient: Sendable {
                     return key.withUnsafeBytes { keyBuffer in
                         return rd_kafka_produce(
                             topicHandle,
-                            message.partition.rawValue,
+                            Int32(message.partition.rawValue),
                             RD_KAFKA_MSG_F_COPY,
                             UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
                             valueBuffer.count,
@@ -127,7 +132,7 @@ final class RDKafkaClient: Sendable {
                     // Returns 0 on success, error code otherwise.
                     return rd_kafka_produce(
                         topicHandle,
-                        message.partition.rawValue,
+                        Int32(message.partition.rawValue),
                         RD_KAFKA_MSG_F_COPY,
                         UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
                         valueBuffer.count,
@@ -346,7 +351,7 @@ final class RDKafkaClient: Sendable {
         changesList.setOffset(
             topic: message.topic,
             partition: message.partition,
-            offset: Int64(message.offset + 1)
+            offset: Int64(message.offset.rawValue + 1)
         )
 
         let error = changesList.withListPointer { listPointer in
@@ -383,7 +388,7 @@ final class RDKafkaClient: Sendable {
             changesList.setOffset(
                 topic: message.topic,
                 partition: message.partition,
-                offset: Int64(message.offset + 1)
+                offset: Int64(message.offset.rawValue + 1)
             )
 
             // Unretained pass because the reference that librdkafka holds to capturedClosure

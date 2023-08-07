@@ -34,7 +34,7 @@ The `send(_:)` method of `KafkaProducer` returns a message-id that can later be 
 ```swift
 let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
 var config = KafkaProducerConfiguration()
-config.bootstrapServers = [broker]
+config.bootstrapBrokerAddresses = [broker]
 
 let (producer, events) = try KafkaProducer.makeProducerWithEvents(
     config: config,
@@ -86,7 +86,7 @@ var config = KafkaConsumerConfiguration(
         topic: "topic-name"
     )
 )
-config.bootstrapServers = [broker]
+config.bootstrapBrokerAddresses = [broker]
 
 let consumer = try KafkaConsumer(
     config: config,
@@ -123,7 +123,7 @@ let broker = KafkaConfiguration.Broker(host: "localhost", port: 9092)
 var config = KafkaConsumerConfiguration(
     consumptionStrategy: .group(id: "example-group", topics: ["topic-name"])
 )
-config.bootstrapServers = [broker]
+config.bootstrapBrokerAddresses = [broker]
 
 let consumer = try KafkaConsumer(
     config: config,
@@ -161,7 +161,7 @@ var config = KafkaConsumerConfiguration(
     consumptionStrategy: .group(id: "example-group", topics: ["topic-name"])
 )
 config.enableAutoCommit = false,
-config.bootstrapServers = [broker]
+config.bootstrapBrokerAddresses = [broker]
 
 let consumer = try KafkaConsumer(
     config: config,

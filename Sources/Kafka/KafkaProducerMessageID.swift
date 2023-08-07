@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 /// ID of message produced by the ``KafkaProducer``.
-/// The ``KafkaProducerMessageID`` is relates incoming ``KafkaAcknowledgedMessage``'s
+/// The ``KafkaProducerMessageID`` can be used to relate incoming ``KafkaDeliveryReport``s
 /// with their corresponding ``KafkaProducer/send(_:)`` invocation.
 public struct KafkaProducerMessageID {
     internal var rawValue: UInt

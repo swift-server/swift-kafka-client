@@ -42,13 +42,13 @@ final class KafkaConsumerTests: XCTestCase {
         // Set no bootstrap servers to trigger librdkafka configuration warning
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"])
+            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
+            bootstrapBrokerAddresses: []
         )
-        config.bootstrapServers = []
         config.securityProtocol = .plaintext
-        config.debug = [.all]
+        config.debugOptions = [.all]
 
-        let consumer = try KafkaConsumer(config: config, logger: mockLogger)
+        let consumer = try KafkaConsumer(configuration: config, logger: mockLogger)
 
         let serviceGroup = ServiceGroup(
             services: [consumer],

@@ -14,9 +14,9 @@
 
 /// Collection of types used in the configuration structs this library provides.
 public enum KafkaConfiguration {
-    /// A Kafka Broker to connect to.
-    public struct Broker: Sendable, Hashable, CustomStringConvertible {
-        /// The host component of the broker to connect to.
+    /// The address of a Kafka broker.
+    public struct BrokerAddress: Sendable, Hashable, CustomStringConvertible {
+        /// The host component of the broker address.
         public var host: String
 
         /// The port to connect to.
@@ -26,7 +26,10 @@ public enum KafkaConfiguration {
             "\(self.host):\(self.port)"
         }
 
-        public init(host: String, port: Int) {
+        public init(
+            host: String,
+            port: Int
+        ) {
             self.host = host
             self.port = port
         }
@@ -34,139 +37,214 @@ public enum KafkaConfiguration {
 
     /// Message options.
     public struct MessageOptions: Sendable, Hashable {
-        /// Maximum Kafka protocol request message size. Due to differing framing overhead between protocol versions the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests, the broker will enforce the the topic's max.message.bytes limit (see Apache Kafka documentation).
+        /// Maximum Kafka protocol request message size. Due to differing framing overhead between protocol versions, the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests.
+        /// The broker will enforce the topic's `max.message.bytes` limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
         /// Default: `1_000_000`
-        public var maxBytes: Int = 1_000_000
+        public var maximumBytes: Int = 1_000_000
 
-        /// Maximum size for message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs.
+        /// Maximum size for a message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs.
         /// Default: `65535`
-        public var copyMaxBytes: Int = 65535
+        public var maximumBytesToCopy: Int = 65535
 
-        public init(
-            maxBytes: Int = 1_000_000,
-            copyMaxBytes: Int = 65535
-        ) {
-            self.maxBytes = maxBytes
-            self.copyMaxBytes = copyMaxBytes
-        }
+        public init() {}
     }
 
     /// Topic metadata options.
     public struct TopicMetadataOptions: Sendable, Hashable {
-        /// Period of time in milliseconds at which topic and broker metadata is refreshed in order to proactively discover any new brokers, topics, partitions or partition leader changes. Use -1 to disable the intervalled refresh (not recommended). If there are no locally referenced topics (no topic objects created, no messages produced, no subscription or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
-        /// Default: `300_000`
-        public var refreshIntervalMilliseconds: Int = 300_000
+        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions or partition leader changes.
+        public struct RefreshInterval: Sendable, Hashable {
+            internal let rawValue: Int
+
+            private init(rawValue: Int) {
+                self.rawValue = rawValue
+            }
+
+            /// (Lowest granularity is milliseconds)
+            public static func interval(_ value: Duration) -> RefreshInterval {
+                precondition(
+                    value.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+                return .init(rawValue: Int(value.inMilliseconds))
+            }
+
+            /// Disable the intervalled refresh (not recommended).
+            public static let disable: RefreshInterval = .init(rawValue: -1)
+        }
+
+        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions or partition leader changes.
+        /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
+        /// Default: `.interval(.milliseconds(300_000))`
+        public var refreshInterval: RefreshInterval = .interval(.milliseconds(300_000))
 
         /// When a topic loses its leader a new metadata request will be enqueued with this initial interval, exponentially increasing until the topic metadata has been refreshed. This is used to recover quickly from transitioning leader brokers.
-        /// Default: `250`
-        public var refreshFastIntervalMilliseconds: Int = 250
+        /// Default: `.milliseconds(250)`
+        public var refreshFastInterval: Duration = .milliseconds(250) {
+            didSet {
+                precondition(
+                    self.refreshFastInterval.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
+        }
 
         /// Sparse metadata requests (consumes less network bandwidth).
         /// Default: `true`
-        public var refreshSparse: Bool = true
+        public var isSparseRefreshingEnabled: Bool = true
 
         /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic will seem to be non-existent and the client will mark the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as non-existent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, e.g., on `send()`.
-        /// Default: `30000`
-        public var propagationMaxMilliseconds: Int = 30000
-
-        public init(
-            refreshIntervalMilliseconds: Int = 300_000,
-            refreshFastIntervalMilliseconds: Int = 250,
-            refreshSparse: Bool = true,
-            propagationMaxMilliseconds: Int = 30000
-        ) {
-            self.refreshIntervalMilliseconds = refreshIntervalMilliseconds
-            self.refreshFastIntervalMilliseconds = refreshFastIntervalMilliseconds
-            self.refreshSparse = refreshSparse
-            self.propagationMaxMilliseconds = propagationMaxMilliseconds
+        /// Default: `.milliseconds(30000)`
+        public var maximumPropagation: Duration = .milliseconds(30000) {
+            didSet {
+                precondition(
+                    self.maximumPropagation.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
         }
+
+        public init() {}
     }
 
     /// Socket options.
     public struct SocketOptions: Sendable, Hashable {
-        /// Default timeout for network requests. Producer: ProduceRequests will use the lesser value of socket.timeout.ms and remaining message.timeout.ms for the first message in the batch. Consumer: FetchRequests will use fetch.wait.max.ms + socket.timeout.ms.
-        /// Default: `60000`
-        public var timeoutMilliseconds: Int = 60000
+        /// Default timeout for network requests. Producer: ProduceRequests will use the lesser value of ``KafkaConfiguration/SocketOptions/timeout``
+        /// and remaining ``KafkaTopicConfiguration/messageTimeout``for the first message in the batch.
+        /// Default: `.milliseconds(60000)`
+        public var timeout: Duration = .milliseconds(60000) {
+            didSet {
+                precondition(
+                    self.timeout.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
+        }
 
-        /// Broker socket send buffer size. System default is used if 0.
-        /// Default: `0`
-        public var sendBufferBytes: Int = 0
+        /// Broker socket send/receive buffer size.
+        public struct BufferSize: Sendable, Hashable {
+            internal let rawValue: Int
 
-        /// Broker socket receive buffer size. System default is used if 0.
-        /// Default: `0`
-        public var receiveBufferBytes: Int = 0
+            private init(rawValue: Int) {
+                self.rawValue = rawValue
+            }
+
+            public static func value(_ value: Int) -> BufferSize {
+                .init(rawValue: value)
+            }
+
+            /// System default for send/receive buffer size.
+            public static let systemDefault: BufferSize = .init(rawValue: 0)
+        }
+
+        /// Broker socket send buffer size.
+        /// Default: `.systemDefault`
+        public var sendBufferBytes: BufferSize = .systemDefault
+
+        /// Broker socket receive buffer size.
+        /// Default: `.systemDefault`
+        public var receiveBufferBytes: BufferSize = .systemDefault
 
         /// Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets.
         /// Default: `false`
-        public var keepaliveEnable: Bool = false
+        public var isKeepaliveEnabled: Bool = false
 
         /// Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.
         /// Default: `false`
-        public var nagleDisable: Bool = false
+        public var isNagleDisabled: Bool = false
 
-        /// Disconnect from broker when this number of send failures (e.g., timed out requests) is reached. Disable with 0. WARNING: It is highly recommended to leave this setting at its default value of 1 to avoid the client and broker to become desynchronized in case of request timeouts. NOTE: The connection is automatically re-established.
-        /// Default: `1`
-        public var maxFails: Int = 1
+        /// Disconnect from the broker when this number of send failures (e.g., timed-out requests) is reached.
+        public struct MaximumFailures: Sendable, Hashable {
+            internal let rawValue: Int
 
-        /// Maximum time allowed for broker connection setup (TCP connection setup as well SSL and SASL handshake). If the connection to the broker is not fully functional after this the connection will be closed and retried.
-        /// Default: `30000`
-        public var connectionSetupTimeoutMilliseconds: Int = 30000
+            private init(rawValue: Int) {
+                self.rawValue = rawValue
+            }
 
-        public init(
-            timeoutMilliseconds: Int = 60000,
-            sendBufferBytes: Int = 0,
-            receiveBufferBytes: Int = 0,
-            keepaliveEnable: Bool = false,
-            nagleDisable: Bool = false,
-            maxFails: Int = 1,
-            connectionSetupTimeoutMilliseconds: Int = 30000
-        ) {
-            self.timeoutMilliseconds = timeoutMilliseconds
-            self.sendBufferBytes = sendBufferBytes
-            self.receiveBufferBytes = receiveBufferBytes
-            self.keepaliveEnable = keepaliveEnable
-            self.nagleDisable = nagleDisable
-            self.maxFails = maxFails
-            self.connectionSetupTimeoutMilliseconds = connectionSetupTimeoutMilliseconds
+            public static func failures(_ value: Int) -> MaximumFailures {
+                .init(rawValue: value)
+            }
+
+            /// Disable disconnecting from the broker on a number of send failures.
+            public static let disable: MaximumFailures = .init(rawValue: 0)
         }
+
+        /// Disconnect from the broker when this number of send failures (e.g., timed-out requests) is reached.
+        ///
+        /// - Warning: It is highly recommended to leave this setting at its default value of 1 to avoid the client and broker becoming desynchronized in case of request timeouts.
+        /// - Note: The connection is automatically re-established.
+        /// Default: `.failures(1)`
+        public var maximumFailures: MaximumFailures = .failures(1)
+
+        /// Maximum time allowed for broker connection setup (TCP connection setup as well SSL and SASL handshake).
+        /// If the connection to the broker is not fully functional after this the connection will be closed and retried.
+        /// Default: `.milliseconds(30000)`
+        public var connectionSetupTimeout: Duration = .milliseconds(30000)
+
+        public init() {}
     }
 
     /// Broker options.
     public struct BrokerOptions: Sendable, Hashable {
-        /// How long to cache the broker address resolving results (milliseconds).
-        /// Default: `1000`
-        public var addressTTL: Int = 1000
+        /// How long to cache the broker address resolving results.
+        /// (Lowest granularity is milliseconds)
+        /// Default: `.milliseconds(1000)`
+        public var addressTimeToLive: Duration = .milliseconds(1000) {
+            didSet {
+                precondition(
+                    self.addressTimeToLive.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
+        }
 
         /// Allowed broker ``KafkaConfiguration/IPAddressFamily``.
         /// Default: `.any`
-        public var addressFamily: KafkaConfiguration.IPAddressFamily = .any
+        public var addressFamily: IPAddressFamily = .any
 
-        public init(
-            addressTTL: Int = 1000,
-            addressFamily: KafkaConfiguration.IPAddressFamily = .any
-        ) {
-            self.addressTTL = addressTTL
-            self.addressFamily = addressFamily
-        }
+        public init() {}
     }
 
     /// Reconnect options.
     public struct ReconnectOptions: Sendable, Hashable {
-        /// The initial time to wait before reconnecting to a broker after the connection has been closed. The time is increased exponentially until reconnect.backoff.max.ms is reached. -25% to +50% jitter is applied to each reconnect backoff. A value of 0 disables the backoff and reconnects immediately.
-        /// Default: `100`
-        public var backoffMilliseconds: Int = 100
+        /// The initial time to wait before reconnecting to a broker after the connection has been closed.
+        public struct Backoff: Sendable, Hashable {
+            internal let rawValue: UInt
+
+            private init(rawValue: UInt) {
+                self.rawValue = rawValue
+            }
+
+            /// (Lowest granularity is milliseconds)
+            public static func backoff(_ value: Duration) -> Backoff {
+                precondition(
+                    value.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+                return .init(rawValue: value.inMilliseconds)
+            }
+
+            /// Disable the backoff and reconnect immediately.
+            public static let disable: Backoff = .init(rawValue: 0)
+        }
+
+        /// The initial time to wait before reconnecting to a broker after the connection has been closed.
+        /// The time is increased exponentially until ``KafkaConfiguration/ReconnectOptions/maximumBackoff``is reached.
+        /// -25% to +50% jitter is applied to each reconnect backoff.
+        /// Default: `.backoff(.milliseconds(100))`
+        public var backoff: Backoff = .backoff(.milliseconds(100))
 
         /// The maximum time to wait before reconnecting to a broker after the connection has been closed.
-        /// Default: `10000`
-        public var backoffMaxMilliseconds: Int = 10000
-
-        public init(
-            backoffMilliseconds: Int = 100,
-            backoffMaxMilliseconds: Int = 10000
-        ) {
-            self.backoffMilliseconds = backoffMilliseconds
-            self.backoffMaxMilliseconds = backoffMaxMilliseconds
+        /// Default: `.milliseconds(10000)`
+        public var maximumBackoff: Duration = .milliseconds(10000) {
+            didSet {
+                precondition(
+                    self.maximumBackoff.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
         }
+
+        public init() {}
     }
 
     // MARK: - Enum-like Option types

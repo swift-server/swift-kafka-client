@@ -23,181 +23,10 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// The strategy used for consuming messages.
-    /// See ``KafkaConfiguration/ConsumptionStrategy`` for more information.
-    public var consumptionStrategy: KafkaConfiguration.ConsumptionStrategy
-
-    // MARK: - Consumer-specific Config Properties
-
-    /// Client group session options.
-    public var session: KafkaConfiguration.SessionOptions = .init()
-
-    /// Group session keepalive heartbeat interval.
-    /// Default: `3000`
-    public var heartbeatIntervalMilliseconds: Int = 3000
-
-    /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance in order to reassign the partitions to another consumer group member. Warning: Offset commits may be not possible at this point. Note: It is recommended to set enable.auto.offset.store=false for long-time processing applications and then explicitly store offsets (using offsets_store()) after message processing, to make sure offsets are not auto-committed prior to processing has finished. The interval is checked two times per second. See KIP-62 for more information.
-    /// Default: `300_000`
-    public var maxPollInvervalMilliseconds: Int = 300_000
-
-    /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
-    /// Default: `true`
-    public var enableAutoCommit: Bool = true
-
-    /// The frequency in milliseconds that the consumer offsets are committed (written) to offset storage. (0 = disable).
-    /// Default: `5000`
-    public var autoCommitIntervalMilliseconds: Int = 5000
-
-    /// Action to take when there is no initial offset in offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
-    /// Default: `.largest`
-    public var autoOffsetReset: KafkaConfiguration.AutoOffsetReset = .largest
-
-    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
-    /// The broker must also be configured with auto.create.topics.enable=true for this configuration to take effect.
-    /// Default: `false`
-    public var allowAutoCreateTopics: Bool = false
-
-    // MARK: - Common Client Config Properties
-
-    /// Client identifier.
-    /// Default: `"rdkafka"`
-    public var clientID: String = "rdkafka"
-
-    /// Initial list of brokers.
-    /// Default: `[]`
-    public var bootstrapServers: [KafkaConfiguration.Broker] = []
-
-    /// Message options.
-    public var message: KafkaConfiguration.MessageOptions = .init()
-
-    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hickups. This value must be at least fetch.max.bytes + 512 to allow for protocol overhead; the value is adjusted automatically unless the configuration property is explicitly set.
-    /// Default: `100_000_000`
-    public var receiveMessageMaxBytes: Int = 100_000_000
-
-    /// Maximum number of in-flight requests per broker connection. This is a generic property applied to all broker communication, however it is primarily relevant to produce requests. In particular, note that other mechanisms limit the number of outstanding consumer fetch request per broker to one.
-    /// Default: `1_000_000`
-    public var maxInFlightRequestsPerConnection: Int = 1_000_000
-
-    /// Metadata cache max age.
-    /// Default: `900_000`
-    public var metadataMaxAgeMilliseconds: Int = 900_000
-
-    /// Topic metadata options.
-    public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
-
-    /// Topic denylist.
-    /// Default: `[]`
-    public var topicDenylist: [String] = []
-
-    /// Debug options.
-    /// Default: `[]`
-    public var debug: [KafkaConfiguration.DebugOption] = []
-
-    /// Socket options.
-    public var socket: KafkaConfiguration.SocketOptions = .init()
-
-    /// Broker options.
-    public var broker: KafkaConfiguration.BrokerOptions = .init()
-
-    /// Reconnect options.
-    public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
-
-    /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
-    /// Default: `.plaintext`
-    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
-
-    public init(consumptionStrategy: KafkaConfiguration.ConsumptionStrategy) {
-        self.consumptionStrategy = consumptionStrategy
-    }
-}
-
-// MARK: - KafkaConsumerConfiguration + Dictionary
-
-extension KafkaConsumerConfiguration {
-    internal var dictionary: [String: String] {
-        var resultDict: [String: String] = [:]
-
-        switch self.consumptionStrategy._internal {
-        case .partition:
-            // Although an assignment is not related to a consumer group,
-            // librdkafka requires us to set a `group.id`.
-            // This is a known issue:
-            // https://github.com/edenhill/librdkafka/issues/3261
-            resultDict["group.id"] = UUID().uuidString
-        case .group(groupID: let groupID, topics: _):
-            resultDict["group.id"] = groupID
-        }
-
-        resultDict["session.timeout.ms"] = String(session.timeoutMilliseconds)
-        resultDict["heartbeat.interval.ms"] = String(heartbeatIntervalMilliseconds)
-        resultDict["max.poll.interval.ms"] = String(maxPollInvervalMilliseconds)
-        resultDict["enable.auto.commit"] = String(enableAutoCommit)
-        resultDict["auto.commit.interval.ms"] = String(autoCommitIntervalMilliseconds)
-        resultDict["auto.offset.reset"] = autoOffsetReset.description
-        resultDict["allow.auto.create.topics"] = String(allowAutoCreateTopics)
-
-        resultDict["client.id"] = clientID
-        resultDict["bootstrap.servers"] = bootstrapServers.map(\.description).joined(separator: ",")
-        resultDict["message.max.bytes"] = String(message.maxBytes)
-        resultDict["message.copy.max.bytes"] = String(message.copyMaxBytes)
-        resultDict["receive.message.max.bytes"] = String(receiveMessageMaxBytes)
-        resultDict["max.in.flight.requests.per.connection"] = String(maxInFlightRequestsPerConnection)
-        resultDict["metadata.max.age.ms"] = String(metadataMaxAgeMilliseconds)
-        resultDict["topic.metadata.refresh.interval.ms"] = String(topicMetadata.refreshIntervalMilliseconds)
-        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(topicMetadata.refreshFastIntervalMilliseconds)
-        resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.refreshSparse)
-        resultDict["topic.metadata.propagation.max.ms"] = String(topicMetadata.propagationMaxMilliseconds)
-        resultDict["topic.blacklist"] = topicDenylist.joined(separator: ",")
-        if !debug.isEmpty {
-            resultDict["debug"] = debug.map(\.description).joined(separator: ",")
-        }
-        resultDict["socket.timeout.ms"] = String(socket.timeoutMilliseconds)
-        resultDict["socket.send.buffer.bytes"] = String(socket.sendBufferBytes)
-        resultDict["socket.receive.buffer.bytes"] = String(socket.receiveBufferBytes)
-        resultDict["socket.keepalive.enable"] = String(socket.keepaliveEnable)
-        resultDict["socket.nagle.disable"] = String(socket.nagleDisable)
-        resultDict["socket.max.fails"] = String(socket.maxFails)
-        resultDict["socket.connection.setup.timeout.ms"] = String(socket.connectionSetupTimeoutMilliseconds)
-        resultDict["broker.address.ttl"] = String(broker.addressTTL)
-        resultDict["broker.address.family"] = broker.addressFamily.description
-        resultDict["reconnect.backoff.ms"] = String(reconnect.backoffMilliseconds)
-        resultDict["reconnect.backoff.max.ms"] = String(reconnect.backoffMaxMilliseconds)
-
-        // Merge with SecurityProtocol configuration dictionary
-        resultDict.merge(securityProtocol.dictionary) { _, _ in
-            fatalError("securityProtocol and \(#file) should not have duplicate keys")
-        }
-
-        return resultDict
-    }
-}
-
-// MARK: - KafkaConsumerConfiguration + Hashable
-
-extension KafkaConsumerConfiguration: Hashable {}
-
-// MARK: - KafkaConsumerConfiguration + Sendable
-
-extension KafkaConsumerConfiguration: Sendable {}
-
-// MARK: - KafkaConfiguration + Consumer Additions
-
-extension KafkaConfiguration {
-    /// Client group session options.
-    public struct SessionOptions: Sendable, Hashable {
-        /// Client group session and failure detection timeout. The consumer sends periodic heartbeats (heartbeat.interval.ms) to indicate its liveness to the broker. If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance. The allowed range is configured with the broker configuration properties group.min.session.timeout.ms and group.max.session.timeout.ms. Also see max.poll.interval.ms.
-        /// Default: `45000`
-        public var timeoutMilliseconds: Int = 45000
-
-        public init(timeoutMilliseconds: Int = 45000) {
-            self.timeoutMilliseconds = timeoutMilliseconds
-        }
-    }
-
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {
-            case partition(topic: String, partition: KafkaPartition, offset: Int)
+            case partition(topic: String, partition: KafkaPartition, offset: KafkaOffset)
             case group(groupID: String, topics: [String])
         }
 
@@ -213,12 +42,11 @@ extension KafkaConfiguration {
         /// - Parameters:
         ///     - partition: The partition of the topic to consume from.
         ///     - topic: The name of the Kafka topic.
-        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
-        ///       Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
+        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
         public static func partition(
             _ partition: KafkaPartition,
             topic: String,
-            offset: Int = Int(RD_KAFKA_OFFSET_END)
+            offset: KafkaOffset = .end
         ) -> ConsumptionStrategy {
             return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
         }
@@ -233,6 +61,67 @@ extension KafkaConfiguration {
             return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
         }
     }
+
+    /// The strategy used for consuming messages.
+    /// See ``KafkaConfiguration/ConsumptionStrategy`` for more information.
+    public var consumptionStrategy: ConsumptionStrategy
+
+    // MARK: - Consumer-specific Config Properties
+
+    /// Client group session options.
+    public struct SessionOptions: Sendable, Hashable {
+        /// Client group session and failure detection timeout.
+        /// The consumer sends periodic heartbeats (``KafkaConsumerConfiguration/heartbeatInterval``) to indicate its liveness to the broker.
+        /// If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance.
+        /// (Lowest granularity is milliseconds)
+        /// Default: `.milliseconds(45000)`
+        public var timeout: Duration = .milliseconds(45000) {
+            didSet {
+                precondition(
+                    timeout.canBeRepresentedAsMilliseconds,
+                    "Lowest granularity is milliseconds"
+                )
+            }
+        }
+
+        public init() {}
+    }
+
+    /// Client group session options.
+    public var session: SessionOptions = .init()
+
+    /// Group session keepalive heartbeat interval.
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(3000)`
+    public var heartbeatInterval: Duration = .milliseconds(3000) {
+        didSet {
+            precondition(
+                heartbeatInterval.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
+
+    /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance to reassign the partitions to another consumer group member.
+    ///
+    /// - Warning: Offset commits may be not possible at this point.
+    ///
+    /// The interval is checked two times per second. See KIP-62 for more information.
+    ///
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(300_000)`
+    public var maximumPollInterval: Duration = .milliseconds(300_000) {
+        didSet {
+            precondition(
+                maximumPollInterval.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
+
+    /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
+    /// Default: `true`
+    public var isAutoCommitEnabled: Bool = true
 
     /// Available actions to take when there is no initial offset in offset store / offset is out of range.
     public struct AutoOffsetReset: Sendable, Hashable, CustomStringConvertible {
@@ -253,4 +142,144 @@ extension KafkaConfiguration {
         /// Trigger an error when there is no initial offset / offset is out of range.
         public static let error = AutoOffsetReset(description: "error")
     }
+
+    /// Action to take when there is no initial offset in the offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
+    /// Default: `.largest`
+    public var autoOffsetReset: AutoOffsetReset = .largest
+
+    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
+    /// The broker must also be configured with ``KafkaConsumerConfiguration/isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
+    /// Default: `false`
+    public var isAutoCreateTopicsEnabled: Bool = false
+
+    // MARK: - Common Client Config Properties
+
+    /// Client identifier.
+    /// Default: `"rdkafka"`
+    public var identifier: String = "rdkafka"
+
+    /// Initial list of brokers.
+    /// Default: `[]`
+    public var bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress] = []
+
+    /// Message options.
+    public var message: KafkaConfiguration.MessageOptions = .init()
+
+    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
+    /// Default: `100_000_000`
+    public var maximumReceiveMessageBytes: Int = 100_000_000
+
+    /// Maximum number of in-flight requests per broker connection.
+    /// This is a generic property applied to all broker communication, however, it is primarily relevant to produce requests.
+    /// In particular, note that other mechanisms limit the number of outstanding consumer fetch requests per broker to one.
+    /// Default: `1_000_000`
+    public var maximumInFlightRequestsPerConnection: Int = 1_000_000
+
+    /// Metadata cache max age.
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(900_000)`
+    public var maximumMetadataAge: Duration = .milliseconds(900_000) {
+        didSet {
+            precondition(
+                maximumMetadataAge.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
+
+    /// Topic metadata options.
+    public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
+
+    /// Topic denylist.
+    /// Default: `[]`
+    public var topicDenylist: [String] = []
+
+    /// Debug options.
+    /// Default: `[]`
+    public var debugOptions: [KafkaConfiguration.DebugOption] = []
+
+    /// Socket options.
+    public var socket: KafkaConfiguration.SocketOptions = .init()
+
+    /// Broker options.
+    public var broker: KafkaConfiguration.BrokerOptions = .init()
+
+    /// Reconnect options.
+    public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
+
+    /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
+    /// Default: `.plaintext`
+    public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
+
+    public init(
+        consumptionStrategy: ConsumptionStrategy,
+        bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
+    ) {
+        self.consumptionStrategy = consumptionStrategy
+        self.bootstrapBrokerAddresses = bootstrapBrokerAddresses
+    }
 }
+
+// MARK: - KafkaConsumerConfiguration + Dictionary
+
+extension KafkaConsumerConfiguration {
+    internal var dictionary: [String: String] {
+        var resultDict: [String: String] = [:]
+
+        switch self.consumptionStrategy._internal {
+        case .partition:
+            // Although an assignment is not related to a consumer group,
+            // librdkafka requires us to set a `group.id`.
+            // This is a known issue:
+            // https://github.com/edenhill/librdkafka/issues/3261
+            resultDict["group.id"] = UUID().uuidString
+        case .group(groupID: let groupID, topics: _):
+            resultDict["group.id"] = groupID
+        }
+
+        resultDict["session.timeout.ms"] = String(session.timeout.inMilliseconds)
+        resultDict["heartbeat.interval.ms"] = String(heartbeatInterval.inMilliseconds)
+        resultDict["max.poll.interval.ms"] = String(maximumPollInterval.inMilliseconds)
+        resultDict["enable.auto.commit"] = String(isAutoCommitEnabled)
+        resultDict["auto.offset.reset"] = autoOffsetReset.description
+        resultDict["allow.auto.create.topics"] = String(isAutoCreateTopicsEnabled)
+
+        resultDict["client.id"] = identifier
+        resultDict["bootstrap.servers"] = bootstrapBrokerAddresses.map(\.description).joined(separator: ",")
+        resultDict["message.max.bytes"] = String(message.maximumBytes)
+        resultDict["message.copy.max.bytes"] = String(message.maximumBytesToCopy)
+        resultDict["receive.message.max.bytes"] = String(maximumReceiveMessageBytes)
+        resultDict["max.in.flight.requests.per.connection"] = String(maximumInFlightRequestsPerConnection)
+        resultDict["metadata.max.age.ms"] = String(maximumMetadataAge.inMilliseconds)
+        resultDict["topic.metadata.refresh.interval.ms"] = String(topicMetadata.refreshInterval.rawValue)
+        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(topicMetadata.refreshFastInterval.inMilliseconds)
+        resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.isSparseRefreshingEnabled)
+        resultDict["topic.metadata.propagation.max.ms"] = String(topicMetadata.maximumPropagation.inMilliseconds)
+        resultDict["topic.blacklist"] = topicDenylist.joined(separator: ",")
+        if !debugOptions.isEmpty {
+            resultDict["debug"] = debugOptions.map(\.description).joined(separator: ",")
+        }
+        resultDict["socket.timeout.ms"] = String(socket.timeout.inMilliseconds)
+        resultDict["socket.send.buffer.bytes"] = String(socket.sendBufferBytes.rawValue)
+        resultDict["socket.receive.buffer.bytes"] = String(socket.receiveBufferBytes.rawValue)
+        resultDict["socket.keepalive.enable"] = String(socket.isKeepaliveEnabled)
+        resultDict["socket.nagle.disable"] = String(socket.isNagleDisabled)
+        resultDict["socket.max.fails"] = String(socket.maximumFailures.rawValue)
+        resultDict["socket.connection.setup.timeout.ms"] = String(socket.connectionSetupTimeout.inMilliseconds)
+        resultDict["broker.address.ttl"] = String(broker.addressTimeToLive.inMilliseconds)
+        resultDict["broker.address.family"] = broker.addressFamily.description
+        resultDict["reconnect.backoff.ms"] = String(reconnect.backoff.rawValue)
+        resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
+
+        // Merge with SecurityProtocol configuration dictionary
+        resultDict.merge(securityProtocol.dictionary) { _, _ in
+            fatalError("securityProtocol and \(#file) should not have duplicate keys")
+        }
+
+        return resultDict
+    }
+}
+
+// MARK: - KafkaConsumerConfiguration + Sendable
+
+extension KafkaConsumerConfiguration: Sendable {}
