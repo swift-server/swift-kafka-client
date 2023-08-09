@@ -19,37 +19,51 @@ import Logging
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
 final class RDKafkaClient: Sendable {
+    // Default size for Strings returned from C API
+    static let stringSize = 1024
+
     /// Determines if client is a producer or a consumer.
     enum ClientType {
         case producer
         case consumer
     }
 
-    // Default size for Strings returned from C API
-    static let stringSize = 1024
-
     /// Handle for the C library's Kafka instance.
     private let kafkaHandle: OpaquePointer
     /// A logger.
     private let logger: Logger
 
-    /// `librdkafka`'s main `rd_kafka_queue_t`.
-    private let mainQueue: OpaquePointer
+    /// `librdkafka`'s `rd_kafka_queue_t` that events are received on.
+    private let queue: OpaquePointer
 
     // Use factory method to initialize
     private init(
+        type: ClientType,
         kafkaHandle: OpaquePointer,
         logger: Logger
     ) {
         self.kafkaHandle = kafkaHandle
         self.logger = logger
 
-        self.mainQueue = rd_kafka_queue_get_main(self.kafkaHandle)
+        if type == .consumer {
+            if let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle) {
+                // (Important)
+                // Polling the queue counts as a consumer poll, and will reset the timer for `max.poll.interval.ms`.
+                self.queue = consumerQueue
+            } else {
+                // Getting consumer queue failed, use main queue.
+                self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
+            }
+        } else {
+            self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
+        }
 
-        rd_kafka_set_log_queue(self.kafkaHandle, self.mainQueue)
+        rd_kafka_set_log_queue(self.kafkaHandle, self.queue)
     }
 
     deinit {
+        // Loose reference to librdkafka's event queue
+        rd_kafka_queue_destroy(self.queue)
         rd_kafka_destroy(kafkaHandle)
     }
 
@@ -60,8 +74,6 @@ final class RDKafkaClient: Sendable {
         events: [RDKafkaEvent],
         logger: Logger
     ) throws -> RDKafkaClient {
-        let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
-
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
         // Manually override some of the configuration options
         // Handle logs in event queue
@@ -75,6 +87,7 @@ final class RDKafkaClient: Sendable {
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
+        let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
         guard let handle = rd_kafka_new(
             clientType,
             rdConfig,
@@ -88,7 +101,7 @@ final class RDKafkaClient: Sendable {
             throw KafkaError.client(reason: errorString)
         }
 
-        return RDKafkaClient(kafkaHandle: handle, logger: logger)
+        return RDKafkaClient(type: type, kafkaHandle: handle, logger: logger)
     }
 
     /// Produce a message to the Kafka cluster.
@@ -163,7 +176,7 @@ final class RDKafkaClient: Sendable {
         events.reserveCapacity(maxEvents)
 
         for _ in 0..<maxEvents {
-            let event = rd_kafka_queue_poll(self.mainQueue, 0)
+            let event = rd_kafka_queue_poll(self.queue, 0)
             defer { rd_kafka_event_destroy(event) }
 
             let rdEventType = rd_kafka_event_type(event)
@@ -399,7 +412,7 @@ final class RDKafkaClient: Sendable {
                 rd_kafka_commit_queue(
                     self.kafkaHandle,
                     listPointer,
-                    self.mainQueue,
+                    self.queue,
                     nil,
                     opaquePointer
                 )
