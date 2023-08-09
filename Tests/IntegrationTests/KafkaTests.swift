@@ -470,7 +470,7 @@ final class KafkaTests: XCTestCase {
                 break // Ignore any other events
             }
 
-            if receivedDeliveryReports.count >= 2 {
+            if receivedDeliveryReports.count >= messages.count {
                 break
             }
         }
