@@ -314,7 +314,7 @@ public final class KafkaConsumer: Sendable, Service {
         switch action {
         case .setUpConnection(let client):
             let assignment = RDKafkaTopicPartitionList()
-            assignment.setOffset(topic: topic, partition: partition, offset: Int64(offset.rawValue))
+            assignment.setOffset(topic: topic, partition: partition, offset: offset)
             try client.assign(topicPartitionList: assignment)
         }
     }
@@ -427,6 +427,10 @@ public final class KafkaConsumer: Sendable, Service {
                 logger.error("Caught unknown error: \(error)")
             }
         }
+    }
+
+    func client() throws -> RDKafkaClient {
+        return try self.stateMachine.withLockedValue { try $0.client() }
     }
 }
 
@@ -696,6 +700,23 @@ extension KafkaConsumer {
                 return .triggerGracefulShutdown(client: client)
             case .finishing, .finished:
                 return nil
+            }
+        }
+
+        func client() throws -> RDKafkaClient {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .initializing(let client, _):
+                return client
+            case .consuming(let client, _):
+                return client
+            case .consumptionStopped(let client):
+                return client
+            case .finishing(let client):
+                return client
+            case .finished:
+                throw KafkaError.client(reason: "Client is stopped")
             }
         }
     }
