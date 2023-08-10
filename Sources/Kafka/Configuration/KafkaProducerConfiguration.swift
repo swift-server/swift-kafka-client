@@ -107,7 +107,7 @@ public struct KafkaProducerConfiguration {
     public var isAutoCreateTopicsEnabled: Bool = true
 
     // MARK: - Common Client Config Properties
-    
+
     /// Client identifier.
     /// Default: `"rdkafka"`
     public var identifier: String = "rdkafka"

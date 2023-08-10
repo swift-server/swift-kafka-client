@@ -119,7 +119,7 @@ public final class KafkaProducer: Service, Sendable {
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: configuration.dictionary,
-            events: [.log],
+            events: [.log], // No .deliveryReport here!
             logger: logger
         )
 
