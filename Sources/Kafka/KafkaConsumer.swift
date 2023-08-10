@@ -321,6 +321,57 @@ public final class KafkaConsumer: Sendable, Service {
             try client.assign(topicPartitionList: assignment)
         }
     }
+    
+    public func assign(_ list: KafkaTopicList) throws {
+        let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
+        switch action {
+        case .allowed(let client):
+            try client.assign(topicPartitionList: list.list)
+        case .denied(let err):
+            throw KafkaError.client(reason: err)
+        }
+    }
+    
+    public func incrementalAssign(_ list: KafkaTopicList) throws {
+        let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
+        switch action {
+        case .allowed(let client):
+            try client.incrementalAssign(topicPartitionList: list.list)
+        case .denied(let err):
+            throw KafkaError.client(reason: err)
+        }
+    }
+    
+    public func incrementalUnassign(_ list: KafkaTopicList) throws {
+        let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
+        switch action {
+        case .allowed(let client):
+            try client.incrementalUnassign(topicPartitionList: list.list)
+        case .denied(let err):
+            throw KafkaError.client(reason: err)
+        }
+    }
+    
+    // TODO: add docc: timeout = 0 -> async (no errors reported)
+    public func seek(_ list: KafkaTopicList, timeout: Duration) async throws {
+        let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
+        switch action {
+        case .allowed(let client):
+            try await client.seek(topicPartitionList: list.list, timeout: timeout)
+        case .denied(let err):
+            throw KafkaError.client(reason: err)
+        }
+    }
+
+    public func seek(_ list: KafkaTopicList) throws {
+        let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
+        switch action {
+        case .allowed(let client):
+            try client.seek(topicPartitionList: list.list)
+        case .denied(let err):
+            throw KafkaError.client(reason: err)
+        }
+    }
 
     /// Start the ``KafkaConsumer``.
     ///
@@ -705,6 +756,34 @@ extension KafkaConsumer {
                 return nil
             }
         }
+        
+        enum RebalanceAction {
+            /// Rebalance is still possible
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            case allowed(
+                client: RDKafkaClient
+            )
+            /// Throw an error. The ``KafkaConsumer`` is closed.
+            case denied(error: String)
+        }
+
+        
+        func seekOrRebalance() -> RebalanceAction {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .initializing:
+                fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
+            case .consumptionStopped(let client),
+                 .consuming(let client, _, _),
+                 .finishing(let client):
+                return .allowed(client: client)
+            case .finished:
+                return .denied(error: "Cannot perform reblance actions, consumer stopped")
+            }
+        }
+
 
         func client() throws -> RDKafkaClient {
             switch self.state {
