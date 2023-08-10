@@ -283,4 +283,25 @@ public enum KafkaConfiguration {
         /// Use the IPv6 address family.
         public static let v6 = IPAddressFamily(description: "v6")
     }
+    
+    /// Minimum time between key refresh attempts.
+    public struct KeyRefreshAttempts: Sendable, Hashable {
+        internal let rawValue: UInt
+
+        private init(rawValue: UInt) {
+            self.rawValue = rawValue
+        }
+
+        /// (Lowest granularity is milliseconds)
+        public static func value(_ value: Duration) -> KeyRefreshAttempts {
+            precondition(
+                value.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+            return .init(rawValue: UInt(value.inMilliseconds))
+        }
+
+        /// Disable automatic key refresh by setting this property.
+        public static let disable: KeyRefreshAttempts = .init(rawValue: 0)
+    }
 }

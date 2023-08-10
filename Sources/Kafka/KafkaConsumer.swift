@@ -250,7 +250,7 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
-        if configuration.statisticsInterval != .zero {
+        if configuration.statisticsInterval != .disable {
             subscribedEvents.append(.statistics)
         }
 

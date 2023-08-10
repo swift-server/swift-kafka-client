@@ -360,8 +360,7 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testProducerStatistics() async throws {
-        self.config.statisticsInterval = Duration.milliseconds(10)
-        self.config.debugOptions = [.all]
+        self.config.statisticsInterval = .value(.milliseconds(10))
 
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
             configuration: self.config,

@@ -22,8 +22,4 @@ extension Duration {
     internal var canBeRepresentedAsMilliseconds: Bool {
         return self.inMilliseconds > 0
     }
-    
-    internal static var disabled: Duration { // FIXME: public?
-        return .zero
-    }
 }

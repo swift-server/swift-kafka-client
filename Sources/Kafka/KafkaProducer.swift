@@ -165,7 +165,7 @@ public final class KafkaProducer: Service, Sendable {
         
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
         // Listen to statistics events when statistics enabled
-        if configuration.statisticsInterval != .disabled {
+        if configuration.statisticsInterval != .disable {
             subscribedEvents.append(.statistics)
         }
 

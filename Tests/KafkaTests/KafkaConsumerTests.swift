@@ -92,7 +92,7 @@ final class KafkaConsumerTests: XCTestCase {
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
             bootstrapBrokerAddresses: []
         )
-        config.statisticsInterval = Duration.milliseconds(10)
+        config.statisticsInterval = .value(.milliseconds(10))
 
         let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
 

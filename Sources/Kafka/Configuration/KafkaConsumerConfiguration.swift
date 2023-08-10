@@ -208,16 +208,7 @@ public struct KafkaConsumerConfiguration {
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
     /// Interval for librdkafka statistics reports
-    /// 0ms - disabled
-    /// >= 1ms - statistics provided every specified interval
-    public var statisticsInterval: Duration = .zero {
-        didSet {
-            precondition(
-                self.statisticsInterval.canBeRepresentedAsMilliseconds || self.statisticsInterval == .disabled,
-                "Lowest granularity is milliseconds or disabled"
-            )
-        }
-    }
+    public var statisticsInterval: KafkaConfiguration.KeyRefreshAttempts = .disable
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
@@ -283,7 +274,7 @@ extension KafkaConsumerConfiguration {
         resultDict["reconnect.backoff.ms"] = String(reconnect.backoff.rawValue)
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
         
-        resultDict["statistics.interval.ms"] = String(statisticsInterval.inMilliseconds)
+        resultDict["statistics.interval.ms"] = String(statisticsInterval.rawValue)
 
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(securityProtocol.dictionary) { _, _ in
