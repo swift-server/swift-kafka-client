@@ -14,14 +14,14 @@ public final class KafkaTransaction {
     deinit {}
 
     public func send(
-        offsets: RDKafkaTopicPartitionList,
+        offsets: KafkaTopicList,
         forConsumer consumer: KafkaConsumer,
         timeout: Duration = .kafkaUntilEndOfTransactionTimeout,
         attempts: UInt64 = .max
     ) async throws {
         let consumerClient = try consumer.client()
         try await consumerClient.withKafkaHandlePointer {
-            try await self.client.send(attempts: attempts, offsets: offsets, forConsumerKafkaHandle: $0, timeout: timeout)
+            try await self.client.send(attempts: attempts, offsets: offsets.list, forConsumerKafkaHandle: $0, timeout: timeout)
         }
     }
 

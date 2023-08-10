@@ -23,6 +23,9 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
+    
+    public var listenForRebalance: Bool = false
+    
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {

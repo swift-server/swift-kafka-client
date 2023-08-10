@@ -20,15 +20,15 @@
 // MARK: - Statistics
 
 public struct KafkaStatisticsJson: Hashable, Codable {
-    let name, clientID, type: String?
-    let ts, time, age, replyq: Int?
-    let msgCnt, msgSize, msgMax, msgSizeMax: Int?
-    let simpleCnt, metadataCacheCnt: Int?
-    let brokers: [String: Broker]?
-    let topics: [String: Topic]?
-    let cgrp: Cgrp?
-    let tx, txBytes, rx, rxBytes: Int?
-    let txmsgs, txmsgBytes, rxmsgs, rxmsgBytes: Int?
+    public let name, clientID, type: String?
+    public let ts, time, age, replyq: Int?
+    public let msgCnt, msgSize, msgMax, msgSizeMax: Int?
+    public let simpleCnt, metadataCacheCnt: Int?
+    public let brokers: [String: Broker]?
+    public let topics: [String: Topic]?
+    public let cgrp: Cgrp?
+    public let tx, txBytes, rx, rxBytes: Int?
+    public let txmsgs, txmsgBytes, rxmsgs, rxmsgBytes: Int?
 
     enum CodingKeys: String, CodingKey {
         case name
@@ -54,18 +54,18 @@ public struct KafkaStatisticsJson: Hashable, Codable {
 // MARK: - Broker
 
 public struct Broker: Hashable, Codable {
-    let name: String?
-    let nodeid: Int?
-    let nodename, source, state: String?
-    let stateage, outbufCnt, outbufMsgCnt, waitrespCnt: Int?
-    let waitrespMsgCnt, tx, txbytes, txerrs: Int?
-    let txretries, txidle, reqTimeouts, rx: Int?
-    let rxbytes, rxerrs, rxcorriderrs, rxpartial: Int?
-    let rxidle, zbufGrow, bufGrow, wakeups: Int?
-    let connects, disconnects: Int?
-    let intLatency, outbufLatency, rtt, throttle: [String: Int]?
-    let req: [String: Int]?
-    let toppars: [String: Toppar]?
+    public let name: String?
+    public let nodeid: Int?
+    public let nodename, source, state: String?
+    public let stateage, outbufCnt, outbufMsgCnt, waitrespCnt: Int?
+    public let waitrespMsgCnt, tx, txbytes, txerrs: Int?
+    public let txretries, txidle, reqTimeouts, rx: Int?
+    public let rxbytes, rxerrs, rxcorriderrs, rxpartial: Int?
+    public let rxidle, zbufGrow, bufGrow, wakeups: Int?
+    public let connects, disconnects: Int?
+    public let intLatency, outbufLatency, rtt, throttle: [String: Int]?
+    public let req: [String: Int]?
+    public let toppars: [String: Toppar]?
 
     enum CodingKeys: String, CodingKey {
         case name, nodeid, nodename, source, state, stateage
@@ -87,9 +87,9 @@ public struct Broker: Hashable, Codable {
 
 // MARK: - Toppars
 
-struct Toppar: Hashable, Codable {
-    let topic: String?
-    let partition: Int?
+public struct Toppar: Hashable, Codable {
+    public let topic: String?
+    public let partition: Int?
 
     enum CodingKeys: String, CodingKey {
         case topic, partition
@@ -98,13 +98,13 @@ struct Toppar: Hashable, Codable {
 
 // MARK: - Cgrp
 
-struct Cgrp: Hashable, Codable {
-    let state: String?
-    let stateage: Int?
-    let joinState: String?
-    let rebalanceAge, rebalanceCnt: Int?
-    let rebalanceReason: String?
-    let assignmentSize: Int?
+public struct Cgrp: Hashable, Codable {
+    public let state: String?
+    public let stateage: Int?
+    public let joinState: String?
+    public let rebalanceAge, rebalanceCnt: Int?
+    public let rebalanceReason: String?
+    public let assignmentSize: Int?
 
     enum CodingKeys: String, CodingKey {
         case state, stateage
@@ -118,11 +118,11 @@ struct Cgrp: Hashable, Codable {
 
 // MARK: - Topic
 
-struct Topic: Hashable, Codable {
-    let topic: String?
-    let age, metadataAge: Int?
-    let batchsize, batchcnt: [String: Int]?
-    let partitions: [String: Partition]?
+public struct Topic: Hashable, Codable {
+    public let topic: String?
+    public let age, metadataAge: Int?
+    public let batchsize, batchcnt: [String: Int]?
+    public let partitions: [String: Partition]?
 
     enum CodingKeys: String, CodingKey {
         case topic, age
@@ -133,18 +133,18 @@ struct Topic: Hashable, Codable {
 
 // MARK: - Partition
 
-struct Partition: Hashable, Codable {
-    let partition, broker, leader: Int?
-    let desired, unknown: Bool?
-    let msgqCnt, msgqBytes, xmitMsgqCnt, xmitMsgqBytes: Int?
-    let fetchqCnt, fetchqSize: Int?
-    let fetchState: String?
-    let queryOffset, nextOffset, appOffset, storedOffset: Int?
-    let commitedOffset, committedOffset, eofOffset, loOffset: Int?
-    let hiOffset, lsOffset, consumerLag, consumerLagStored: Int?
-    let txmsgs, txbytes, rxmsgs, rxbytes: Int?
-    let msgs, rxVerDrops, msgsInflight, nextACKSeq: Int?
-    let nextErrSeq, ackedMsgid: Int?
+public struct Partition: Hashable, Codable {
+    public let partition, broker, leader: Int?
+    public let desired, unknown: Bool?
+    public let msgqCnt, msgqBytes, xmitMsgqCnt, xmitMsgqBytes: Int?
+    public let fetchqCnt, fetchqSize: Int?
+    public let fetchState: String?
+    public let queryOffset, nextOffset, appOffset, storedOffset: Int?
+    public let commitedOffset, committedOffset, eofOffset, loOffset: Int?
+    public let hiOffset, lsOffset, consumerLag, consumerLagStored: Int?
+    public let txmsgs, txbytes, rxmsgs, rxbytes: Int?
+    public let msgs, rxVerDrops, msgsInflight, nextACKSeq: Int?
+    public let nextErrSeq, ackedMsgid: Int?
 
     enum CodingKeys: String, CodingKey {
         case partition, broker, leader, desired, unknown

@@ -75,4 +75,46 @@ public final class RDKafkaTopicPartitionList {
     func withListPointer<T>(_ body: (UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) async throws -> T) async rethrows -> T {
         return try await body(self._internal)
     }
+    
+    func getByIdx(idx: Int) -> TopicPartition? {
+        withListPointer { list -> TopicPartition? in
+            guard list.pointee.cnt > idx else {
+                return nil
+            }
+            let elem = list.pointee.elems[idx]
+            let topicName = String(cString: elem.topic)
+            let partition = KafkaPartition(rawValue: Int(elem.partition))
+            let offset = KafkaOffset(rawValue: Int(elem.offset))
+            return TopicPartition(topicName, partition, offset)
+        }
+    }
+    
+    var count: Int {
+        withListPointer { list in
+            Int(list.pointee.cnt)
+        }
+    }
+}
+
+extension RDKafkaTopicPartitionList: Sendable {}
+extension RDKafkaTopicPartitionList: Hashable {
+    
+    public func hash(into hasher: inout Hasher) {
+        for idx in 0..<self.count {
+            hasher.combine(self.getByIdx(idx: idx))
+        }
+    }
+    
+    public static func == (lhs: RDKafkaTopicPartitionList, rhs: RDKafkaTopicPartitionList) -> Bool {
+        if lhs.count != rhs.count {
+            return false
+        }
+        
+        for idx in 0..<lhs.count {
+            guard lhs.getByIdx(idx: idx) == rhs.getByIdx(idx: idx) else {
+                return false
+            }
+        }
+        return true
+    }
 }

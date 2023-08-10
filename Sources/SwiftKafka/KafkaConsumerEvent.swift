@@ -1,16 +1,20 @@
+#if false
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the swift-kafka-client open source project
+// This source file is part of the swift-kafka-gsoc open source project
 //
-// Copyright (c) 2023 Apple Inc. and the swift-kafka-client project authors
+// Copyright (c) 2023 Apple Inc. and the swift-kafka-gsoc project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
+// See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+
+
+// TODO: Move new structures to Rebalance:
 
 public struct KafkaTopicList {
     let list: RDKafkaTopicPartitionList
@@ -28,29 +32,14 @@ public struct KafkaTopicList {
     }
 }
 
-public struct TopicPartition {
-    public let topic: String
-    public let partition: KafkaPartition
-    public let offset: KafkaOffset
-    
-    public init(_ topic: String, _ partition: KafkaPartition, _ offset: KafkaOffset) {
-        self.topic = topic
-        self.partition = partition
-        self.offset = offset
-    }
-}
-
-extension TopicPartition: Sendable {}
-extension TopicPartition: Hashable {}
-
 extension KafkaTopicList : Sendable {}
 extension KafkaTopicList : Hashable {}
 
-//extension KafkaTopicList : CustomDebugStringConvertible {
-//    public var debugDescription: String {
-//        list.debugDescription
-//    }
-//}
+extension KafkaTopicList : CustomDebugStringConvertible {
+    public var debugDescription: String {
+        list.debugDescription
+    }
+}
 
 extension KafkaTopicList : Sequence {
     public struct TopicPartitionIterator : IteratorProtocol {
@@ -66,7 +55,7 @@ extension KafkaTopicList : Sequence {
                 return nil
             }
             idx += 1
-            return topic
+            return TopicPartition(from: topic)
         }
     }
     
@@ -75,32 +64,96 @@ extension KafkaTopicList : Sequence {
     }
 }
 
+public typealias KafkaOffset = RDKafkaOffset // Should we wrap it?
+
+
+public struct TopicPartition: Sendable, Hashable {
+    public private(set) var topic: String
+    public private(set) var partition: KafkaPartition
+    public private(set) var offset: KafkaOffset
+    
+    init(from topicPartition: RDKafkaTopicPartition) {
+        self.topic = topicPartition.topic
+        self.partition = topicPartition.partition
+        self.offset = KafkaOffset(rawValue: topicPartition.offset)
+    }
+    
+    public init(_ topic: String, _ partition: KafkaPartition, _ offset: KafkaOffset = .beginning) {
+        self.topic = topic
+        self.partition = partition
+        self.offset = offset
+    }
+
+    public var name: String {
+        "\(topic):\(partition):\(offset)"
+    }
+}
+
+extension TopicPartition : CustomDebugStringConvertible {
+    public var debugDescription: String {
+        "\(topic):\(partition):\(offset)"
+    }
+}
+//
+//public struct TopicPartition {
+//
+//
+//    let kafkaTopicPartition: RDKafkaTopicPartition
+//
+//    init(kafkaTopicPartition: RDKafkaTopicPartition) {
+//        self.kafkaTopicPartition = kafkaTopicPartition
+//    }
+//
+//    var topic: String {
+//        self.kafkaTopicPartition.topic
+//    }
+//
+//    var partition: KafkaPartition {
+//        kafkaTopicPartition.partition
+//    }
+//
+//    var offset: Int64 {
+//        kafkaTopicPartition.offset
+//    }
+//}
+
 public enum KafkaRebalanceProtocol: Sendable, Hashable {
     case cooperative
     case eager
     case none
     
-    static func convert(from proto: String) -> KafkaRebalanceProtocol{
+    static func convert(from proto: RDKafkaRebalanceProtocol) -> KafkaRebalanceProtocol{
         switch proto {
-        case "COOPERATIVE": return .cooperative
-        case "EAGER": return .eager
-        default: return .none
+        case .cooperative: return .cooperative
+        case .eager: return .eager
+        case .none: return .none
         }
     }
 }
-
 
 public enum RebalanceAction : Sendable, Hashable {
     case assign(KafkaRebalanceProtocol, KafkaTopicList)
     case revoke(KafkaRebalanceProtocol, KafkaTopicList)
     case error(KafkaRebalanceProtocol, KafkaTopicList, KafkaError)
+    
+    static func convert(from rebalance: RDKafkaRebalanceAction) -> RebalanceAction {
+        switch rebalance {
+        case .assign(let proto, let list):
+            return .assign(.convert(from: proto), .init(from: list))
+        case .revoke(let proto, let list):
+            return .revoke(.convert(from: proto), .init(from: list))
+        case .error(let proto, let list, let err):
+            return .error(.convert(from: proto), .init(from: list), err)
+        }
+    }
 }
+
 
 /// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
 public enum KafkaConsumerEvent: Sendable, Hashable {
     /// Statistics from librdkafka
     case statistics(KafkaStatistics)
-    /// Rebalance from librdkafka
+    /// Rebalance callback from Kafka
     case rebalance(RebalanceAction)
     /// - Important: Always provide a `default` case when switiching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
@@ -110,7 +163,7 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
         case .statistics(let stat):
             self = .statistics(stat)
         case .rebalance(let action):
-            self = .rebalance(action)
+            self = .rebalance(.convert(from: action))
         case .deliveryReport:
             fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         case .consumerMessages:
@@ -118,3 +171,4 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
         }
     }
 }
+#endif

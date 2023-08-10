@@ -253,9 +253,9 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.statisticsInterval != .disable {
             subscribedEvents.append(.statistics)
         }
-//        if configuration.listenForRebalance {
+        if configuration.listenForRebalance {
             subscribedEvents.append(.rebalance)
-//        }
+        }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
@@ -321,6 +321,24 @@ public final class KafkaConsumer: Sendable, Service {
             try client.assign(topicPartitionList: assignment)
         }
     }
+    
+    /// Subscribe to the given list of `topics`.
+    /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
+    /// - Parameter topics: An array of topic names to subscribe to.
+    /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
+    public func subscribeTopics(topics: [String]) throws {
+        let client = try self.stateMachine.withLockedValue { try $0.client() }
+        
+        let subscription = RDKafkaTopicPartitionList()
+        for topic in topics {
+            subscription.add(
+                topic: topic,
+                partition: KafkaPartition.unassigned
+            )
+        }
+        try client.subscribe(topicPartitionList: subscription)
+    }
+        
     
     public func assign(_ list: KafkaTopicList) throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }

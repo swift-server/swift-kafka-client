@@ -1,12 +1,13 @@
+#if false
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the swift-kafka-client open source project
+// This source file is part of the swift-kafka-gsoc open source project
 //
-// Copyright (c) 2022 Apple Inc. and the swift-kafka-client project authors
+// Copyright (c) 2022 Apple Inc. and the swift-kafka-gsoc project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
+// See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -19,27 +20,27 @@ import Logging
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
 final class RDKafkaClient: Sendable {
-    // Default size for Strings returned from C API
-    static let stringSize = 1024
-
     /// Determines if client is a producer or a consumer.
     enum ClientType {
         case producer
         case consumer
     }
 
+    // Default size for Strings returned from C API
+    static let stringSize = 1024
+
     /// Handle for the C library's Kafka instance.
     private let kafkaHandle: OpaquePointer
     /// A logger.
     private let logger: Logger
 
-    /// `librdkafka`'s `rd_kafka_queue_t` that events are received on.
-    private let queue: OpaquePointer
+    /// `librdkafka`'s main `rd_kafka_queue_t`.
+    private let mainQueue: OpaquePointer
 
     /// Queue for blocking calls outside of cooperative thread pool
-    private var gcdQueue: DispatchQueue {
+    private var queue: DispatchQueue {
         // global concurrent queue
-        .global(qos: .default) // FIXME: maybe DispatchQueue(label: "com.swift.kafka.queue")
+        .global(qos: .default)
     }
 
     // Use factory method to initialize
@@ -55,24 +56,20 @@ final class RDKafkaClient: Sendable {
             if let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle) {
                 // (Important)
                 // Polling the queue counts as a consumer poll, and will reset the timer for `max.poll.interval.ms`.
-                self.queue = consumerQueue
+                self.mainQueue = consumerQueue
             } else {
-                fatalError("""
-                Internal error: failed to get consumer queue. \
-                A group.id should be set even when the client is not part of a consumer group. \
-                See https://github.com/edenhill/librdkafka/issues/3261 for more information.
-                """)
+                // Getting consumer queue failed, use main queue.
+                // better fixed in upstream
+                fatalError("Just for now")
             }
         } else {
-            self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
+            self.mainQueue = rd_kafka_queue_get_main(self.kafkaHandle)
         }
 
-        rd_kafka_set_log_queue(self.kafkaHandle, self.queue)
+        rd_kafka_set_log_queue(self.kafkaHandle, self.mainQueue)
     }
 
     deinit {
-        // Loose reference to librdkafka's event queue
-        rd_kafka_queue_destroy(self.queue)
         rd_kafka_destroy(kafkaHandle)
     }
 
@@ -83,6 +80,8 @@ final class RDKafkaClient: Sendable {
         events: [RDKafkaEvent],
         logger: Logger
     ) throws -> RDKafkaClient {
+        let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
+
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
         // Manually override some of the configuration options
         // Handle logs in event queue
@@ -96,7 +95,6 @@ final class RDKafkaClient: Sendable {
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
-        let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
         guard let handle = rd_kafka_new(
             clientType,
             rdConfig,
@@ -117,21 +115,16 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     /// - Parameter newMessageID: ID that was assigned to the `message`.
-    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter topicConfig: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
     func produce<Key, Value>(
         message: KafkaProducerMessage<Key, Value>,
         newMessageID: UInt,
-        topicConfiguration: KafkaTopicConfiguration,
+        topicConfig: KafkaTopicConfiguration,
         topicHandles: RDKafkaTopicHandles
     ) throws {
-        precondition(
-            0...Int(Int32.max) ~= message.partition.rawValue || message.partition == .unassigned,
-            "Partition ID outside of valid range \(0...Int32.max)"
-        )
-
         let responseCode = try message.value.withUnsafeBytes { valueBuffer in
-            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfiguration: topicConfiguration) { topicHandle in
+            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfig: topicConfig) { topicHandle in
                 if let key = message.key {
                     // Key available, we can use scoped accessor to safely access its rawBufferPointer.
                     // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
@@ -139,7 +132,7 @@ final class RDKafkaClient: Sendable {
                     return key.withUnsafeBytes { keyBuffer in
                         return rd_kafka_produce(
                             topicHandle,
-                            Int32(message.partition.rawValue),
+                            message.partition.rawValue,
                             RD_KAFKA_MSG_F_COPY,
                             UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
                             valueBuffer.count,
@@ -154,7 +147,7 @@ final class RDKafkaClient: Sendable {
                     // Returns 0 on success, error code otherwise.
                     return rd_kafka_produce(
                         topicHandle,
-                        Int32(message.partition.rawValue),
+                        message.partition.rawValue,
                         RD_KAFKA_MSG_F_COPY,
                         UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
                         valueBuffer.count,
@@ -187,7 +180,7 @@ final class RDKafkaClient: Sendable {
         events.reserveCapacity(maxEvents)
 
         for _ in 0..<maxEvents {
-            let event = rd_kafka_queue_poll(self.queue, 0)
+            let event = rd_kafka_queue_poll(self.mainQueue, 0)
             defer { rd_kafka_event_destroy(event) }
 
             let rdEventType = rd_kafka_event_type(event)
@@ -210,7 +203,7 @@ final class RDKafkaClient: Sendable {
             case .statistics:
                 events.append(self.handleStatistics(event))
             case .rebalance:
-                fatalError("Rebalance is triggered")
+                events.append(self.handleRebalance(event))
             case .none:
                 // Finished reading events, return early
                 return events
@@ -265,6 +258,27 @@ final class RDKafkaClient: Sendable {
     private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent {
         let jsonStr = String(cString: rd_kafka_event_stats(event))
         return .statistics(KafkaStatistics(jsonString: jsonStr))
+    }
+    
+    private func handleRebalance(_ event: OpaquePointer?) -> KafkaEvent {
+        guard let partitions = rd_kafka_event_topic_partition_list(event) else {
+            fatalError("Must never happen") // TODO: remove
+        }
+        
+        
+        let code = rd_kafka_event_error(event)
+        
+        let protoStringDef = String(cString: rd_kafka_rebalance_protocol(kafkaHandle))
+        let rebalanceProtocol = KafkaRebalanceProtocol.rebalanceProtocol(from: protoStringDef)
+        let list = RDKafkaTopicPartitionList(from: partitions)
+        switch code {
+        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+            return .rebalance(.assign(rebalanceProtocol, list))
+        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+            return .rebalance(.revoke(rebalanceProtocol, list))
+        default:
+            return .rebalance(.error(rebalanceProtocol, list, KafkaError.rdKafkaError(wrapping: code)))
+        }
     }
 
     /// Handle event of type `RDKafkaEvent.log`.
@@ -348,6 +362,32 @@ final class RDKafkaClient: Sendable {
             throw KafkaError.rdKafkaError(wrapping: result)
         }
     }
+
+    /// Subscribe to topic set using balanced consumer groups.
+    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
+    func subscribe(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        if topicPartitionList.getByIdx(idx: 0) == nil {
+            return // empty list, FIXME: to subscribe after init
+        }
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_subscribe(self.kafkaHandle, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+        }
+    }
+
+    /// Atomic assignment of partitions to consume.
+    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
+    func assign(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_assign(self.kafkaHandle, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+        }
+    }
+    
     /// Atomic  incremental assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func incrementalAssign(topicPartitionList: RDKafkaTopicPartitionList) throws {
@@ -376,12 +416,12 @@ final class RDKafkaClient: Sendable {
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func seek(topicPartitionList: RDKafkaTopicPartitionList, timeout: Duration) async throws {
         let doSeek = {
-            topicPartitionList.withListPointer { rd_kafka_seek_partitions(self.kafkaHandle, $0, Int32(timeout.inMilliseconds)) }
+            topicPartitionList.withListPointer { rd_kafka_seek_partitions(self.kafkaHandle, $0, timeout.totalMilliseconds) }
         }
         let error =
             timeout == .zero
             ? doSeek() // async when timeout is zero
-            : await performBlockingCall(queue: gcdQueue, body: doSeek)
+            : await performBlockingCall(queue: queue, body: doSeek)
         
         defer { rd_kafka_error_destroy(error) }
         let code = rd_kafka_error_code(error)
@@ -398,27 +438,9 @@ final class RDKafkaClient: Sendable {
         }
         
         defer { rd_kafka_error_destroy(error) }
-    }
-
-    /// Subscribe to topic set using balanced consumer groups.
-    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
-    func subscribe(topicPartitionList: RDKafkaTopicPartitionList) throws {
-        try topicPartitionList.withListPointer { pointer in
-            let result = rd_kafka_subscribe(self.kafkaHandle, pointer)
-            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-                throw KafkaError.rdKafkaError(wrapping: result)
-            }
-        }
-    }
-
-    /// Atomic assignment of partitions to consume.
-    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
-    func assign(topicPartitionList: RDKafkaTopicPartitionList) throws {
-        try topicPartitionList.withListPointer { pointer in
-            let result = rd_kafka_assign(self.kafkaHandle, pointer)
-            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-                throw KafkaError.rdKafkaError(wrapping: result)
-            }
+        let code = rd_kafka_error_code(error)
+        if code != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: code)
         }
     }
 
@@ -444,7 +466,7 @@ final class RDKafkaClient: Sendable {
         changesList.setOffset(
             topic: message.topic,
             partition: message.partition,
-            offset: .init(rawValue: message.offset.rawValue + 1)
+            offset: KafkaOffset(rawValue: message.offset.rawValue + 1)
         )
 
         let error = changesList.withListPointer { listPointer in
@@ -481,7 +503,7 @@ final class RDKafkaClient: Sendable {
             changesList.setOffset(
                 topic: message.topic,
                 partition: message.partition,
-                offset: .init(rawValue: message.offset.rawValue + 1)
+                offset: KafkaOffset(rawValue: message.offset.rawValue + 1)
             )
 
             // Unretained pass because the reference that librdkafka holds to capturedClosure
@@ -492,7 +514,7 @@ final class RDKafkaClient: Sendable {
                 rd_kafka_commit_queue(
                     self.kafkaHandle,
                     listPointer,
-                    self.queue,
+                    self.mainQueue,
                     nil,
                     opaquePointer
                 )
@@ -526,7 +548,8 @@ final class RDKafkaClient: Sendable {
     ///
     /// Make sure to run poll loop until ``RDKafkaClient/consumerIsClosed`` returns `true`.
     func consumerClose() throws {
-        let result = rd_kafka_consumer_close_queue(self.kafkaHandle, self.queue)
+        let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle)
+        let result = rd_kafka_consumer_close_queue(self.kafkaHandle, consumerQueue)
         let kafkaError = rd_kafka_error_code(result)
         if kafkaError != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: kafkaError)
@@ -559,7 +582,7 @@ final class RDKafkaClient: Sendable {
             print("test")
         }
 
-        let result = await performBlockingCall(queue: gcdQueue) {
+        let result = await performBlockingCall(queue: queue) {
             rd_kafka_init_transactions(self.kafkaHandle, timeout.totalMilliseconds)
         }
 
@@ -592,7 +615,7 @@ final class RDKafkaClient: Sendable {
 
             // TODO: actually it should be withing some timeout (like transaction timeout or session timeout)
             for idx in 0..<attempts {
-                let error = await performBlockingCall(queue: gcdQueue) {
+                let error = await performBlockingCall(queue: queue) {
                     rd_kafka_send_offsets_to_transaction(self.kafkaHandle, topicPartitionList,
                                                          consumerMetadata, timeout.totalMillisecondsOrMinusOne)
                 }
@@ -627,7 +650,7 @@ final class RDKafkaClient: Sendable {
 
     func abortTransaction(attempts: UInt64, timeout: Duration) async throws {
         for _ in 0..<attempts {
-            let error = await performBlockingCall(queue: gcdQueue) {
+            let error = await performBlockingCall(queue: queue) {
                 rd_kafka_abort_transaction(self.kafkaHandle, timeout.totalMillisecondsOrMinusOne)
             }
             /* check if transaction abort is completed successfully  */
@@ -648,7 +671,7 @@ final class RDKafkaClient: Sendable {
 
     func commitTransaction(attempts: UInt64, timeout: Duration) async throws {
         for idx in 0..<attempts {
-            let error = await performBlockingCall(queue: gcdQueue) {
+            let error = await performBlockingCall(queue: queue) {
                 rd_kafka_commit_transaction(self.kafkaHandle, timeout.totalMillisecondsOrMinusOne)
             }
             /* check if transaction is completed successfully  */
@@ -678,17 +701,4 @@ final class RDKafkaClient: Sendable {
         throw KafkaError.transactionOutOfAttempts(numOfAttempts: attempts)
     }
 }
-
-extension Duration {
-    // Internal usage only: librdkafka accepts Int32 as timeouts
-    internal var totalMilliseconds: Int32 {
-        return Int32(self.components.seconds * 1000 + self.components.attoseconds / 1_000_000_000_000_000)
-    }
-
-    internal var totalMillisecondsOrMinusOne: Int32 {
-        return max(self.totalMilliseconds, -1)
-    }
-
-    public static var kafkaUntilEndOfTransactionTimeout: Duration = .milliseconds(-1)
-    public static var kafkaNoWaitTransaction: Duration = .zero
-}
+#endif

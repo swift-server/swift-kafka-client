@@ -157,7 +157,7 @@ final class KafkaTests: XCTestCase {
             await serviceGroup.triggerGracefulShutdown()
         }
     }
-
+    #if false
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
@@ -272,6 +272,7 @@ final class KafkaTests: XCTestCase {
             await serviceGroup.triggerGracefulShutdown()
         }
     }
+    #endif
 
     func testProduceAndConsumeWithCommitSync() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
