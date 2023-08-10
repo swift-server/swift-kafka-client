@@ -170,8 +170,7 @@ public final class KafkaConsumer: Sendable, Service {
             )
         }
 
-        // Events that would be triggered by ``RDKafkaClient/poll(timeout:)``
-        // are now triggered by ``RDKafkaClient/consumerPoll``.
+        // Forward main queue events to the consumer queue.
         try client.pollSetConsumer()
 
         switch configuration.consumptionStrategy._internal {
