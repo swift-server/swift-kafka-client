@@ -159,7 +159,7 @@ public final class KafkaConsumer: Sendable, Service {
         self.configuration = configuration
         self.stateMachine = stateMachine
         self.logger = logger
-
+                // TODO:+ [.rebalance]
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerMessage.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
@@ -253,6 +253,9 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.statisticsInterval != .disable {
             subscribedEvents.append(.statistics)
         }
+//        if configuration.listenForRebalance {
+            subscribedEvents.append(.rebalance)
+//        }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
