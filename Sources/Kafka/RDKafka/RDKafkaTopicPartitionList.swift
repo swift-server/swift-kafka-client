@@ -24,6 +24,10 @@ public final class RDKafkaTopicPartitionList {
     init(size: Int32 = 1) {
         self._internal = rd_kafka_topic_partition_list_new(size)
     }
+    
+    init(from: UnsafePointer<rd_kafka_topic_partition_list_t>) {
+        self._internal = rd_kafka_topic_partition_list_copy(from)
+    }
 
     deinit {
         rd_kafka_topic_partition_list_destroy(self._internal)
@@ -39,7 +43,7 @@ public final class RDKafkaTopicPartitionList {
         rd_kafka_topic_partition_list_add(
             self._internal,
             topic,
-            Int32(partition.rawValue)
+            Int32(-1 /*partition.rawValue*/)
         )
     }
 

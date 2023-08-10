@@ -211,18 +211,24 @@ public final class KafkaProducer: Service, Sendable {
             subscribedEvents.append(.statistics)
         }
 
-        let client = try RDKafkaClient.makeClient(
-            type: .producer,
-            configDictionary: configuration.dictionary,
-            events: subscribedEvents,
-            logger: logger
-        )
-
-        let producer = try KafkaProducer(
-            stateMachine: stateMachine,
-            configuration: configuration,
-            topicConfiguration: configuration.topicConfiguration
-        )
+        var client: RDKafkaClient!
+        var producer: KafkaProducer!
+        do {
+            client = try RDKafkaClient.makeClient(
+                type: .producer,
+                configDictionary: configuration.dictionary,
+                events: subscribedEvents,
+                logger: logger
+            )
+            
+            producer = try KafkaProducer(
+                stateMachine: stateMachine,
+                configuration: configuration,
+                topicConfiguration: configuration.topicConfiguration
+            )
+        } catch {
+            fatalError("Catch error \(error)")
+        }
 
         stateMachine.withLockedValue {
             $0.initialize(

@@ -254,7 +254,7 @@ public final class KafkaConsumer: Sendable, Service {
             subscribedEvents.append(.statistics)
         }
         if configuration.listenForRebalance {
-            subscribedEvents.append(.rebalance)
+//            subscribedEvents.append(.rebalance)
         }
 
         let client = try RDKafkaClient.makeClient(
@@ -289,6 +289,9 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     private func subscribe(topics: [String]) throws {
         let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+        if topics.isEmpty {
+            return
+        }
         switch action {
         case .setUpConnection(let client):
             let subscription = RDKafkaTopicPartitionList()
@@ -327,6 +330,10 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     public func subscribeTopics(topics: [String]) throws {
+        logger.info("Subscribe for topics \(topics)")
+        if topics.isEmpty {
+            return
+        }
         let client = try self.stateMachine.withLockedValue { try $0.client() }
         
         let subscription = RDKafkaTopicPartitionList()
