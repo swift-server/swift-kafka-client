@@ -3,20 +3,20 @@ version: "3"
 services:
 
   runtime-setup:
-    image: swift-kafka-gsoc:22.04-5.9
+    image: swift-kafka-client:22.04-5.9
     build:
       args:
         base_image: "swiftlang/swift:nightly-5.9-jammy"
 
   build:
-    image: swift-kafka-gsoc:22.04-5.9
+    image: swift-kafka-client:22.04-5.9
 
   test:
-    image: swift-kafka-gsoc:22.04-5.9
+    image: swift-kafka-client:22.04-5.9
     environment:
       - WARN_AS_ERROR_ARG=-Xswiftc -warnings-as-errors
       - IMPORT_CHECK_ARG=--explicit-target-dependency-import-check error
       # - SANITIZER_ARG=--sanitize=thread # TSan broken still
 
   shell:
-    image: swift-kafka-gsoc:22.04-5.9
+    image: swift-kafka-client:22.04-5.9

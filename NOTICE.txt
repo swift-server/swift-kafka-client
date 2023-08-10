@@ -4,7 +4,7 @@
 
 Please visit the Swift Kafka Client web site for more information:
 
-  * https://github.com/swift-server/swift-kafka-gsoc
+  * https://github.com/swift-server/swift-kafka-client
 
 Copyright 2023 The Swift Kafka Client Project
 

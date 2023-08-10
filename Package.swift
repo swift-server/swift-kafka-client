@@ -1,13 +1,13 @@
 // swift-tools-version: 5.7
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the swift-kafka-gsoc open source project
+// This source file is part of the swift-kafka-client open source project
 //
-// Copyright (c) 2022 Apple Inc. and the swift-kafka-gsoc project authors
+// Copyright (c) 2022 Apple Inc. and the swift-kafka-client project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+// See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -27,7 +27,7 @@ let rdkafkaExclude = [
 ]
 
 let package = Package(
-    name: "swift-kafka-gsoc",
+    name: "swift-kafka-client",
     platforms: [
         .macOS(.v13),
         .iOS(.v16),
@@ -36,8 +36,12 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "SwiftKafka",
-            targets: ["SwiftKafka"]
+            name: "Kafka",
+            targets: ["Kafka"]
+        ),
+        .library(
+            name: "KafkaFoundationCompat",
+            targets: ["KafkaFoundationCompat"]
         ),
     ],
     dependencies: [
@@ -71,13 +75,19 @@ let package = Package(
             ]
         ),
         .target(
-            name: "SwiftKafka",
+            name: "Kafka",
             dependencies: [
                 "Crdkafka",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "ExtrasJSON", package: "swift-extras-json"),
+            ]
+        ),
+        .target(
+            name: "KafkaFoundationCompat",
+            dependencies: [
+                "Kafka",
             ]
         ),
         .systemLibrary(
@@ -89,12 +99,12 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "SwiftKafkaTests",
-            dependencies: ["SwiftKafka"]
+            name: "KafkaTests",
+            dependencies: ["Kafka"]
         ),
         .testTarget(
             name: "IntegrationTests",
-            dependencies: ["SwiftKafka"]
+            dependencies: ["Kafka"]
         ),
     ]
 )

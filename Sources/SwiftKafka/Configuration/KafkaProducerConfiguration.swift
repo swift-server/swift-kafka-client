@@ -20,17 +20,6 @@ public struct KafkaProducerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// Interval for librdkafka statistics reports
-    /// 0ms - disabled
-    /// >= 1ms - statistics provided every specified interval
-    public var statisticsInterval: Duration = .zero {
-        didSet {
-            precondition(
-                self.statisticsInterval.totalMilliseconds > 0 || self.statisticsInterval == .zero /*self.statisticsInterval.canBeRepresentedAsMilliseconds*/,
-                "Lowest granularity is milliseconds"
-            )
-        }
-    }
 
     /// Maximum timeout for flushing outstanding produce requests when the ``KakfaProducer`` is shutting down.
     /// Default: `10000`

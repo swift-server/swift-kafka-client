@@ -1,13 +1,13 @@
 #!/bin/bash
 ##===----------------------------------------------------------------------===##
 ##
-## This source file is part of the swift-kafka-gsoc open source project
+## This source file is part of the swift-kafka-client open source project
 ##
-## Copyright (c) 2022 Apple Inc. and the swift-kafka-gsoc project authors
+## Copyright (c) 2022 Apple Inc. and the swift-kafka-client project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
-## See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+## See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
 ##
 ## SPDX-License-Identifier: Apache-2.0
 ##
@@ -19,7 +19,7 @@ contributors=$( cd "$here"/.. && git shortlog -es | cut -f2 | sed 's/^/- /' )
 
 cat > "$here/../CONTRIBUTORS.txt" <<- EOF
 	For the purpose of tracking copyright, this is the list of individuals and
-	organizations who have contributed source code to swift-kafka-gsoc.
+	organizations who have contributed source code to swift-kafka-client.
 
 	For employees of an organization/company where the copyright of work done
 	by employees of that company is held by the company itself, only the company
