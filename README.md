@@ -212,12 +212,9 @@ let privateKey = KafkaConfiguration.TLSConfiguration.PrivateKey(
     password: ""
 )
 
-let tlsConfig = KafkaConfiguration.TLSConfiguration.keyPair(
-    privateKey: privateKey,
-    publicKeyCertificate: leafCert,
-    caCertificate: rootCert,
-    crlLocation: nil
-)
+var tlsConfig = KafkaConfiguration.TLSConfiguration()
+tlsConfig.client = .disableClientVerification
+tlsConfig.broker = .verify(crlLocation: nil)
 
 var configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
 configuration.securityProtocol = .tls(configuration: tlsConfig)
@@ -247,12 +244,9 @@ let privateKey = KafkaConfiguration.TLSConfiguration.PrivateKey(
     password: ""
 )
 
-let tlsConfig = KafkaConfiguration.TLSConfiguration.keyPair(
-    privateKey: privateKey,
-    publicKeyCertificate: leafCert,
-    caCertificate: rootCert,
-    crlLocation: nil
-)
+var tlsConfig = KafkaConfiguration.TLSConfiguration()
+tlsConfig.client = .disableClientVerification
+tlsConfig.broker = .verify(crlLocation: nil)
 
 let saslMechanism = KafkaConfiguration.SASLMechanism.scramSHA256(
     username: "USERNAME",

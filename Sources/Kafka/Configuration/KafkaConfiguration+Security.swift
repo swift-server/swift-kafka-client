@@ -45,7 +45,6 @@ extension KafkaConfiguration {
         public struct Root: Sendable, Hashable {
             internal enum _Root: Sendable, Hashable {
                 case probe
-                case disableBrokerVerification
                 case file(location: String)
                 case pem(String)
             }
@@ -54,9 +53,6 @@ extension KafkaConfiguration {
 
             /// A list of standard paths will be probed and the first one found will be used as the default root certificate location path.
             public static let probe = Root(_internal: .probe)
-
-            /// Disable OpenSSL's built-in broker (server) certificate verification.
-            public static let disableBrokerVerification = Root(_internal: .disableBrokerVerification)
 
             /// File or directory path to root certificate(s) for verifying the broker's key.
             public static func file(location: String) -> Root {
@@ -122,73 +118,101 @@ extension KafkaConfiguration {
             }
         }
 
-        internal enum _TLSConfiguration: Sendable, Hashable {
-            case keyPair(
+        /// Configuration for the TLS verification of the client.
+        public struct Client: Sendable, Hashable {
+            internal enum _Client: Sendable, Hashable {
+                case disableClientVerification
+                case keyPair(
+                    privateKey: PrivateKey,
+                    publicKeyCertificate: LeafAndIntermediates
+                )
+                case keyStore(keyStore: KeyStore)
+            }
+
+            let _internal: _Client
+
+            /// Do not verify the identity of the client.
+            public static let disableClientVerification: Client = .init(_internal: .disableClientVerification)
+
+            /// Use TLS client verification with a given private/public key pair.
+            ///
+            /// - Parameters:
+            ///     - privateKey: The client's private key (PEM) used for authentication.
+            ///     - publicKeyCertificate: The client's public key (PEM) used for authentication.
+            public static func keyPair(
                 privateKey: PrivateKey,
-                publicKeyCertificate: LeafAndIntermediates,
-                caCertificate: Root,
-                crlLocation: String?
-            )
-            case keyStore(
-                keyStore: KeyStore,
-                caCertificate: Root,
-                crlLocation: String?
-            )
-        }
-
-        let _internal: _TLSConfiguration
-
-        /// Use TLS with a given private/public key pair.
-        ///
-        /// - Parameters:
-        ///
-        ///     - privateKey: The client's private key (PEM) used for authentication.
-        ///     - publicKeyCertificate: The client's public key (PEM) used for authentication.
-        ///     - caCertificate: File or directory path to CA certificate(s) for verifying the broker's key.
-        ///     - crLocation: Path to CRL for verifying broker's certificate validity.
-        public static func keyPair(
-            privateKey: PrivateKey,
-            publicKeyCertificate: LeafAndIntermediates,
-            caCertificate: Root = .probe,
-            crlLocation: String?
-        ) -> TLSConfiguration {
-            return TLSConfiguration(
-                _internal: .keyPair(
-                    privateKey: privateKey,
-                    publicKeyCertificate: publicKeyCertificate,
-                    caCertificate: caCertificate,
-                    crlLocation: crlLocation
+                publicKeyCertificate: LeafAndIntermediates
+            ) -> Client {
+                return .init(
+                    _internal: .keyPair(
+                        privateKey: privateKey,
+                        publicKeyCertificate: publicKeyCertificate
+                    )
                 )
-            )
+            }
+
+            /// Use TLS client verification with a given key store.
+            ///
+            /// - Parameters:
+            ///     - keyStore: The client's keystore (PKCS#12) used for authentication.
+            public static func keyStore(keyStore: KeyStore) -> Client {
+                return .init(_internal: .keyStore(keyStore: keyStore))
+            }
         }
 
-        ///
-        /// - Parameters:
-        ///
-        ///     - keyStore: The client's keystore (PKCS#12) used for authentication.
-        ///     - caCertificate: File or directory path to CA certificate(s) for verifying the broker's key.
-        ///     - crlLocation: Path to CRL for verifying broker's certificate validity.
-        public static func keyStore(
-            keyStore: KeyStore,
-            caCertificate: Root = .probe,
-            crlLocation: String?
-        ) -> TLSConfiguration {
-            return TLSConfiguration(
-                _internal: .keyStore(
-                    keyStore: keyStore,
-                    caCertificate: caCertificate,
-                    crlLocation: crlLocation
+        /// Configuration for the TLS verification of the broker.
+        public struct Broker: Sendable, Hashable {
+            internal enum _Broker: Sendable, Hashable {
+                case disableBrokerVerification
+                case verify(
+                    caCertificate: Root,
+                    crlLocation: String?
                 )
-            )
+            }
+
+            let _internal: _Broker
+
+            /// Do not verify the identity of the broker.
+            public static let disableBrokerVerification: Broker = .init(_internal: .disableBrokerVerification)
+
+            /// Verify the identity of the broker.
+            ///
+            /// Parameters:
+            ///     - caCertificate: File or directory path to CA certificate(s) for verifying the broker's key.
+            ///     - crlLocation: Path to CRL for verifying broker's certificate validity.///
+            public static func verify(
+                caCertificate: Root = .probe,
+                crlLocation: String?
+            ) -> Broker {
+                return .init(
+                    _internal: .verify(
+                        caCertificate: caCertificate,
+                        crlLocation: crlLocation
+                    )
+                )
+            }
         }
+
+        /// Configuration for the TLS verification of the client.
+        /// Default: ``Client-swift.struct/disableClientVerification``
+        public var client: Client = .disableClientVerification
+
+        /// Configuration for the TLS verification of the broker.
+        /// Default: ``Broker-swift.struct/verify(caCertificate:crlLocation:)``
+        public var broker: Broker = .verify(caCertificate: .probe, crlLocation: nil)
+
+        public init() {}
 
         // MARK: TLSConfiguration + Dictionary
 
         internal var dictionary: [String: String] {
             var resultDict: [String: String] = [:]
 
-            switch self._internal {
-            case .keyPair(let privateKey, let publicKeyCertificate, let caCertificate, let crlLocation):
+            // Client TLS Verification
+            switch self.client._internal {
+            case .disableClientVerification:
+                break
+            case .keyPair(let privateKey, let publicKeyCertificate):
                 switch privateKey.key._internal {
                 case .file(location: let location):
                     resultDict["ssl.key.location"] = location
@@ -203,23 +227,18 @@ extension KafkaConfiguration {
                 case .pem(let pem):
                     resultDict["ssl.certificate.pem"] = pem
                 }
-                switch caCertificate._internal {
-                case .disableBrokerVerification:
-                    resultDict["enable.ssl.certificate.verification"] = String(false)
-                case .probe:
-                    resultDict["ssl.ca.location"] = "probe"
-                case .file(location: let location):
-                    resultDict["ssl.ca.location"] = location
-                case .pem(let pem):
-                    resultDict["ssl.ca.pem"] = pem
-                }
-                resultDict["ssl.crl.location"] = crlLocation
-            case .keyStore(let keyStore, let caCertificate, let crlLocation):
+            case .keyStore(let keyStore):
                 resultDict["ssl.keystore.location"] = keyStore.location
                 resultDict["ssl.keystore.password"] = keyStore.password
+            }
+
+            // Broker TLS Verification
+            switch self.broker._internal {
+            case .disableBrokerVerification:
+                resultDict["enable.ssl.certificate.verification"] = String(false)
+            case .verify(let caCertificate, let crlLocation):
+                resultDict["enable.ssl.certificate.verification"] = String(true)
                 switch caCertificate._internal {
-                case .disableBrokerVerification:
-                    resultDict["enable.ssl.certificate.verification"] = String(false)
                 case .probe:
                     resultDict["ssl.ca.location"] = "probe"
                 case .file(location: let location):
@@ -311,7 +330,6 @@ extension KafkaConfiguration {
             /// Default OAuthBearer method.
             ///
             /// - Parameters:
-            ///
             ///     - configuration: SASL/OAUTHBEARER configuration.
             ///     The format is implementation-dependent and must be parsed accordingly.
             ///     The default unsecured token implementation (see https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes space-separated name=value pairs with valid names including principalClaimName, principal, scopeClaimName, scope, and lifeSeconds.
@@ -327,7 +345,6 @@ extension KafkaConfiguration {
             /// OpenID Connect (OIDC).
             ///
             /// - Parameters:
-            ///
             ///     - configuration: SASL/OAUTHBEARER configuration.
             ///         The format is implementation-dependent and must be parsed accordingly.
             ///         The default unsecured token implementation (see https://tools.ietf.org/html/rfc7515#appendix-A.5) recognizes space-separated    name=value pairs with valid names including principalClaimName, principal, scopeClaimName, scope, and lifeSeconds.
@@ -481,7 +498,7 @@ extension KafkaConfiguration {
         )
 
         /// Use the Transport Layer Security (TLS) protocol.
-        public static func tls(configuration: TLSConfiguration) -> SecurityProtocol {
+        public static func tls(configuration: TLSConfiguration = TLSConfiguration()) -> SecurityProtocol {
             return SecurityProtocol(
                 _internal: .tls(configuration: configuration)
             )
@@ -497,7 +514,7 @@ extension KafkaConfiguration {
         /// Use the Simple Authentication and Security Layer (SASL) with TLS.
         public static func saslTLS(
             saslMechanism: SASLMechanism,
-            tlsConfiguaration: TLSConfiguration
+            tlsConfiguaration: TLSConfiguration = TLSConfiguration()
         ) -> SecurityProtocol {
             return SecurityProtocol(
                 _internal: .saslTLS(saslMechanism: saslMechanism, tlsConfiguaration: tlsConfiguaration)
