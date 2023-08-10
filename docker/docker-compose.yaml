@@ -14,7 +14,7 @@ services:
     environment:
       ZOOKEEPER_HOST: zookeeper
 
-  swift-kafka-gsoc:
+  swift-kafka-client:
     depends_on:
       - kafka
     build:
@@ -24,13 +24,13 @@ services:
       KAFKA_HOST: kafka
 
   runtime-setup:
-    image: swift-kafka-gsoc:default
+    image: swift-kafka-client:default
     build:
       context: .
       dockerfile: Dockerfile
 
   common: &common
-    image: swift-kafka-gsoc:default
+    image: swift-kafka-client:default
     depends_on: [runtime-setup]
     volumes:
       - ~/.ssh:/root/.ssh
