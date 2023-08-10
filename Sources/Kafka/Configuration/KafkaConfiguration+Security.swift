@@ -42,28 +42,28 @@ extension KafkaConfiguration {
             }
         }
 
-        public struct Root: Sendable, Hashable {
-            internal enum _Root: Sendable, Hashable {
+        public struct TrustRoots: Sendable, Hashable {
+            internal enum _TrustRoots: Sendable, Hashable {
                 case probe
                 case file(location: String)
                 case pem(String)
             }
 
-            let _internal: _Root
+            let _internal: _TrustRoots
 
             /// A list of standard paths will be probed and the first one found will be used as the default root certificate location path.
-            public static let probe = Root(_internal: .probe)
+            public static let probe = TrustRoots(_internal: .probe)
 
             /// File or directory path to root certificate(s) for verifying the broker's key.
-            public static func file(location: String) -> Root {
-                return Root(
+            public static func file(location: String) -> TrustRoots {
+                return TrustRoots(
                     _internal: .file(location: location)
                 )
             }
 
-            /// Root certificate String for verifying the broker's key.
-            public static func pem(_ pem: String) -> Root {
-                return Root(
+            /// Trust roots certificate String for verifying the broker's key.
+            public static func pem(_ pem: String) -> TrustRoots {
+                return TrustRoots(
                     _internal: .pem(pem)
                 )
             }
@@ -119,34 +119,30 @@ extension KafkaConfiguration {
         }
 
         /// Configuration for the TLS verification of the client.
-        public struct Client: Sendable, Hashable {
-            internal enum _Client: Sendable, Hashable {
-                case disableClientVerification
+        public struct ClientIdentity: Sendable, Hashable {
+            internal enum _ClientIdentity: Sendable, Hashable {
                 case keyPair(
                     privateKey: PrivateKey,
-                    publicKeyCertificate: LeafAndIntermediates
+                    certificate: LeafAndIntermediates
                 )
                 case keyStore(keyStore: KeyStore)
             }
 
-            let _internal: _Client
-
-            /// Do not verify the identity of the client.
-            public static let disableClientVerification: Client = .init(_internal: .disableClientVerification)
+            let _internal: _ClientIdentity
 
             /// Use TLS client verification with a given private/public key pair.
             ///
             /// - Parameters:
             ///     - privateKey: The client's private key (PEM) used for authentication.
-            ///     - publicKeyCertificate: The client's public key (PEM) used for authentication.
+            ///     - certificate: The client's public key (PEM) used for authentication.
             public static func keyPair(
                 privateKey: PrivateKey,
-                publicKeyCertificate: LeafAndIntermediates
-            ) -> Client {
+                certificate: LeafAndIntermediates
+            ) -> ClientIdentity {
                 return .init(
                     _internal: .keyPair(
                         privateKey: privateKey,
-                        publicKeyCertificate: publicKeyCertificate
+                        certificate: certificate
                     )
                 )
             }
@@ -155,25 +151,25 @@ extension KafkaConfiguration {
             ///
             /// - Parameters:
             ///     - keyStore: The client's keystore (PKCS#12) used for authentication.
-            public static func keyStore(keyStore: KeyStore) -> Client {
+            public static func keyStore(keyStore: KeyStore) -> ClientIdentity {
                 return .init(_internal: .keyStore(keyStore: keyStore))
             }
         }
 
         /// Configuration for the TLS verification of the broker.
-        public struct Broker: Sendable, Hashable {
-            internal enum _Broker: Sendable, Hashable {
-                case disableBrokerVerification
+        public struct BrokerVerification: Sendable, Hashable {
+            internal enum _BrokerVerification: Sendable, Hashable {
+                case disable
                 case verify(
-                    caCertificate: Root,
+                    caCertificate: TrustRoots,
                     crlLocation: String?
                 )
             }
 
-            let _internal: _Broker
+            let _internal: _BrokerVerification
 
             /// Do not verify the identity of the broker.
-            public static let disableBrokerVerification: Broker = .init(_internal: .disableBrokerVerification)
+            public static let disable: BrokerVerification = .init(_internal: .disable)
 
             /// Verify the identity of the broker.
             ///
@@ -181,9 +177,9 @@ extension KafkaConfiguration {
             ///     - caCertificate: File or directory path to CA certificate(s) for verifying the broker's key.
             ///     - crlLocation: Path to CRL for verifying broker's certificate validity.///
             public static func verify(
-                caCertificate: Root = .probe,
+                caCertificate: TrustRoots = .probe,
                 crlLocation: String?
-            ) -> Broker {
+            ) -> BrokerVerification {
                 return .init(
                     _internal: .verify(
                         caCertificate: caCertificate,
@@ -194,12 +190,12 @@ extension KafkaConfiguration {
         }
 
         /// Configuration for the TLS verification of the client.
-        /// Default: ``Client-swift.struct/disableClientVerification``
-        public var client: Client = .disableClientVerification
+        /// Default: `nil`
+        public var clientIdentity: ClientIdentity? = nil
 
         /// Configuration for the TLS verification of the broker.
-        /// Default: ``Broker-swift.struct/verify(caCertificate:crlLocation:)``
-        public var broker: Broker = .verify(caCertificate: .probe, crlLocation: nil)
+        /// Default: ``BrokerVerification-swift.struct/verify(caCertificate:crlLocation:)``
+        public var brokerVerification: BrokerVerification = .verify(caCertificate: .probe, crlLocation: nil)
 
         public init() {}
 
@@ -209,10 +205,10 @@ extension KafkaConfiguration {
             var resultDict: [String: String] = [:]
 
             // Client TLS Verification
-            switch self.client._internal {
-            case .disableClientVerification:
+            switch self.clientIdentity?._internal {
+            case .none:
                 break
-            case .keyPair(let privateKey, let publicKeyCertificate):
+            case .keyPair(let privateKey, let certificate):
                 switch privateKey.key._internal {
                 case .file(location: let location):
                     resultDict["ssl.key.location"] = location
@@ -220,7 +216,7 @@ extension KafkaConfiguration {
                     resultDict["ssl.key.pem"] = pem
                 }
                 resultDict["ssl.key.password"] = privateKey.password
-                switch publicKeyCertificate._internal {
+                switch certificate._internal {
                 case .file(location: let location):
                     resultDict["ssl.key.location"] = location
                     resultDict["ssl.certificate.location"] = location
@@ -233,8 +229,8 @@ extension KafkaConfiguration {
             }
 
             // Broker TLS Verification
-            switch self.broker._internal {
-            case .disableBrokerVerification:
+            switch self.brokerVerification._internal {
+            case .disable:
                 resultDict["enable.ssl.certificate.verification"] = String(false)
             case .verify(let caCertificate, let crlLocation):
                 resultDict["enable.ssl.certificate.verification"] = String(true)
