@@ -58,6 +58,9 @@ internal protocol KafkaProducerSharedProperties: Sendable {
     /// Maximum timeout for flushing outstanding produce requests when the ``KafkaProducer`` is shutting down.
     /// Default: `10000`
     var flushTimeoutMilliseconds: Int { get }
+
+    /// Interval for librdkafka statistics reports
+    var statisticsInterval: KafkaConfiguration.KeyRefreshAttempts { get }
     
     var dictionary: [String: String] { get }
 }

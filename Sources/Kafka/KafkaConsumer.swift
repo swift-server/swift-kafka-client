@@ -707,9 +707,9 @@ extension KafkaConsumer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .initializing(let client, _):
+            case .initializing(let client, _, _):
                 return client
-            case .consuming(let client, _):
+            case .consuming(let client, _, _):
                 return client
             case .consumptionStopped(let client):
                 return client

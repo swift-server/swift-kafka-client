@@ -167,6 +167,9 @@ public struct KafkaTransactionalProducerConfiguration {
 
     /// Reconnect options.
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
+    
+    /// Interval for librdkafka statistics reports
+    public var statisticsInterval: KafkaConfiguration.KeyRefreshAttempts = .disable
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
@@ -234,6 +237,8 @@ extension KafkaTransactionalProducerConfiguration {
         resultDict["broker.address.family"] = self.broker.addressFamily.description
         resultDict["reconnect.backoff.ms"] = String(self.reconnect.backoff.rawValue)
         resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.maximumBackoff.inMilliseconds)
+  
+        resultDict["statistics.interval.ms"] = String(statisticsInterval.rawValue)
 
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(self.securityProtocol.dictionary) { _, _ in
