@@ -51,8 +51,11 @@ final class RDKafkaClient: Sendable {
                 // Polling the queue counts as a consumer poll, and will reset the timer for `max.poll.interval.ms`.
                 self.queue = consumerQueue
             } else {
-                // Getting consumer queue failed, use main queue.
-                self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
+                fatalError("""
+                Internal error: failed to get consumer queue. \
+                A group.id should be set even when the client is not part of a consumer group. \
+                See https://github.com/edenhill/librdkafka/issues/3261 for more information.
+                """)
             }
         } else {
             self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
@@ -446,8 +449,7 @@ final class RDKafkaClient: Sendable {
     ///
     /// Make sure to run poll loop until ``RDKafkaClient/consumerIsClosed`` returns `true`.
     func consumerClose() throws {
-        let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle)
-        let result = rd_kafka_consumer_close_queue(self.kafkaHandle, consumerQueue)
+        let result = rd_kafka_consumer_close_queue(self.kafkaHandle, self.queue)
         let kafkaError = rd_kafka_error_code(result)
         if kafkaError != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: kafkaError)
