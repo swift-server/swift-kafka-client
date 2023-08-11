@@ -210,6 +210,7 @@ final class RDKafkaClient: Sendable {
             case .statistics:
                 events.append(self.handleStatistics(event))
             case .rebalance:
+                self.logger.info("rebalance received (RDClient)")
                 events.append(self.handleRebalance(event))
             case .none:
                 // Finished reading events, return early

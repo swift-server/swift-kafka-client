@@ -254,7 +254,7 @@ public final class KafkaConsumer: Sendable, Service {
             subscribedEvents.append(.statistics)
         }
         if configuration.listenForRebalance {
-//            subscribedEvents.append(.rebalance)
+            subscribedEvents.append(.rebalance)
         }
 
         let client = try RDKafkaClient.makeClient(
@@ -429,6 +429,9 @@ public final class KafkaConsumer: Sendable, Service {
                         }
                     case .statistics(let statistics):
                         _ = eventSource?.yield(.statistics(statistics))
+                    case .rebalance(let rebalance):
+                        self.logger.info("rebalance received \(rebalance)")
+                        _ = eventSource?.yield(.rebalance(rebalance))
                     default:
                         break // Ignore
                     }
@@ -702,7 +705,9 @@ extension KafkaConsumer {
                 fatalError("Cannot store offset when consumption has been stopped")
             case .consuming(let client, _, _):
                 return .storeOffset(client: client)
-            case .finishing, .finished:
+            case .finishing(let client):
+                return .storeOffset(client: client)
+            case .finished:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             }
         }
