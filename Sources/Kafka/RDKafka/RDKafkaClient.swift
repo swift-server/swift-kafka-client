@@ -89,7 +89,7 @@ final class RDKafkaClient: Sendable {
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
         // KafkaConsumer is manually storing read offsets
         if type == .consumer {
-            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+//            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
         }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
@@ -200,12 +200,14 @@ final class RDKafkaClient: Sendable {
                 let forwardEvent = self.handleDeliveryReportEvent(event)
                 events.append(forwardEvent)
             case .fetch:
+                logger.debug("Received event \(eventType)")
                 if let forwardEvent = self.handleFetchEvent(event) {
                     events.append(forwardEvent)
                 }
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
+                logger.debug("Received event \(eventType)")
                 self.handleOffsetCommitEvent(event)
             case .statistics:
                 events.append(self.handleStatistics(event))
@@ -297,6 +299,7 @@ final class RDKafkaClient: Sendable {
         var buffer: UnsafePointer<CChar>?
         var level: Int32 = 0
         if rd_kafka_event_log(event, &faculty, &buffer, &level) == 0 {
+//            rd_kafka_event_debug_contexts
             if let faculty, let buffer {
                 // Mapping according to https://en.wikipedia.org/wiki/Syslog
                 switch level {
@@ -420,6 +423,10 @@ final class RDKafkaClient: Sendable {
         }
         
         defer { rd_kafka_error_destroy(error) }
+        let code = rd_kafka_error_code(error)
+        if code != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: code)
+        }
     }
 
     /// Subscribe to topic set using balanced consumer groups.
@@ -435,12 +442,18 @@ final class RDKafkaClient: Sendable {
 
     /// Atomic assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
-    func assign(topicPartitionList: RDKafkaTopicPartitionList) throws {
-        try topicPartitionList.withListPointer { pointer in
-            let result = rd_kafka_assign(self.kafkaHandle, pointer)
-            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-                throw KafkaError.rdKafkaError(wrapping: result)
+    func assign(topicPartitionList: RDKafkaTopicPartitionList?) throws {
+        if let topicPartitionList {
+            try topicPartitionList.withListPointer { pointer in
+                let result = rd_kafka_assign(self.kafkaHandle, pointer)
+                if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    throw KafkaError.rdKafkaError(wrapping: result)
+                }
             }
+        }
+        let result = rd_kafka_assign(self.kafkaHandle, nil)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
         }
     }
 
@@ -459,26 +472,26 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Important: `enable.auto.offset.store` must be set to `false` when using this API.
     func storeMessageOffset(_ message: KafkaConsumerMessage) throws {
-        // The offset committed is always the offset of the next requested message.
-        // Thus, we increase the offset of the current message by one before committing it.
-        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        let changesList = RDKafkaTopicPartitionList()
-        changesList.setOffset(
-            topic: message.topic,
-            partition: message.partition,
-            offset: .init(rawValue: message.offset.rawValue + 1)
-        )
-
-        let error = changesList.withListPointer { listPointer in
-            rd_kafka_offsets_store(
-                self.kafkaHandle,
-                listPointer
-            )
-        }
-
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
-        }
+//        // The offset committed is always the offset of the next requested message.
+//        // Thus, we increase the offset of the current message by one before committing it.
+//        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+//        let changesList = RDKafkaTopicPartitionList()
+//        changesList.setOffset(
+//            topic: message.topic,
+//            partition: message.partition,
+//            offset: .init(rawValue: message.offset.rawValue + 1)
+//        )
+//
+//        let error = changesList.withListPointer { listPointer in
+//            rd_kafka_offsets_store(
+//                self.kafkaHandle,
+//                listPointer
+//            )
+//        }
+//
+//        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+//            throw KafkaError.rdKafkaError(wrapping: error)
+//        }
     }
 
     /// Non-blocking **awaitable** commit of a the `message`'s offset to Kafka.

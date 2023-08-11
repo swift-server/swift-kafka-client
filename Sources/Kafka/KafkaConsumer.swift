@@ -335,23 +335,26 @@ public final class KafkaConsumer: Sendable, Service {
             return
         }
         let client = try self.stateMachine.withLockedValue { try $0.client() }
-        
         let subscription = RDKafkaTopicPartitionList()
         for topic in topics {
-            subscription.add(
-                topic: topic,
-                partition: KafkaPartition.unassigned
-            )
+            subscription.setOffset(topic: topic, partition: KafkaPartition.unassigned, offset: .init(rawValue: 0))
+        }
+        var idx = 0
+        while let topic = subscription.getByIdx(idx: idx) {
+            defer {
+                idx += 1
+            }
+            logger.info("Subscribe for \(topic)")
         }
         try client.subscribe(topicPartitionList: subscription)
     }
         
     
-    public func assign(_ list: KafkaTopicList) throws {
+    public func assign(_ list: KafkaTopicList?) throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
         switch action {
         case .allowed(let client):
-            try client.assign(topicPartitionList: list.list)
+            try client.assign(topicPartitionList: list?.list)
         case .denied(let err):
             throw KafkaError.client(reason: err)
         }

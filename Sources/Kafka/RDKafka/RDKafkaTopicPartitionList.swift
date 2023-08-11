@@ -43,7 +43,7 @@ public final class RDKafkaTopicPartitionList {
         rd_kafka_topic_partition_list_add(
             self._internal,
             topic,
-            Int32(-1 /*partition.rawValue*/)
+            Int32(partition.rawValue)
         )
     }
 

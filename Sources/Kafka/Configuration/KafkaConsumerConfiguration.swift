@@ -217,6 +217,10 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
+    public var isolationLevel: String?
+    
+    public var groupInstanceId: String?
+    
     public init(
         consumptionStrategy: ConsumptionStrategy,
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
@@ -278,6 +282,14 @@ extension KafkaConsumerConfiguration {
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
         
         resultDict["statistics.interval.ms"] = String(statisticsInterval.rawValue)
+        
+        if let isolationLevel {
+            resultDict["isolation.level"] = isolationLevel
+        }
+        
+        if let groupInstanceId {
+            resultDict["group.instance.id"] = groupInstanceId
+        }
 
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(securityProtocol.dictionary) { _, _ in
