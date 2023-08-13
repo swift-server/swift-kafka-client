@@ -159,31 +159,31 @@ extension KafkaConfiguration {
         /// Configuration for the TLS verification of the broker.
         public struct BrokerVerification: Sendable, Hashable {
             internal enum _BrokerVerification: Sendable, Hashable {
-                case disable
+                case disabled
                 case verify(
-                    rootCertificates: TrustRoots,
-                    crlLocation: String?
+                    trustRoots: TrustRoots,
+                    certificateRevocationListPath: String?
                 )
             }
 
             let _internal: _BrokerVerification
 
             /// Do not verify the identity of the broker.
-            public static let disable: BrokerVerification = .init(_internal: .disable)
+            public static let disabled: BrokerVerification = .init(_internal: .disabled)
 
             /// Verify the identity of the broker.
             ///
             /// Parameters:
-            ///     - caCertificate: File or directory path to CA certificate(s) for verifying the broker's key.
-            ///     - crlLocation: Path to CRL for verifying broker's certificate validity.///
+            ///     - trustRoots: File or directory path to CA certificate(s) for verifying the broker's key.
+            ///     - certificateRevocationListPath: Path to CRL for verifying broker's certificate validity.
             public static func verify(
-                rootCertificates: TrustRoots = .probe,
-                crlLocation: String?
+                trustRoots: TrustRoots = .probe,
+                certificateRevocationListPath: String?
             ) -> BrokerVerification {
                 return .init(
                     _internal: .verify(
-                        rootCertificates: rootCertificates,
-                        crlLocation: crlLocation
+                        trustRoots: trustRoots,
+                        certificateRevocationListPath: certificateRevocationListPath
                     )
                 )
             }
@@ -194,8 +194,11 @@ extension KafkaConfiguration {
         public var clientIdentity: ClientIdentity? = nil
 
         /// Configuration for the TLS verification of the broker.
-        /// Default: ``BrokerVerification-swift.struct/verify(caCertificate:crlLocation:)``
-        public var brokerVerification: BrokerVerification = .verify(rootCertificates: .probe, crlLocation: nil)
+        /// Default: ``BrokerVerification-swift.struct/verify(trustRoots:certificateRevocationListPath:)``
+        public var brokerVerification: BrokerVerification = .verify(
+            trustRoots: .probe,
+            certificateRevocationListPath: nil
+        )
 
         public init() {}
 
@@ -230,11 +233,11 @@ extension KafkaConfiguration {
 
             // Broker TLS Verification
             switch self.brokerVerification._internal {
-            case .disable:
+            case .disabled:
                 resultDict["enable.ssl.certificate.verification"] = String(false)
-            case .verify(let caCertificate, let crlLocation):
+            case .verify(let trustRoots, let certificateRevocationListPath):
                 resultDict["enable.ssl.certificate.verification"] = String(true)
-                switch caCertificate._internal {
+                switch trustRoots._internal {
                 case .probe:
                     resultDict["ssl.ca.location"] = "probe"
                 case .file(location: let location):
@@ -242,7 +245,7 @@ extension KafkaConfiguration {
                 case .pem(let pem):
                     resultDict["ssl.ca.pem"] = pem
                 }
-                resultDict["ssl.crl.location"] = crlLocation
+                resultDict["ssl.crl.location"] = certificateRevocationListPath
             }
 
             return resultDict
@@ -292,7 +295,7 @@ extension KafkaConfiguration {
                 }
 
                 /// Disable automatic key refresh by setting this property.
-                public static let disable: KeyRefreshAttempts = .init(rawValue: 0)
+                public static let disabled: KeyRefreshAttempts = .init(rawValue: 0)
             }
 
             /// Minimum time in between key refresh attempts.
