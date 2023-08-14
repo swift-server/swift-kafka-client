@@ -330,21 +330,13 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
     public func subscribeTopics(topics: [String]) throws {
-        logger.info("Subscribe for topics \(topics)")
         if topics.isEmpty {
             return
         }
         let client = try self.stateMachine.withLockedValue { try $0.client() }
         let subscription = RDKafkaTopicPartitionList()
         for topic in topics {
-            subscription.setOffset(topic: topic, partition: KafkaPartition.unassigned, offset: .init(rawValue: 0))
-        }
-        var idx = 0
-        while let topic = subscription.getByIdx(idx: idx) {
-            defer {
-                idx += 1
-            }
-            logger.info("Subscribe for \(topic)")
+            subscription.add(topic: topic, partition: KafkaPartition.unassigned)
         }
         try client.subscribe(topicPartitionList: subscription)
     }

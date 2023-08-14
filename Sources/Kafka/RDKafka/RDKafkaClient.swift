@@ -89,7 +89,7 @@ final class RDKafkaClient: Sendable {
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
         // KafkaConsumer is manually storing read offsets
         if type == .consumer {
-//            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
         }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
@@ -437,13 +437,14 @@ final class RDKafkaClient: Sendable {
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)
             }
-//            let result2 = rd_kafka_offsets_store(
-//                self.kafkaHandle,
-//                pointer
-//            )
-//            if result2 != RD_KAFKA_RESP_ERR_NO_ERROR {
-//                throw KafkaError.rdKafkaError(wrapping: result2)
-//            }
+        }
+    }
+    
+    // TODO: remove?
+    func doOrThrow(_ body: () -> rd_kafka_resp_err_t, isFatal: Bool = false, file: String = #fileID, line: UInt = #line) throws {
+        let result = body()
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result, isFatal: isFatal, file: file, line: line)
         }
     }
 
@@ -452,17 +453,11 @@ final class RDKafkaClient: Sendable {
     func assign(topicPartitionList: RDKafkaTopicPartitionList?) throws {
         if let topicPartitionList {
             try topicPartitionList.withListPointer { pointer in
-                let result = rd_kafka_assign(self.kafkaHandle, pointer)
-                if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-                    throw KafkaError.rdKafkaError(wrapping: result)
+                try doOrThrow {
+                    rd_kafka_assign(self.kafkaHandle, pointer)
                 }
-//                TODO: offsets store should be carefefully handled with rebalance...
-//                let result2 = rd_kafka_offsets_store(
-//                    self.kafkaHandle,
-//                    pointer
-//                )
-//                if result2 != RD_KAFKA_RESP_ERR_NO_ERROR {
-//                    throw KafkaError.rdKafkaError(wrapping: result2)
+//                try doOrThrow {
+//                    rd_kafka_offsets_store(self.kafkaHandle, pointer)
 //                }
             }
             return
@@ -488,26 +483,27 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Important: `enable.auto.offset.store` must be set to `false` when using this API.
     func storeMessageOffset(_ message: KafkaConsumerMessage) throws {
+//        return ()
 //        // The offset committed is always the offset of the next requested message.
 //        // Thus, we increase the offset of the current message by one before committing it.
 //        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-//        let changesList = RDKafkaTopicPartitionList()
-//        changesList.setOffset(
-//            topic: message.topic,
-//            partition: message.partition,
-//            offset: .init(rawValue: message.offset.rawValue + 1)
-//        )
-//
-//        let error = changesList.withListPointer { listPointer in
-//            rd_kafka_offsets_store(
-//                self.kafkaHandle,
-//                listPointer
-//            )
-//        }
-//
-//        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-//            throw KafkaError.rdKafkaError(wrapping: error)
-//        }
+        let changesList = RDKafkaTopicPartitionList()
+        changesList.setOffset(
+            topic: message.topic,
+            partition: message.partition,
+            offset: .init(rawValue: message.offset.rawValue + 1)
+        )
+
+        let error = changesList.withListPointer { listPointer in
+            rd_kafka_offsets_store(
+                self.kafkaHandle,
+                listPointer
+            )
+        }
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
     }
 
     /// Non-blocking **awaitable** commit of a the `message`'s offset to Kafka.
