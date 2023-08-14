@@ -437,6 +437,13 @@ final class RDKafkaClient: Sendable {
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)
             }
+//            let result2 = rd_kafka_offsets_store(
+//                self.kafkaHandle,
+//                pointer
+//            )
+//            if result2 != RD_KAFKA_RESP_ERR_NO_ERROR {
+//                throw KafkaError.rdKafkaError(wrapping: result2)
+//            }
         }
     }
 
@@ -449,7 +456,16 @@ final class RDKafkaClient: Sendable {
                 if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                     throw KafkaError.rdKafkaError(wrapping: result)
                 }
+//                TODO: offsets store should be carefefully handled with rebalance...
+//                let result2 = rd_kafka_offsets_store(
+//                    self.kafkaHandle,
+//                    pointer
+//                )
+//                if result2 != RD_KAFKA_RESP_ERR_NO_ERROR {
+//                    throw KafkaError.rdKafkaError(wrapping: result2)
+//                }
             }
+            return
         }
         let result = rd_kafka_assign(self.kafkaHandle, nil)
         if result != RD_KAFKA_RESP_ERR_NO_ERROR {

@@ -122,3 +122,14 @@ extension RDKafkaTopicPartitionList: Hashable {
         return true
     }
 }
+
+extension RDKafkaTopicPartitionList: CustomStringConvertible {
+    public var description: String {
+        var str = "RDKafkaTopicPartitionList {"
+        for idx in 0..<count {
+            str += "\(getByIdx(idx: idx))"
+        }
+        str += "}"
+        return str
+    }
+}
