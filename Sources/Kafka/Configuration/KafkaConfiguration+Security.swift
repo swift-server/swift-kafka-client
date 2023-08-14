@@ -178,7 +178,7 @@ extension KafkaConfiguration {
             ///     - certificateRevocationListPath: Path to CRL for verifying broker's certificate validity.
             public static func verify(
                 trustRoots: TrustRoots = .probe,
-                certificateRevocationListPath: String?
+                certificateRevocationListPath: String? = nil
             ) -> BrokerVerification {
                 return .init(
                     _internal: .verify(
@@ -194,7 +194,7 @@ extension KafkaConfiguration {
         public var clientIdentity: ClientIdentity? = nil
 
         /// Configuration for the TLS verification of the broker.
-        /// Default: ``BrokerVerification-swift.struct/verify(trustRoots:certificateRevocationListPath:)``
+        /// Default:  `verify(trustRoots: .probe, certificateRevocationListPath: nil)``
         public var brokerVerification: BrokerVerification = .verify(
             trustRoots: .probe,
             certificateRevocationListPath: nil
