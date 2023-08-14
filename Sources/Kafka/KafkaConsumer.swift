@@ -32,7 +32,8 @@ extension KafkaConsumerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 
     func didTerminate() {
-        self.stateMachine.withLockedValue { $0.messageSequenceTerminated(isMessageSequence: isMessageSequence) }
+        let seq = self.stateMachine.withLockedValue { $0.messageSequenceTerminated(isMessageSequence: isMessageSequence) }
+        seq?.finish()
     }
 }
 
@@ -653,7 +654,7 @@ extension KafkaConsumer {
 
         /// The messages asynchronous sequence was terminated.
         /// All incoming messages will be dropped.
-        mutating func messageSequenceTerminated(isMessageSequence: Bool) {
+        mutating func messageSequenceTerminated(isMessageSequence: Bool) -> ProducerEvents.Source? {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
@@ -669,7 +670,8 @@ extension KafkaConsumer {
                     self.state = .consumptionStopped(client: client)
                     // If message sequence is being terminated, it means class deinit is called
                     // see `messages` field, it is last change to call finish for `eventSource`
-                    eventSource?.finish()
+                    // but we cannot do it under lock => return to make it outside
+                    return eventSource
                 }
                 else {
                     // Messages are still consuming, only event source was finished
@@ -680,6 +682,7 @@ extension KafkaConsumer {
             case .finishing, .finished:
                 break
             }
+            return nil
         }
 
         /// Action to take when wanting to store a message offset (to be auto-committed by `librdkafka`).
