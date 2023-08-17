@@ -19,7 +19,7 @@
 
 // MARK: - Statistics
 
-public struct KafkaStatisticsJson: Hashable, Codable {
+struct KafkaStatisticsJson: Hashable, Codable {
     let name, clientID, type: String?
     let ts, time, age, replyq: Int?
     let msgCnt, msgSize, msgMax, msgSizeMax: Int?
@@ -53,7 +53,7 @@ public struct KafkaStatisticsJson: Hashable, Codable {
 
 // MARK: - Broker
 
-public struct Broker: Hashable, Codable {
+struct Broker: Hashable, Codable {
     let name: String?
     let nodeid: Int?
     let nodename, source, state: String?

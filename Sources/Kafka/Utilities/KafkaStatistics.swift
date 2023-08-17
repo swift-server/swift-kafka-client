@@ -14,16 +14,10 @@
 
 import ExtrasJSON
 
-public struct KafkaStatistics: Sendable, Hashable {
-    public let jsonString: String
-
-    public var json: KafkaStatisticsJson {
-        get throws {
-            return try XJSONDecoder().decode(KafkaStatisticsJson.self, from: self.jsonString.utf8)
-        }
-    }
+struct KafkaStatistics: Sendable, Hashable {
+    let jsonString: String
     
-    internal func fill(_ options: KafkaConfiguration.MetricsOptions) {
+    func fill(_ options: KafkaConfiguration.MetricsOptions) {
         do {
             let json = try XJSONDecoder().decode(KafkaStatisticsJson.self, from: self.jsonString.utf8)
             if let age = options.age,
