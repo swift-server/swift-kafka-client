@@ -300,8 +300,5 @@ public enum KafkaConfiguration {
             )
             return .init(rawValue: UInt(value.inMilliseconds))
         }
-
-        /// Disable automatic key refresh by setting this property.
-        public static let disable: KeyRefreshAttempts = .init(rawValue: 0)
     }
 }

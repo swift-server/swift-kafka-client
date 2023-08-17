@@ -12,8 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 import Logging
 import NIOConcurrencyHelpers
+import Metrics
 
 extension Logger {
     static var kafkaTest: Logger {
@@ -96,5 +98,12 @@ internal struct MockLogHandler: LogHandler {
         set {
             self._metadata[metadataKey] = newValue
         }
+    }
+}
+
+class MockTimerHandler: TimerHandler {
+    let duration = ManagedAtomic<Int64>(0)
+    func recordNanoseconds(_ duration: Int64) {
+        self.duration.store(duration, ordering: .relaxed)
     }
 }

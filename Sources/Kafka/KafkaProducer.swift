@@ -165,7 +165,7 @@ public final class KafkaProducer: Service, Sendable {
         
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
         // Listen to statistics events when statistics enabled
-        if configuration.statisticsInterval != .disable {
+        if case .enable = configuration.metrics {
             subscribedEvents.append(.statistics)
         }
 
@@ -214,6 +214,12 @@ public final class KafkaProducer: Service, Sendable {
             case .pollAndYield(let client, let source):
                 let events = client.eventPoll()
                 for event in events {
+                    if case let .statistics(kafkaStatistics) = event {
+                        if case let .enable(_, options) = self.configuration.metrics {
+                            kafkaStatistics.fill(options)
+                        }
+                        continue
+                    }
                     let producerEvent = KafkaProducerEvent(event)
                     // Ignore YieldResult as we don't support back pressure in KafkaProducer
                     _ = source?.yield(producerEvent)

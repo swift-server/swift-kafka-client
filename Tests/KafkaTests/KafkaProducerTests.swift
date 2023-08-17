@@ -360,7 +360,14 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testProducerStatistics() async throws {
-        self.config.statisticsInterval = .value(.milliseconds(10))
+        var metricsOptions = KafkaConfiguration.MetricsOptions()
+        
+        let handler = MockTimerHandler()
+        metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
+        
+        self.config.metrics = .enable(updateInterval: .value(.milliseconds(10)), options: metricsOptions)
+        
+//        self.config.statisticsInterval = .value(.milliseconds(10))
 
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
             configuration: self.config,
@@ -380,25 +387,27 @@ final class KafkaProducerTests: XCTestCase {
             }
 
             // check for librdkafka statistics
-            group.addTask {
-                var statistics: KafkaStatistics? = nil
-                for try await e in events {
-                    if case let .statistics(stat) = e {
-                        statistics = stat
-                        break
-                    }
-                }
-                guard let statistics else {
-                    XCTFail("stats are not occurred")
-                    return
-                }
-                XCTAssertFalse(statistics.jsonString.isEmpty)
-                XCTAssertNoThrow(try statistics.json)
-            }
-
-            try await group.next()
+//            group.addTask {
+//                var statistics: KafkaStatistics? = nil
+//                for try await e in events {
+//                    if case let .statistics(stat) = e {
+//                        statistics = stat
+//                        break
+//                    }
+//                }
+//                guard let statistics else {
+//                    XCTFail("stats are not occurred")
+//                    return
+//                }
+//                XCTAssertFalse(statistics.jsonString.isEmpty)
+//                XCTAssertNoThrow(try statistics.json)
+//            }
+            try await Task.sleep(for: .milliseconds(500))
+//            try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
+        let value = handler.duration.load(ordering: .relaxed)
+        XCTAssertNotEqual(value, 0)
     }
 }

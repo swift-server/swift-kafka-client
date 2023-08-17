@@ -22,4 +22,18 @@ public struct KafkaStatistics: Sendable, Hashable {
             return try XJSONDecoder().decode(KafkaStatisticsJson.self, from: self.jsonString.utf8)
         }
     }
+    
+    internal func fill(_ options: KafkaConfiguration.MetricsOptions) {
+        do {
+            let json = try XJSONDecoder().decode(KafkaStatisticsJson.self, from: self.jsonString.utf8)
+            if let age = options.age,
+               let jsonAge = json.age {
+                age.recordMicroseconds(jsonAge)
+            }
+            
+            // TODO: other metrics
+        } catch {
+            fatalError("Statistics json decode error \(error)")
+        }
+    }
 }

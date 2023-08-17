@@ -13,10 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 import struct Foundation.UUID
+import Atomics
 @testable import Kafka
 import Logging
 import ServiceLifecycle
 import XCTest
+import Metrics
 
 // For testing locally on Mac, do the following:
 //
@@ -85,14 +87,20 @@ final class KafkaConsumerTests: XCTestCase {
             )
         }
     }
-
+    
     func testConsumerStatistics() async throws {
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
             bootstrapBrokerAddresses: []
         )
-        config.statisticsInterval = .value(.milliseconds(10))
+        
+        var metricsOptions = KafkaConfiguration.MetricsOptions()
+        
+        let handler = MockTimerHandler()
+        metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
+        
+        config.metrics = .enable(updateInterval: .value(.milliseconds(10)), options: metricsOptions)
 
         let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
 
@@ -109,26 +117,30 @@ final class KafkaConsumerTests: XCTestCase {
             }
 
             // check for librdkafka statistics
-            group.addTask {
-                var statistics: KafkaStatistics? = nil
-                for try await event in events {
-                    if case let .statistics(stat) = event {
-                        statistics = stat
-                        break
-                    }
-                }
-                guard let statistics else {
-                    XCTFail("stats are not occurred")
-                    return
-                }
-                XCTAssertFalse(statistics.jsonString.isEmpty)
-                XCTAssertNoThrow(try statistics.json)
-            }
+//            group.addTask {
+//                var statistics: KafkaStatistics? = nil
+//                for try await event in events {
+//                    if case let .statistics(stat) = event {
+//                        statistics = stat
+//                        break
+//                    }
+//                }
+//                guard let statistics else {
+//                    XCTFail("stats are not occurred")
+//                    return
+//                }
+//                XCTAssertFalse(statistics.jsonString.isEmpty)
+//                XCTAssertNoThrow(try statistics.json)
+//            }
+            
+            try await Task.sleep(for: .milliseconds(500))
 
-            try await group.next()
+//            try await group.next()
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
+        let value = handler.duration.load(ordering: .relaxed)
+        XCTAssertNotEqual(value, 0)
     }
 }
