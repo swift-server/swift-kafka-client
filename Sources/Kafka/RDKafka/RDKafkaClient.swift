@@ -89,7 +89,7 @@ final class RDKafkaClient: Sendable {
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
         // KafkaConsumer is manually storing read offsets
         if type == .consumer {
-//            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
         }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
@@ -495,10 +495,9 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Important: `enable.auto.offset.store` must be set to `false` when using this API.
     func storeMessageOffset(_ message: KafkaConsumerMessage) throws {
-        return ()
-//        // The offset committed is always the offset of the next requested message.
-//        // Thus, we increase the offset of the current message by one before committing it.
-//        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+        // The offset committed is always the offset of the next requested message.
+        // Thus, we increase the offset of the current message by one before committing it.
+        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
         let changesList = RDKafkaTopicPartitionList()
         changesList.setOffset(
             topic: message.topic,
