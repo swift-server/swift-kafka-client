@@ -406,11 +406,14 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     private func _run() async throws {
+        var events = [RDKafkaClient.KafkaEvent]()
+        var maxEvents = 100
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source, let eventSource):
-                let events = client.eventPoll()
+                //let events =
+                client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
                     switch event {
                     case .consumerMessages(let result):
@@ -432,12 +435,34 @@ public final class KafkaConsumer: Sendable, Service {
                         break // Ignore
                     }
                 }
-                try await Task.sleep(for: self.configuration.pollInterval)
+                if events.isEmpty {
+                    try await Task.sleep(for: self.configuration.pollInterval)
+                } else {
+                    await Task.yield()
+                }
             case .pollWithoutYield(let client):
                 // Ignore poll result.
                 // We are just polling to serve any remaining events queued inside of `librdkafka`.
                 // All remaining queued consumer messages will get dropped and not be committed (marked as read).
-                _ = client.eventPoll()
+                //let events =
+                client.eventPoll(events: &events, maxEvents: &maxEvents)
+                for event in events {
+                    switch event {
+                    case .rebalance(let type):
+                        switch type {
+                        case .assign(let proto, let list),
+                             .revoke(let proto, let list),
+                             .error(let proto, let list, _):
+                            if proto == .cooperative {
+                                try self.incrementalUnassign(list)
+                            } else {
+                                try self.assign(nil)
+                            }
+                        }
+                    default:
+                        continue
+                    }
+                }
                 try await Task.sleep(for: self.configuration.pollInterval)
             case .terminatePollLoop:
                 return

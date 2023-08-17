@@ -1,11 +1,16 @@
 import Logging
 import ServiceLifecycle
+import Atomics
 
 public final class KafkaTransactionalProducer: Service, Sendable {
-    let producer: KafkaProducer
+    private let producer: KafkaProducer
+    private let logger: Logger
+    
+    private let id: ManagedAtomic<Int> = .init(0)
 
-    private init(producer: KafkaProducer, config: KafkaTransactionalProducerConfiguration) async throws {
+    private init(producer: KafkaProducer, config: KafkaTransactionalProducerConfiguration, logger: Logger) async throws {
         self.producer = producer
+        self.logger = logger
         let client = try producer.client()
         try await client.initTransactions(timeout: config.transactionsTimeout)
     }
@@ -24,7 +29,7 @@ public final class KafkaTransactionalProducer: Service, Sendable {
         logger: Logger
     ) async throws {
         let producer = try KafkaProducer(configuration: config, logger: logger)
-        try await self.init(producer: producer, config: config)
+        try await self.init(producer: producer, config: config, logger: logger)
     }
 
     /// Initialize a new ``KafkaTransactionalProducer`` and a ``KafkaProducerEvents`` asynchronous sequence.
@@ -49,25 +54,38 @@ public final class KafkaTransactionalProducer: Service, Sendable {
             logger: logger
         )
 
-        let transactionalProducer = try await KafkaTransactionalProducer(producer: producer, config: config)
+        let transactionalProducer = try await KafkaTransactionalProducer(producer: producer, config: config, logger: logger)
 
         return (transactionalProducer, events)
     }
 
     //
     public func withTransaction(_ body: @Sendable (KafkaTransaction) async throws -> Void) async throws {
+        let id = id.wrappingIncrementThenLoad(ordering: .relaxed)
+//        var logger = Logger(label: "Transaction \(id)")
+//
+//        logger.info("Begin txn \(id)")
+//        defer {
+//            logger.info("End txn \(id)")
+//        }
         let transaction = try KafkaTransaction(
             client: try producer.client(),
-            producer: self.producer
+            producer: self.producer,
+            logger: logger
         )
 
         do { // need to think here a little bit how to abort transaction
+//            logger.info("Fill the transaction \(id)")
             try await body(transaction)
+//            logger.info("Committing the transaction \(id)")
             try await transaction.commit()
         } catch { // FIXME: maybe catch AbortTransaction?
+//            logger.info("Caught error for transaction \(id): \(error), aborting")
             do {
                 try await transaction.abort()
+//                logger.info("Transaction \(id) aborted")
             } catch {
+//                logger.info("Failed to perform abort for transaction \(id): \(error)")
                 // FIXME: that some inconsistent state
                 // should we emit fatalError(..)
                 // or propagate error as exception with isFatal flag?

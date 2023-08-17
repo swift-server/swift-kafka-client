@@ -167,6 +167,8 @@ public struct KafkaProducerConfiguration {
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
+    
+    public var compression: String?
 
     public init(
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
@@ -216,6 +218,10 @@ extension KafkaProducerConfiguration {
         resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.maximumBackoff.inMilliseconds)
         
         resultDict["statistics.interval.ms"] = String(statisticsInterval.rawValue)
+        
+        if let compression {
+            resultDict["compression.codec"] = compression
+        }
 
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(self.securityProtocol.dictionary) { _, _ in

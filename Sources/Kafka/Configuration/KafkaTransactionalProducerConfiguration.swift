@@ -186,6 +186,8 @@ public struct KafkaTransactionalProducerConfiguration {
         }
     }
     
+    public var compression: String?
+    
     public init(
         transactionalId: String,
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
@@ -243,6 +245,10 @@ extension KafkaTransactionalProducerConfiguration {
         // Merge with SecurityProtocol configuration dictionary
         resultDict.merge(self.securityProtocol.dictionary) { _, _ in
             fatalError("securityProtocol and \(#file) should not have duplicate keys")
+        }
+        
+        if let compression {
+            resultDict["compression.codec"] = compression
         }
 
         return resultDict

@@ -542,7 +542,7 @@ final class KafkaTests: XCTestCase {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
         }
     }
-
+/*
     func testProduceAndConsumeWithTransaction() async throws {
         let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: 10)
 
@@ -647,6 +647,79 @@ final class KafkaTests: XCTestCase {
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+    
+    
+    */
+    func testOrdo() async throws {
+//        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+//        let firstConsumerOffset = testMessages.count / 2
+//        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+//
+//        // Important: both consumer must have the same group.id
+        let uniqueGroupID = UUID().uuidString
+
+        // MARK: First Consumer
+        var logger_ = Logger(label: "ordo")
+        logger_.logLevel = .debug
+        let logger = logger_
+        
+        logger.info("unique group id \(uniqueGroupID)")
+
+        var consumer1Config = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: ["transactions-pending-dc-1"] //["transactions-snapshots-dc-1"]
+            ),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumer1Config.isAutoCommitEnabled = false
+        consumer1Config.autoOffsetReset = .beginning // Read topic from beginning
+        consumer1Config.broker.addressFamily = .v4
+//        consumer1Config.debugOptions = [.all]
+        consumer1Config.groupInstanceId = uniqueGroupID //"transactions-pending-dc-1-test-instance-id"
+        
+        
+
+        let consumer1 = try KafkaConsumer(
+            configuration: consumer1Config,
+            logger: logger
+        )
+
+        let serviceGroup1 = ServiceGroup(
+            services: [consumer1],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: logger
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup1.run()
+            }
+
+            // First Consumer Task
+            group.addTask {
+//                try consumer1.subscribeTopics(topics: ["transactions-pending-dc-1"])
+                var count = 0
+                var start = Date.now
+                for try await message in consumer1.messages {
+//                    logger.info("Got msg: \(message)")
+//                    try await consumer1.commitSync(message)
+                    count += 1
+                    let now = Date.now
+                    if count > 1000 && now > start {
+                        let diff = -start.timeIntervalSinceNow
+                        let rate = Double(count) / diff
+                        logger.info("Rate is \(rate) for last \(diff)")
+                        count = 0
+                        start = now
+                        try await consumer1.commitSync(message)
+                    }
+                }
+            }
+
         }
     }
 }

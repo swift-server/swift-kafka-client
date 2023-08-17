@@ -89,7 +89,7 @@ final class RDKafkaClient: Sendable {
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
         // KafkaConsumer is manually storing read offsets
         if type == .consumer {
-            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+//            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
         }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
@@ -182,9 +182,19 @@ final class RDKafkaClient: Sendable {
     /// Poll the event `rd_kafka_queue_t` for new events.
     ///
     /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
-    func eventPoll(maxEvents: Int = 100) -> [KafkaEvent] {
-        var events = [KafkaEvent]()
+    func eventPoll(events: inout [KafkaEvent], maxEvents: inout Int)/* -> [KafkaEvent] */{
+//        var events = [KafkaEvent]()
+        events.removeAll(keepingCapacity: true)
         events.reserveCapacity(maxEvents)
+        
+        defer {
+            if events.count >= maxEvents {
+                maxEvents *= 2
+//            } else if events.count < maxEvents / 2 {
+//                maxEvents /= 2
+            }
+//            maxEvents = Swift.max(maxEvents, 1)
+        }
 
         for _ in 0..<maxEvents {
             let event = rd_kafka_queue_poll(self.queue, 0)
@@ -200,14 +210,14 @@ final class RDKafkaClient: Sendable {
                 let forwardEvent = self.handleDeliveryReportEvent(event)
                 events.append(forwardEvent)
             case .fetch:
-                logger.debug("Received event \(eventType)")
+//                logger.debug("Received event \(eventType)")
                 if let forwardEvent = self.handleFetchEvent(event) {
                     events.append(forwardEvent)
                 }
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
-                logger.debug("Received event \(eventType)")
+//                logger.debug("Received event \(eventType)")
                 self.handleOffsetCommitEvent(event)
             case .statistics:
                 events.append(self.handleStatistics(event))
@@ -216,13 +226,15 @@ final class RDKafkaClient: Sendable {
                 events.append(self.handleRebalance(event))
             case .none:
                 // Finished reading events, return early
-                return events
+                return //events
             default:
                 break // Ignored Event
             }
         }
+        
 
-        return events
+
+//        return events
     }
 
     /// Handle event of type `RDKafkaEvent.deliveryReport`.
@@ -483,7 +495,7 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Important: `enable.auto.offset.store` must be set to `false` when using this API.
     func storeMessageOffset(_ message: KafkaConsumerMessage) throws {
-//        return ()
+        return ()
 //        // The offset committed is always the offset of the next requested message.
 //        // Thus, we increase the offset of the current message by one before committing it.
 //        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
@@ -602,10 +614,6 @@ final class RDKafkaClient: Sendable {
     }
 
     func initTransactions(timeout: Duration) async throws {
-        rd_kafka_conf_set_dr_msg_cb(self.kafkaHandle) { _, _, _ in
-            print("test")
-        }
-
         let result = await performBlockingCall(queue: gcdQueue) {
             rd_kafka_init_transactions(self.kafkaHandle, timeout.totalMilliseconds)
         }

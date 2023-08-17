@@ -221,6 +221,8 @@ public struct KafkaConsumerConfiguration {
     
     public var groupInstanceId: String?
     
+    public var compression: String?
+    
     public init(
         consumptionStrategy: ConsumptionStrategy,
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
@@ -289,6 +291,10 @@ extension KafkaConsumerConfiguration {
         
         if let groupInstanceId {
             resultDict["group.instance.id"] = groupInstanceId
+        }
+        
+        if let compression {
+            resultDict["compression.codec"] = compression
         }
 
         // Merge with SecurityProtocol configuration dictionary
