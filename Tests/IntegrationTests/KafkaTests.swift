@@ -102,11 +102,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup = ServiceGroup(
-            services: [producer, consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -174,11 +171,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup = ServiceGroup(
-            services: [producer, consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -243,11 +237,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup = ServiceGroup(
-            services: [producer, consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Consumer Run Task
@@ -315,11 +306,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup1 = ServiceGroup(
-            services: [producer, consumer1],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration1 = ServiceGroupConfiguration(services: [producer, consumer1], logger: .kafkaTest)
+        let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -392,11 +380,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup2 = ServiceGroup(
-            services: [consumer2],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer2], logger: .kafkaTest)
+        let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
