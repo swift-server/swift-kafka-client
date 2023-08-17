@@ -15,7 +15,7 @@
 extension KafkaConfiguration {
     // MARK: - TLSConfiguration
 
-    /// Use to configure an TLS connection.
+    /// Use to configure a TLS connection.
     public struct TLSConfiguration: Sendable, Hashable {
         /// Certificate chain consisting of one leaf certificate and potentially multiple intermediate certificates.
         /// The public key of the leaf certificate will be used for authentication.
@@ -486,7 +486,7 @@ extension KafkaConfiguration {
             case plaintext
             case tls(configuration: TLSConfiguration)
             case saslPlaintext(mechanism: SASLMechanism)
-            case saslTLS(saslMechanism: SASLMechanism, tlsConfiguaration: TLSConfiguration)
+            case saslTLS(saslMechanism: SASLMechanism, tlsConfiguration: TLSConfiguration)
         }
 
         private let _internal: _SecurityProtocol
@@ -513,10 +513,10 @@ extension KafkaConfiguration {
         /// Use the Simple Authentication and Security Layer (SASL) with TLS.
         public static func saslTLS(
             saslMechanism: SASLMechanism,
-            tlsConfiguaration: TLSConfiguration = TLSConfiguration()
+            tlsConfiguration: TLSConfiguration = TLSConfiguration()
         ) -> SecurityProtocol {
             return SecurityProtocol(
-                _internal: .saslTLS(saslMechanism: saslMechanism, tlsConfiguaration: tlsConfiguaration)
+                _internal: .saslTLS(saslMechanism: saslMechanism, tlsConfiguration: tlsConfiguration)
             )
         }
 
