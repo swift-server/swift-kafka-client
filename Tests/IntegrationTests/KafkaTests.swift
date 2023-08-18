@@ -123,10 +123,7 @@ final class KafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer.messages {
                     consumedMessages.append(message)
 
                     if consumedMessages.count >= testMessages.count {
@@ -192,10 +189,7 @@ final class KafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer.messages {
                     consumedMessages.append(message)
 
                     if consumedMessages.count >= testMessages.count {
@@ -258,10 +252,7 @@ final class KafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer.messages {
                     consumedMessages.append(message)
                     try await consumer.commitSync(message)
 
@@ -327,10 +318,7 @@ final class KafkaTests: XCTestCase {
             // First Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer1.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer1.messages {
                     consumedMessages.append(message)
 
                     // Only read first half of messages
@@ -392,10 +380,7 @@ final class KafkaTests: XCTestCase {
             // Second Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer2.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer2.messages {
                     consumedMessages.append(message)
 
                     // Read second half of messages
