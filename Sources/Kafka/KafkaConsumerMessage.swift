@@ -16,7 +16,7 @@ import Crdkafka
 import NIOCore
 
 /// A message received from the Kafka cluster.
-public class KafkaConsumerMessage {
+public struct KafkaConsumerMessage {
     /// The topic that the message was received from.
     public var topic: String
     /// The partition that the message was received from.
@@ -75,7 +75,7 @@ public class KafkaConsumerMessage {
 
 // MARK: - KafkaConsumerMessage + Hashable
 
-//extension KafkaConsumerMessage: Hashable {}
+extension KafkaConsumerMessage: Hashable {}
 
 // MARK: - KafkaConsumerMessage + Sendable
 
