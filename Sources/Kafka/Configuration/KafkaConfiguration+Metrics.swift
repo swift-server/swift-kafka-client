@@ -59,7 +59,7 @@ extension KafkaConfiguration {
     }
     
     public enum Metrics: Sendable {
-        case disable
+        case disabled
         case enable(updateInterval: KafkaConfiguration.KeyRefreshAttempts, options: MetricsOptions)
     }
 }
