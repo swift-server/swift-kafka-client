@@ -18,7 +18,7 @@ extension KafkaConfiguration {
     // MARK: - Metrics
 
     /// Use to configure metrics.
-    public struct MetricsOptions: Sendable {
+    public struct KafkaMetrics: Sendable {
         /// librdkafka's internal monotonic clock (microseconds)
         public var ts: Gauge?
         /// Wall clock time in seconds since the epoch
