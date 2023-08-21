@@ -115,11 +115,17 @@ public final class KafkaProducer: Service, Sendable {
         logger: Logger
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
+        
+        var subscribedEvents: [RDKafkaEvent] = [.log] // No .deliveryReport here!
+        
+        if case .enabled = configuration.metrics {
+            subscribedEvents.append(.statistics)
+        }
 
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: configuration.dictionary,
-            events: [.log], // No .deliveryReport here!
+            events: subscribedEvents,
             logger: logger
         )
 
@@ -165,7 +171,7 @@ public final class KafkaProducer: Service, Sendable {
         
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
         // Listen to statistics events when statistics enabled
-        if case .enable = configuration.metrics {
+        if case .enabled = configuration.metrics {
             subscribedEvents.append(.statistics)
         }
 
@@ -214,15 +220,20 @@ public final class KafkaProducer: Service, Sendable {
             case .pollAndYield(let client, let source):
                 let events = client.eventPoll()
                 for event in events {
-                    if case let .statistics(kafkaStatistics) = event {
-                        if case let .enable(_, options) = self.configuration.metrics {
-                            kafkaStatistics.fill(options)
+                    switch event {
+                    case .statistics(let statistics):
+                        switch self.configuration.metrics {
+                        case .enabled(_, let options):
+                            assert(options.someMetricsSet, "Unexpected statistics received when no metrics configured")
+                            statistics.fill(options)
+                        case .disabled:
+                            assert(false, "Unexpected statistics received when metrics disabled")
                         }
-                        continue
+                    case .deliveryReport(let reports):
+                        _ = source?.yield(.deliveryReports(reports))
+                    case .consumerMessages:
+                        fatalError("Unexpected event for producer \(event)")
                     }
-                    let producerEvent = KafkaProducerEvent(event)
-                    // Ignore YieldResult as we don't support back pressure in KafkaProducer
-                    _ = source?.yield(producerEvent)
                 }
                 try await Task.sleep(for: self.configuration.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):

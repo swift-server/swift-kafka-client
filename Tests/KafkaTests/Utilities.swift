@@ -102,8 +102,16 @@ internal struct MockLogHandler: LogHandler {
 }
 
 class MockTimerHandler: TimerHandler {
-    let duration = ManagedAtomic<Int64>(0)
+    let expectation: AsyncStream<Int64>
+    private let expectationContinuation: AsyncStream<Int64>.Continuation
+
+    init() {
+        var expectationContinuation: AsyncStream<Int64>.Continuation!
+        self.expectation = AsyncStream<Int64>(bufferingPolicy: .bufferingNewest(1)) { expectationContinuation = $0 }
+        self.expectationContinuation = expectationContinuation
+    }
+
     func recordNanoseconds(_ duration: Int64) {
-        self.duration.store(duration, ordering: .relaxed)
+        _ = self.expectationContinuation.yield(duration)
     }
 }

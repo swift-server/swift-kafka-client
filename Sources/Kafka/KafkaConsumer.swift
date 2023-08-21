@@ -207,6 +207,9 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
+        if case .enabled = configuration.metrics {
+            subscribedEvents.append(.statistics)
+        }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
@@ -247,7 +250,7 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
-        if case .enable = configuration.metrics {
+        if case .enabled = configuration.metrics {
             subscribedEvents.append(.statistics)
         }
 
@@ -344,8 +347,12 @@ public final class KafkaConsumer: Sendable, Service {
                             throw error
                         }
                     case .statistics(let statistics):
-                        if case let .enable(_, options) = self.configuration.metrics {
+                        switch self.configuration.metrics {
+                        case .enabled(_, let options):
+                            assert(options.someMetricsSet, "Unexpected statistics received when no metrics configured")
                             statistics.fill(options)
+                        case .disabled:
+                            assert(false, "Unexpected statistics received when metrics disabled")
                         }
                     default:
                         break // Ignore

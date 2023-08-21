@@ -95,12 +95,12 @@ final class KafkaConsumerTests: XCTestCase {
             bootstrapBrokerAddresses: []
         )
         
-        var metricsOptions = KafkaConfiguration.MetricsOptions()
+        var metricsOptions = KafkaConfiguration.KafkaMetrics()
         
         let handler = MockTimerHandler()
         metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
         
-        config.metrics = .enable(updateInterval: .value(.milliseconds(10)), options: metricsOptions)
+        config.metrics = .enabled(updateInterval: .milliseconds(10), options: metricsOptions)
 
         let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
 
@@ -116,31 +116,13 @@ final class KafkaConsumerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            // check for librdkafka statistics
-//            group.addTask {
-//                var statistics: KafkaStatistics? = nil
-//                for try await event in events {
-//                    if case let .statistics(stat) = event {
-//                        statistics = stat
-//                        break
-//                    }
-//                }
-//                guard let statistics else {
-//                    XCTFail("stats are not occurred")
-//                    return
-//                }
-//                XCTAssertFalse(statistics.jsonString.isEmpty)
-//                XCTAssertNoThrow(try statistics.json)
-//            }
-            
             try await Task.sleep(for: .milliseconds(500))
-
-//            try await group.next()
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
-        let value = handler.duration.load(ordering: .relaxed)
+        var iter = handler.expectation.makeAsyncIterator()
+        let value = await iter.next()
         XCTAssertNotEqual(value, 0)
     }
 }
