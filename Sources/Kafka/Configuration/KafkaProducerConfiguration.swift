@@ -162,7 +162,7 @@ public struct KafkaProducerConfiguration {
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
     /// Options for librdkafka metrics updates
-    public var metrics: KafkaConfiguration.Metrics = .disabled  {
+    public var metrics: KafkaConfiguration.Metrics = .disabled {
         didSet {
             if case .enabled(let updateInterval, let options) = metrics {
                 precondition(
@@ -176,7 +176,7 @@ public struct KafkaProducerConfiguration {
             }
         }
     }
-    
+
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
@@ -227,7 +227,7 @@ extension KafkaProducerConfiguration {
         resultDict["broker.address.family"] = self.broker.addressFamily.description
         resultDict["reconnect.backoff.ms"] = String(self.reconnect.backoff.rawValue)
         resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.maximumBackoff.inMilliseconds)
-        
+
         switch self.metrics {
         case .disabled:
             resultDict["statistics.interval.ms"] = "0"

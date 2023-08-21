@@ -286,7 +286,7 @@ extension KafkaConsumerConfiguration {
         resultDict["broker.address.family"] = broker.addressFamily.description
         resultDict["reconnect.backoff.ms"] = String(reconnect.backoff.rawValue)
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
-        
+
         switch self.metrics {
         case .disabled:
             resultDict["statistics.interval.ms"] = "0"

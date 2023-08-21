@@ -21,23 +21,23 @@ extension KafkaConfiguration {
     public struct KafkaMetrics: Sendable {
         internal var someMetricsSet: Bool {
             self.timestamp != nil ||
-            self.time != nil ||
-            self.age != nil ||
-            self.replyQueue != nil ||
-            self.messageCount != nil ||
-            self.messageSize != nil ||
-            self.messageMax != nil ||
-            self.messageSizeMax != nil ||
-            self.totalRequestsSent != nil ||
-            self.totalBytesSent != nil ||
-            self.totalResponsesRecieved != nil ||
-            self.totalBytesReceived != nil ||
-            self.totalMessagesSent != nil ||
-            self.totalMessagesBytesSent != nil ||
-            self.totalBytesReceived != nil ||
-            self.metadataCacheCount != nil
+                self.time != nil ||
+                self.age != nil ||
+                self.replyQueue != nil ||
+                self.messageCount != nil ||
+                self.messageSize != nil ||
+                self.messageMax != nil ||
+                self.messageSizeMax != nil ||
+                self.totalRequestsSent != nil ||
+                self.totalBytesSent != nil ||
+                self.totalResponsesRecieved != nil ||
+                self.totalBytesReceived != nil ||
+                self.totalMessagesSent != nil ||
+                self.totalMessagesBytesSent != nil ||
+                self.totalBytesReceived != nil ||
+                self.metadataCacheCount != nil
         }
-        
+
         /// librdkafka's internal monotonic clock (microseconds)
         public var timestamp: Gauge?
         /// Wall clock time in seconds since the epoch
@@ -54,7 +54,7 @@ extension KafkaConfiguration {
         public var messageMax: Gauge?
         /// Threshold: maximum total size of messages allowed on the producer queues
         public var messageSizeMax: Gauge?
-        
+
         /// Total number of requests sent to Kafka brokers
         public var totalRequestsSent: Gauge?
         /// Total number of bytes transmitted to Kafka brokers
@@ -63,7 +63,7 @@ extension KafkaConfiguration {
         public var totalResponsesRecieved: Gauge?
         /// Total number of bytes received from Kafka brokers
         public var totalBytesReceived: Gauge?
-        
+
         /// Total number of messages transmitted (produced) to Kafka brokers
         public var totalMessagesSent: Gauge?
         /// Total number of message bytes (including framing, such as per-Message framing and MessageSet/batch framing) transmitted to Kafka brokers
@@ -72,11 +72,11 @@ extension KafkaConfiguration {
         public var totalMessagesRecieved: Gauge?
         /// Total number of message bytes (including framing) received from Kafka brokers
         public var totalMessagesBytesRecieved: Gauge?
-        
+
         /// Number of topics in the metadata cache.
         public var metadataCacheCount: Gauge?
     }
-    
+
     public enum Metrics: Sendable {
         case disabled
         case enabled(updateInterval: Duration, options: KafkaMetrics)

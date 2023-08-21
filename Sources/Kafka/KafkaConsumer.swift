@@ -275,7 +275,7 @@ public final class KafkaConsumer: Sendable, Service {
             configuration: configuration,
             logger: logger
         )
-        
+
         return (consumer, eventsSequence)
     }
 
@@ -352,7 +352,7 @@ public final class KafkaConsumer: Sendable, Service {
                             assert(options.someMetricsSet, "Unexpected statistics received when no metrics configured")
                             statistics.fill(options)
                         case .disabled:
-                            assert(false, "Unexpected statistics received when metrics disabled")
+                            assertionFailure("Unexpected statistics received when metrics disabled")
                         }
                     default:
                         break // Ignore

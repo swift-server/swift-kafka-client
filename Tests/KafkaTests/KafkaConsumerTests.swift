@@ -12,13 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.UUID
 import Atomics
+import struct Foundation.UUID
 @testable import Kafka
 import Logging
+import Metrics
 import ServiceLifecycle
 import XCTest
-import Metrics
 
 // For testing locally on Mac, do the following:
 //
@@ -87,19 +87,19 @@ final class KafkaConsumerTests: XCTestCase {
             )
         }
     }
-    
+
     func testConsumerStatistics() async throws {
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
             bootstrapBrokerAddresses: []
         )
-        
+
         var metricsOptions = KafkaConfiguration.KafkaMetrics()
-        
+
         let handler = MockTimerHandler()
         metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
-        
+
         config.metrics = .enabled(updateInterval: .milliseconds(10), options: metricsOptions)
 
         let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
@@ -116,13 +116,17 @@ final class KafkaConsumerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            try await Task.sleep(for: .milliseconds(500))
+            group.addTask {
+                for await value in handler.expectation {
+                    XCTAssertNotEqual(value, 0)
+                    break
+                }
+            }
+            
+            try await group.next()
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
-        var iter = handler.expectation.makeAsyncIterator()
-        let value = await iter.next()
-        XCTAssertNotEqual(value, 0)
     }
 }

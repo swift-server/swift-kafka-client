@@ -361,10 +361,10 @@ final class KafkaProducerTests: XCTestCase {
 
     func testProducerStatistics() async throws {
         var metricsOptions = KafkaConfiguration.KafkaMetrics()
-        
+
         let handler = MockTimerHandler()
         metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
-        
+
         self.config.metrics = .enabled(updateInterval: .milliseconds(10), options: metricsOptions)
 
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
@@ -384,13 +384,17 @@ final class KafkaProducerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            try await Task.sleep(for: .milliseconds(500))
+            group.addTask {
+                for await value in handler.expectation {
+                    XCTAssertNotEqual(value, 0)
+                    break
+                }
+            }
+            
+            try await group.next()
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
-        var iter = handler.expectation.makeAsyncIterator()
-        let value = await iter.next()
-        XCTAssertNotEqual(value, 0)
     }
 }

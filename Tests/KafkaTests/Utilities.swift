@@ -12,10 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Atomics
 import Logging
-import NIOConcurrencyHelpers
 import Metrics
+import NIOConcurrencyHelpers
 
 extension Logger {
     static var kafkaTest: Logger {

@@ -115,9 +115,9 @@ public final class KafkaProducer: Service, Sendable {
         logger: Logger
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
-        
+
         var subscribedEvents: [RDKafkaEvent] = [.log] // No .deliveryReport here!
-        
+
         if case .enabled = configuration.metrics {
             subscribedEvents.append(.statistics)
         }
@@ -168,7 +168,7 @@ public final class KafkaProducer: Service, Sendable {
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
         let source = sourceAndSequence.source
-        
+
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
         // Listen to statistics events when statistics enabled
         if case .enabled = configuration.metrics {
@@ -227,7 +227,7 @@ public final class KafkaProducer: Service, Sendable {
                             assert(options.someMetricsSet, "Unexpected statistics received when no metrics configured")
                             statistics.fill(options)
                         case .disabled:
-                            assert(false, "Unexpected statistics received when metrics disabled")
+                            assertionFailure("Unexpected statistics received when metrics disabled")
                         }
                     case .deliveryReport(let reports):
                         _ = source?.yield(.deliveryReports(reports))

@@ -54,7 +54,7 @@ struct KafkaStatisticsJson: Hashable, Codable {
 
 // MARK: - Broker
 
-//struct Broker: Hashable, Codable {
+// struct Broker: Hashable, Codable {
 //    let name: String?
 //    let nodeid: Int?
 //    let nodename, source, state: String?
@@ -84,7 +84,7 @@ struct KafkaStatisticsJson: Hashable, Codable {
 //        case outbufLatency = "outbuf_latency"
 //        case rtt, throttle, req, toppars
 //    }
-//}
+// }
 
 // MARK: - Toppars
 
@@ -119,7 +119,7 @@ struct Cgrp: Hashable, Codable {
 
 // MARK: - Topic
 
-//struct Topic: Hashable, Codable {
+// struct Topic: Hashable, Codable {
 //    let topic: String?
 //    let age, metadataAge: Int?
 //    let batchsize, batchcnt: [String: Int]?
@@ -130,11 +130,11 @@ struct Cgrp: Hashable, Codable {
 //        case metadataAge = "metadata_age"
 //        case batchsize, batchcnt, partitions
 //    }
-//}
+// }
 
 // MARK: - Partition
 
-//struct Partition: Hashable, Codable {
+// struct Partition: Hashable, Codable {
 //    let partition, broker, leader: Int?
 //    let desired, unknown: Bool?
 //    let msgqCnt, msgqBytes, xmitMsgqCnt, xmitMsgqBytes: Int?
@@ -175,4 +175,4 @@ struct Cgrp: Hashable, Codable {
 //        case nextErrSeq = "next_err_seq"
 //        case ackedMsgid = "acked_msgid"
 //    }
-//}
+// }
