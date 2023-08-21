@@ -272,20 +272,24 @@ final class KafkaTests: XCTestCase {
         }
     }
 
-    func testNoNewConsumerMessagesAfterGracefulShutdown() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 2)
-        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+    func testProduceAndConsumeWithMessageHeaders() async throws {
+        let testMessages = Self.createTestMessages(
+            topic: self.uniqueTestTopic,
+            headers: [
+                KafkaHeader(key: "some.header", value: ByteBuffer(string: "some-header-value")),
+                KafkaHeader(key: "some.null.header", value: nil),
+            ],
+            count: 10
+        )
 
-        let uniqueGroupID = UUID().uuidString
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(
-                id: uniqueGroupID,
-                topics: [self.uniqueTestTopic]
-            ),
+            consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
-        consumerConfig.autoOffsetReset = .beginning // Read topic from beginning
+        consumerConfig.isAutoCommitEnabled = false
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -306,7 +310,75 @@ final class KafkaTests: XCTestCase {
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
-                    events: acks,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+
+            // Consumer Task
+            group.addTask {
+                var consumedMessages = [KafkaConsumerMessage]()
+                for try await messageResult in consumer.messages {
+                    guard case let message = messageResult else {
+                        continue
+                    }
+                    consumedMessages.append(message)
+                    try await consumer.commitSync(message)
+
+                    if consumedMessages.count >= testMessages.count {
+                        break
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+
+                for (index, consumedMessage) in consumedMessages.enumerated() {
+                    XCTAssertEqual(testMessages[index].headers, consumedMessage.headers)
+                }
+            }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    func testNoNewConsumerMessagesAfterGracefulShutdown() async throws {
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 2)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        let uniqueGroupID = UUID().uuidString
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: [self.uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning // Read topic from beginning
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
                     messages: testMessages
                 )
             }
@@ -471,10 +543,15 @@ final class KafkaTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static func createTestMessages(topic: String, count: UInt) -> [KafkaProducerMessage<String, String>] {
+    private static func createTestMessages(
+        topic: String,
+        headers: [KafkaHeader] = [],
+        count: UInt
+    ) -> [KafkaProducerMessage<String, String>] {
         return Array(0..<count).map {
             KafkaProducerMessage(
                 topic: topic,
+                headers: headers,
                 key: "key",
                 value: "Hello, World! \($0) - \(Date().description)"
             )

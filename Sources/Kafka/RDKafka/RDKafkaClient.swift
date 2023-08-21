@@ -124,43 +124,55 @@ final class RDKafkaClient: Sendable {
             "Partition ID outside of valid range \(0...Int32.max)"
         )
 
-        let responseCode = try message.value.withUnsafeBytes { valueBuffer in
+        let errorPointer = try message.value.withUnsafeBytes { valueBuffer in
             try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfiguration: topicConfiguration) { topicHandle in
                 if let key = message.key {
                     // Key available, we can use scoped accessor to safely access its rawBufferPointer.
                     // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
                     // Returns 0 on success, error code otherwise.
                     return key.withUnsafeBytes { keyBuffer in
-                        return rd_kafka_produce(
-                            topicHandle,
-                            Int32(message.partition.rawValue),
-                            RD_KAFKA_MSG_F_COPY,
-                            UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                            valueBuffer.count,
-                            keyBuffer.baseAddress,
-                            keyBuffer.count,
-                            UnsafeMutableRawPointer(bitPattern: newMessageID)
+
+                        let unsafeMessage = RDKafkaUnsafeProducerMessage(
+                            topicHandle: topicHandle,
+                            partition: Int32(message.partition.rawValue),
+                            messageFlags: RD_KAFKA_MSG_F_COPY,
+                            key: keyBuffer,
+                            value: valueBuffer,
+                            opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
+                            headers: message.headers
+                        )
+
+                        return rd_kafka_produceva(
+                            self.kafkaHandle,
+                            unsafeMessage._internal,
+                            unsafeMessage.size
                         )
                     }
                 } else {
                     // No key set.
                     // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
                     // Returns 0 on success, error code otherwise.
-                    return rd_kafka_produce(
-                        topicHandle,
-                        Int32(message.partition.rawValue),
-                        RD_KAFKA_MSG_F_COPY,
-                        UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                        valueBuffer.count,
-                        nil,
-                        0,
-                        UnsafeMutableRawPointer(bitPattern: newMessageID)
+                    let unsafeMessage = RDKafkaUnsafeProducerMessage(
+                        topicHandle: topicHandle,
+                        partition: Int32(message.partition.rawValue),
+                        messageFlags: RD_KAFKA_MSG_F_COPY,
+                        key: nil,
+                        value: valueBuffer,
+                        opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
+                        headers: message.headers
+                    )
+
+                    return rd_kafka_produceva(
+                        self.kafkaHandle,
+                        unsafeMessage._internal,
+                        unsafeMessage.size
                     )
                 }
             }
         }
 
-        guard responseCode == 0 else {
+        let error = rd_kafka_error_code(errorPointer)
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
         }
     }
@@ -425,7 +437,7 @@ final class RDKafkaClient: Sendable {
 
     /// Flush any outstanding produce requests.
     ///
-    /// Parameters:
+    /// - Parameters:
     ///     - timeoutMilliseconds: Maximum time to wait for outstanding messages to be flushed.
     func flush(timeoutMilliseconds: Int32) async throws {
         // rd_kafka_flush is blocking and there is no convenient way to make it non-blocking.

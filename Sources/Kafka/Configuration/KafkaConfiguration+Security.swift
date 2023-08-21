@@ -173,7 +173,7 @@ extension KafkaConfiguration {
 
             /// Verify the identity of the broker.
             ///
-            /// Parameters:
+            /// - Parameters:
             ///     - trustRoots: File or directory path to CA certificate(s) for verifying the broker's key.
             ///     - certificateRevocationListPath: Path to CRL for verifying broker's certificate validity.
             public static func verify(
