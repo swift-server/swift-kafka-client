@@ -256,6 +256,11 @@ public final class KafkaConsumer: Sendable, Service {
             logger: logger
         )
 
+        // Note:
+        // It's crucial to initialize the `sourceAndSequence` variable AFTER `client`.
+        // This order is important to prevent the accidental triggering of `KafkaConsumerCloseOnTerminate.didTerminate()`.
+        // If this order is not met and `RDKafkaClient.makeClient()` fails,
+        // it leads to a call to `stateMachine.messageSequenceTerminated()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerEvent.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
