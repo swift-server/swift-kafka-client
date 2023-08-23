@@ -332,6 +332,16 @@ public final class KafkaProducer: Service, Sendable {
             return KafkaProducerMessageID(rawValue: newMessageID)
         }
     }
+    
+    @discardableResult
+    public func flush(timeout: Duration) async -> Bool {
+        do {
+            let client = try client()
+            try await client.flush(timeoutMilliseconds: Int32(timeout.inMilliseconds))
+        } catch {
+            return false
+        }
+    }
 
     func client() throws -> RDKafkaClient {
         try self.stateMachine.withLockedValue { try $0.client() }
