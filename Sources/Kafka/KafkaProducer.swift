@@ -255,6 +255,7 @@ public final class KafkaProducer: Service, Sendable {
     private func _run() async throws {
         var events = [RDKafkaClient.KafkaEvent]()
         var maxEvents = 100
+        var pollInterval = self.configuration.pollInterval
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
@@ -263,17 +264,26 @@ public final class KafkaProducer: Service, Sendable {
 //                let _ = client.eventPoll()
                 client.eventPoll(events: &events, maxEvents: &maxEvents)
             case .pollAndYield(let client, let source):
-                //let events =
+                var shouldSleep = true
                 client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
-                    let producerEvent = KafkaProducerEvent(event)
-                    // Ignore YieldResult as we don't support back pressure in KafkaProducer
-//                    await yield(message: producerEvent, to: source)
-                    _ = source?.yield(producerEvent)
+                    switch event {
+                    case .deliveryReport(let reports):
+                        // Ignore YieldResult as we don't support back pressure in KafkaProducer
+                        _ = source?.yield(.deliveryReports(reports))
+                        shouldSleep = false
+                    case .statistics(let stats):
+                        // Ignore YieldResult as we don't support back pressure in KafkaProducer
+                        _ = source?.yield(.statistics(stats))
+                    default:
+                        fatalError("Cannot cast \(event) to KafkaProducerEvent")
+                    }
                 }
-                if events.isEmpty {
-                    try await Task.sleep(for: self.configuration.pollInterval)
+                if shouldSleep {
+                    pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
+                    try await Task.sleep(for: pollInterval)
                 } else {
+                    pollInterval = max(pollInterval / 2, .milliseconds(1))
                     await Task.yield()
                 }
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):

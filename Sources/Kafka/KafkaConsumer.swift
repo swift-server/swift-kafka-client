@@ -408,11 +408,12 @@ public final class KafkaConsumer: Sendable, Service {
     private func _run() async throws {
         var events = [RDKafkaClient.KafkaEvent]()
         var maxEvents = 100
+        var pollInterval = self.configuration.pollInterval
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source, let eventSource):
-                //let events =
+                var shouldSleep = true
                 client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
                     switch event {
@@ -426,18 +427,22 @@ public final class KafkaConsumer: Sendable, Service {
                             eventSource?.finish()
                             throw error
                         }
+                        shouldSleep = false
                     case .statistics(let statistics):
                         _ = eventSource?.yield(.statistics(statistics))
                     case .rebalance(let rebalance):
                         self.logger.info("rebalance received \(rebalance)")
                         _ = eventSource?.yield(.rebalance(rebalance))
+                        shouldSleep = false
                     default:
                         break // Ignore
                     }
                 }
-                if events.isEmpty {
-                    try await Task.sleep(for: self.configuration.pollInterval)
+                if shouldSleep {
+                    pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
+                    try await Task.sleep(for: pollInterval)
                 } else {
+                    pollInterval = max(pollInterval / 2, .milliseconds(1))
                     await Task.yield()
                 }
             case .pollWithoutYield(let client):
