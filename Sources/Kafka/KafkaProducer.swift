@@ -341,6 +341,7 @@ public final class KafkaProducer: Service, Sendable {
         } catch {
             return false
         }
+        return true
     }
 
     func client() throws -> RDKafkaClient {
