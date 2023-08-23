@@ -21,7 +21,7 @@ public struct KafkaHeader: Sendable, Hashable {
     public var key: String
 
     /// The value associated with the header.
-    public var value: ByteBuffer? // TODO: KafkaContiguousBytes
+    public var value: ByteBuffer?
 
     /// Initializes a new Kafka header with the provided key and optional value.
     ///
@@ -36,11 +36,3 @@ public struct KafkaHeader: Sendable, Hashable {
         self.value = value
     }
 }
-
-// TODO: KakfaContiguousBytes
-// extension KafkaHeader: Hashable where Value: Hashable {}
-//
-// extension KafkaHeader: Equatable where Value: Equatable {}
-//
-// extension KafkaHeader: Sendable where Value: Sendable {}
-//
