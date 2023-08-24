@@ -272,6 +272,70 @@ final class KafkaTests: XCTestCase {
         }
     }
 
+    func testNoNewConsumerMessagesAfterGracefulShutdown() async throws {
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 2)
+        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        let uniqueGroupID = UUID().uuidString
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: [self.uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning // Read topic from beginning
+        consumerConfig.broker.addressFamily = .v4
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: acks,
+                    messages: testMessages
+                )
+            }
+
+            // Wait for Producer Task to complete
+            try await group.next()
+
+            // Verify that we receive the first message
+            var consumerIterator = consumer.messages.makeAsyncIterator()
+
+            let consumedMessage = try await consumerIterator.next()
+            XCTAssertEqual(testMessages.first!.topic, consumedMessage!.topic)
+            XCTAssertEqual(ByteBuffer(string: testMessages.first!.key!), consumedMessage!.key)
+            XCTAssertEqual(ByteBuffer(string: testMessages.first!.value), consumedMessage!.value)
+
+            // Trigger a graceful shutdown
+            await serviceGroup.triggerGracefulShutdown()
+
+            // Wait to ensure the KafkaConsumer's shutdown handler has
+            // been invoked.
+            try await Task.sleep(for: .seconds(2))
+
+            // We should not be able to read any new messages after the KafkaConsumer's
+            // shutdown handler was invoked
+            let stoppedConsumingMessage = try await consumerIterator.next()
+            XCTAssertNil(stoppedConsumingMessage)
+        }
+    }
+
     func testCommittedOffsetsAreCorrect() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let firstConsumerOffset = testMessages.count / 2
