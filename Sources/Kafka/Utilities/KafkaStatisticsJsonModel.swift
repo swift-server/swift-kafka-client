@@ -21,37 +21,42 @@
 
 struct KafkaStatisticsJson: Hashable, Codable {
     let name, clientID, type: String?
-    let ts, time, age, replyq: Int?
-    let msgCnt, msgSize, msgMax, msgSizeMax: Int?
-    let simpleCnt, metadataCacheCnt: Int?
+    let timestamp, time, age, replyQueue: Int?
+    let messageCount, messageSize, messageMax, messageSizeMax: Int?
+    let simpleCnt, metadataCacheCount: Int?
 //    let brokers: [String: Broker]?
 //    let topics: [String: Topic]?
     let cgrp: Cgrp?
-    let tx, txBytes, rx, rxBytes: Int?
-    let txmsgs, txmsgBytes, rxmsgs, rxmsgBytes: Int?
+    let totalRequestsSent, totalBytesSent, totalResponsesRecieved, totalBytesReceived: Int?
+    let totalMessagesSent, totalMessagesBytesSent, totalMessagesRecieved, totalMessagesBytesRecieved: Int?
 
     enum CodingKeys: String, CodingKey {
-        case name
-        case clientID = "client_id"
-        case type, ts, time, age, replyq
-        case msgCnt = "msg_cnt"
-        case msgSize = "msg_size"
-        case msgMax = "msg_max"
-        case msgSizeMax = "msg_size_max"
-        case simpleCnt = "simple_cnt"
-        case metadataCacheCnt = "metadata_cache_cnt"
+        case name // unused
+        case clientID = "client_id"  // unused
+        case type // unused
+        case timestamp = "ts"
+        case time, age
+        case replyQueue = "replyq"
+        case messageCount = "msg_cnt"
+        case messageSize = "msg_size"
+        case messageMax = "msg_max"
+        case messageSizeMax = "msg_size_max"
+        case simpleCnt = "simple_cnt" // unused
+        case metadataCacheCount = "metadata_cache_cnt"
 //        case brokers, topics
-        case cgrp, tx
-        case txBytes = "tx_bytes"
-        case rx
-        case rxBytes = "rx_bytes"
-        case txmsgs
-        case txmsgBytes = "txmsg_bytes"
-        case rxmsgs
-        case rxmsgBytes = "rxmsg_bytes"
+        case cgrp
+        case totalRequestsSent = "tx"
+        case totalBytesSent = "tx_bytes"
+        case totalResponsesRecieved = "rx"
+        case totalBytesReceived = "rx_bytes"
+        case totalMessagesSent = "txmsgs"
+        case totalMessagesBytesSent = "txmsg_bytes"
+        case totalMessagesRecieved = "rxmsgs"
+        case totalMessagesBytesRecieved = "rxmsg_bytes"
     }
 }
 
+// FIXME: for future use
 // MARK: - Broker
 
 // struct Broker: Hashable, Codable {
