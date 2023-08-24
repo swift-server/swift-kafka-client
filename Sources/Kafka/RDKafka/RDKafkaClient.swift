@@ -274,32 +274,20 @@ final class RDKafkaClient: Sendable {
         cHeaders: inout [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)],
         _ body: ([(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]) throws -> T
     ) rethrows -> T {
-        if kafkaHeaders.isEmpty {
+        guard let kafkaHeader = kafkaHeaders.popLast() else {
             // Base case: we have read all kafkaHeaders and now invoke the accessor closure
             // that can safely access the pointers in cHeaders
             return try body(cHeaders)
-        } else {
-            guard let kafkaHeader = kafkaHeaders.popLast() else {
-                fatalError("kafkaHeaders should not be nil")
-            }
+        }
 
-            // Access underlying memory of key and value with scoped accessor and to a
-            // recursive call to _withKafkaCHeadersRecursive in the scoped accessor.
-            // This allows us to build a chain of scoped accessors so that the body closure
-            // can ultimately access all kafkaHeader underlying key/value bytes safely.
-            return try kafkaHeader.key.withCString { keyCString in
-                if let headerValue = kafkaHeader.value {
-                    return try headerValue.withUnsafeReadableBytes { valueBuffer in
-                        let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, valueBuffer)
-                        cHeaders.append(cHeader)
-                        return try self._withKafkaCHeadersRecursive(
-                            kafkaHeaders: &kafkaHeaders,
-                            cHeaders: &cHeaders,
-                            body
-                        )
-                    }
-                } else {
-                    let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, nil)
+        // Access underlying memory of key and value with scoped accessor and to a
+        // recursive call to _withKafkaCHeadersRecursive in the scoped accessor.
+        // This allows us to build a chain of scoped accessors so that the body closure
+        // can ultimately access all kafkaHeader underlying key/value bytes safely.
+        return try kafkaHeader.key.withCString { keyCString in
+            if let headerValue = kafkaHeader.value {
+                return try headerValue.withUnsafeReadableBytes { valueBuffer in
+                    let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, valueBuffer)
                     cHeaders.append(cHeader)
                     return try self._withKafkaCHeadersRecursive(
                         kafkaHeaders: &kafkaHeaders,
@@ -307,6 +295,14 @@ final class RDKafkaClient: Sendable {
                         body
                     )
                 }
+            } else {
+                let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, nil)
+                cHeaders.append(cHeader)
+                return try self._withKafkaCHeadersRecursive(
+                    kafkaHeaders: &kafkaHeaders,
+                    cHeaders: &cHeaders,
+                    body
+                )
             }
         }
     }
