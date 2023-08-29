@@ -119,7 +119,7 @@ public final class KafkaProducer: Service, Sendable {
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
         configuration: KafkaProducerSharedProperties,
         topicConfiguration: KafkaTopicConfiguration
-    ) throws {
+    ) {
         self.stateMachine = stateMachine
         self.configuration = configuration
         self.topicConfiguration = topicConfiguration
@@ -161,7 +161,7 @@ public final class KafkaProducer: Service, Sendable {
             )
         }
 
-        try self.init(
+        self.init(
             stateMachine: stateMachine,
             configuration: configuration,
             topicConfiguration: configuration.topicConfiguration
@@ -195,13 +195,6 @@ public final class KafkaProducer: Service, Sendable {
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: KafkaProducerEvent.self,
-            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
-        )
-        let source = sourceAndSequence.source
-
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: configuration.dictionary,
@@ -209,16 +202,27 @@ public final class KafkaProducer: Service, Sendable {
             logger: logger
         )
 
-        let producer = try KafkaProducer(
+        let producer = KafkaProducer(
             stateMachine: stateMachine,
             configuration: configuration,
             topicConfiguration: configuration.topicConfiguration
         )
 
+        // Note:
+        // It's crucial to initialize the `sourceAndSequence` variable AFTER `client`.
+        // This order is important to prevent the accidental triggering of `KafkaProducerCloseOnTerminate.didTerminate()`.
+        // If this order is not met and `RDKafkaClient.makeClient()` fails,
+        // it leads to a call to `stateMachine.stopConsuming()` while it's still in the `.uninitialized` state.
+        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+            elementType: KafkaProducerEvent.self,
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
+        )
+
         stateMachine.withLockedValue {
             $0.initialize(
                 client: client,
-                source: source
+                source: sourceAndSequence.source
             )
         }
 

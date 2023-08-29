@@ -130,44 +130,186 @@ final class RDKafkaClient: Sendable {
             "Partition ID outside of valid range \(0...Int32.max)"
         )
 
-        let responseCode = try message.value.withUnsafeBytes { valueBuffer in
-            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfiguration: topicConfiguration) { topicHandle in
-                if let key = message.key {
-                    // Key available, we can use scoped accessor to safely access its rawBufferPointer.
-                    // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
-                    // Returns 0 on success, error code otherwise.
-                    return key.withUnsafeBytes { keyBuffer in
-                        return rd_kafka_produce(
-                            topicHandle,
-                            Int32(message.partition.rawValue),
-                            RD_KAFKA_MSG_F_COPY,
-                            UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                            valueBuffer.count,
-                            keyBuffer.baseAddress,
-                            keyBuffer.count,
-                            UnsafeMutableRawPointer(bitPattern: newMessageID)
-                        )
-                    }
-                } else {
-                    // No key set.
-                    // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
-                    // Returns 0 on success, error code otherwise.
-                    return rd_kafka_produce(
+        // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
+        // Returns 0 on success, error code otherwise.
+        let error = try topicHandles.withTopicHandlePointer(
+            topic: message.topic,
+            topicConfiguration: topicConfiguration
+        ) { topicHandle in
+            return try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
+                if message.headers.isEmpty {
+                    // No message headers set, normal produce method can be used.
+                    rd_kafka_produce(
                         topicHandle,
                         Int32(message.partition.rawValue),
                         RD_KAFKA_MSG_F_COPY,
                         UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
                         valueBuffer.count,
-                        nil,
-                        0,
+                        keyBuffer?.baseAddress,
+                        keyBuffer?.count ?? 0,
                         UnsafeMutableRawPointer(bitPattern: newMessageID)
                     )
+                    return rd_kafka_last_error()
+                } else {
+                    let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
+                        // Setting message headers only works with `rd_kafka_produceva` (variadic arguments).
+                        try self._produceVariadic(
+                            topicHandle: topicHandle,
+                            partition: Int32(message.partition.rawValue),
+                            messageFlags: RD_KAFKA_MSG_F_COPY,
+                            key: keyBuffer,
+                            value: valueBuffer,
+                            opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
+                            cHeaders: cHeaders
+                        )
+                    }
+                    return rd_kafka_error_code(errorPointer)
                 }
             }
         }
 
-        guard responseCode == 0 else {
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
+        }
+    }
+
+    /// Wrapper for `rd_kafka_produceva`.
+    /// (Message production with variadic options, required for sending message headers).
+    ///
+    /// This function should only be called from within a scoped pointer accessor
+    /// to ensure the referenced memory is valid for the function's lifetime.
+    ///
+    /// - Returns: `nil` on success. An opaque pointer `*rd_kafka_resp_err_t` on error.
+    private func _produceVariadic(
+        topicHandle: OpaquePointer,
+        partition: Int32,
+        messageFlags: Int32,
+        key: UnsafeRawBufferPointer?,
+        value: UnsafeRawBufferPointer,
+        opaque: UnsafeMutableRawPointer?,
+        cHeaders: [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]
+    ) throws -> OpaquePointer? {
+        let sizeWithoutHeaders = (key != nil) ? 6 : 5
+        let size = sizeWithoutHeaders + cHeaders.count
+        var arguments = Array(repeating: rd_kafka_vu_t(), count: size)
+        var index = 0
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_RKT
+        arguments[index].u.rkt = topicHandle
+        index += 1
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_PARTITION
+        arguments[index].u.i32 = partition
+        index += 1
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_MSGFLAGS
+        arguments[index].u.i = messageFlags
+        index += 1
+
+        if let key {
+            arguments[index].vtype = RD_KAFKA_VTYPE_KEY
+            arguments[index].u.mem.ptr = UnsafeMutableRawPointer(mutating: key.baseAddress)
+            arguments[index].u.mem.size = key.count
+            index += 1
+        }
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_VALUE
+        arguments[index].u.mem.ptr = UnsafeMutableRawPointer(mutating: value.baseAddress)
+        arguments[index].u.mem.size = value.count
+        index += 1
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_OPAQUE
+        arguments[index].u.ptr = opaque
+        index += 1
+
+        for cHeader in cHeaders {
+            arguments[index].vtype = RD_KAFKA_VTYPE_HEADER
+
+            arguments[index].u.header.name = cHeader.key
+            arguments[index].u.header.val = cHeader.value?.baseAddress
+            arguments[index].u.header.size = cHeader.value?.count ?? 0
+
+            index += 1
+        }
+
+        assert(arguments.count == size)
+
+        return rd_kafka_produceva(
+            self.kafkaHandle,
+            arguments,
+            arguments.count
+        )
+    }
+
+    /// Scoped accessor that enables safe access to a ``KafkaProducerMessage``'s key and value raw buffers.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the pointer.
+    @discardableResult
+    private static func withMessageKeyAndValueBuffer<T, Key, Value>(
+        for message: KafkaProducerMessage<Key, Value>,
+        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T // (keyBuffer, valueBuffer)
+    ) rethrows -> T {
+        return try message.value.withUnsafeBytes { valueBuffer in
+            if let key = message.key {
+                return try key.withUnsafeBytes { keyBuffer in
+                    return try body(keyBuffer, valueBuffer)
+                }
+            } else {
+                return try body(nil, valueBuffer)
+            }
+        }
+    }
+
+    /// Scoped accessor that enables safe access the underlying memory of an array of ``KafkaHeader``s.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the pointer.
+    @discardableResult
+    private static func withKafkaCHeaders<T>(
+        for headers: [KafkaHeader],
+        _ body: ([(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]) throws -> T
+    ) rethrows -> T {
+        var headersMemory: [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)] = []
+        var headers: [KafkaHeader] = headers.reversed()
+        return try self._withKafkaCHeadersRecursive(kafkaHeaders: &headers, cHeaders: &headersMemory, body)
+    }
+
+    /// Recursive helper function that enables safe access the underlying memory of an array of ``KafkaHeader``s.
+    /// Reads through all `kafkaHeaders` and stores their corresponding pointers in `cHeaders`.
+    private static func _withKafkaCHeadersRecursive<T>(
+        kafkaHeaders: inout [KafkaHeader],
+        cHeaders: inout [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)],
+        _ body: ([(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]) throws -> T
+    ) rethrows -> T {
+        guard let kafkaHeader = kafkaHeaders.popLast() else {
+            // Base case: we have read all kafkaHeaders and now invoke the accessor closure
+            // that can safely access the pointers in cHeaders
+            return try body(cHeaders)
+        }
+
+        // Access underlying memory of key and value with scoped accessor and to a
+        // recursive call to _withKafkaCHeadersRecursive in the scoped accessor.
+        // This allows us to build a chain of scoped accessors so that the body closure
+        // can ultimately access all kafkaHeader underlying key/value bytes safely.
+        return try kafkaHeader.key.withCString { keyCString in
+            if let headerValue = kafkaHeader.value {
+                return try headerValue.withUnsafeReadableBytes { valueBuffer in
+                    let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, valueBuffer)
+                    cHeaders.append(cHeader)
+                    return try self._withKafkaCHeadersRecursive(
+                        kafkaHeaders: &kafkaHeaders,
+                        cHeaders: &cHeaders,
+                        body
+                    )
+                }
+            } else {
+                let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, nil)
+                cHeaders.append(cHeader)
+                return try self._withKafkaCHeadersRecursive(
+                    kafkaHeaders: &kafkaHeaders,
+                    cHeaders: &cHeaders,
+                    body
+                )
+            }
         }
     }
 
@@ -431,7 +573,7 @@ final class RDKafkaClient: Sendable {
 
     /// Flush any outstanding produce requests.
     ///
-    /// Parameters:
+    /// - Parameters:
     ///     - timeoutMilliseconds: Maximum time to wait for outstanding messages to be flushed.
     func flush(timeoutMilliseconds: Int32) async throws {
         // rd_kafka_flush is blocking and there is no convenient way to make it non-blocking.
