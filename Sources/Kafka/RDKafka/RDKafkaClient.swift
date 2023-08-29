@@ -524,7 +524,7 @@ final class RDKafkaClient: Sendable {
         changesList.setOffset(
             topic: message.topic,
             partition: message.partition,
-            offset: .init(rawValue: message.offset.rawValue + 1)
+            offset: message.eof ? message.offset : .init(rawValue: message.offset.rawValue + 1)
         )
 
         let error = changesList.withListPointer { listPointer in
