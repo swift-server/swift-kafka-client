@@ -90,6 +90,7 @@ final class RDKafkaClient: Sendable {
         // KafkaConsumer is manually storing read offsets
         if type == .consumer {
             try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.partition.eof", value: "true")
         }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
@@ -224,6 +225,27 @@ final class RDKafkaClient: Sendable {
             case .rebalance:
                 self.logger.info("rebalance received (RDClient)")
                 events.append(self.handleRebalance(event))
+            case .error:
+                #if true
+                let err = rd_kafka_event_error(event)
+                if err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
+                    let topicPartition = rd_kafka_event_topic_partition(event)
+                    if let topicPartition {
+                        events.append(
+                            .consumerMessages(
+                                result: .success(
+                                    .init(topicPartitionPointer: topicPartition)
+                                )
+                            )
+                        )
+                    }
+//                    if let forwardEvent = self.handleFetchEvent(event) {
+//                        events.append(forwardEvent)
+//                    }
+//                    events.append(.consumerMessages(result: .failure(KafkaError.partitionEOF())))
+                }
+                #endif
+                break
             case .none:
                 // Finished reading events, return early
                 return //events
@@ -730,6 +752,50 @@ final class RDKafkaClient: Sendable {
             throw KafkaError.rdKafkaError(wrapping: rd_kafka_error_code(error), isFatal: isFatal)
         }
         throw KafkaError.transactionOutOfAttempts(numOfAttempts: attempts)
+    }
+
+    func inSync() {
+        self.withKafkaHandlePointer {
+
+            /**
+             * @brief Returns the current partition assignment as set by rd_kafka_assign()
+             *        or rd_kafka_incremental_assign().
+             *
+             * @returns An error code on failure, otherwise \p partitions is updated
+             *          to point to a newly allocated partition list (possibly empty).
+             *
+             * @remark The application is responsible for calling
+             *         rd_kafka_topic_partition_list_destroy on the returned list.
+             *
+             * @remark This assignment represents the partitions assigned through the
+             *         assign functions and not the partitions assigned to this consumer
+             *         instance by the consumer group leader.
+             *         They are usually the same following a rebalance but not necessarily
+             *         since an application is free to assign any partitions.
+             */
+//            RD_EXPORT rd_kafka_resp_err_t
+//            rd_kafka_assignment(rd_kafka_t *rk,
+//                                rd_kafka_topic_partition_list_t **partitions);
+            var partitions: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>?
+            _ = rd_kafka_assignment($0, &partitions)
+//            if err == nil {
+//
+//            }
+            defer {
+                rd_kafka_topic_partition_list_destroy(partitions)
+            }
+            rd_kafka_position($0, partitions)
+            
+            guard let partitions else {
+                fatalError("TODO")
+            }
+            
+            var str = String()
+            for idx in 0..<Int(partitions.pointee.cnt) {
+                let elem = partitions.pointee.elems[idx]
+                str += "topic: \(elem.topic), offset: \(elem.offset), partition: \(elem.partition), \(elem.metadata)"
+            }
+        }
     }
 }
 

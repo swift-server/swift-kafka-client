@@ -82,22 +82,27 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         var wrappedIterator: WrappedSequence.AsyncIterator?
 
         public mutating func next() async throws -> Element? {
-            guard let element = try await self.wrappedIterator?.next() else {
-                self.deallocateIterator()
-                return nil
-            }
-
-            let action = self.stateMachine.withLockedValue { $0.storeOffset() }
-            switch action {
-            case .storeOffset(let client):
-                do {
-                    try client.storeMessageOffset(element)
-                } catch {
+            repeat {
+                guard let element = try await self.wrappedIterator?.next() else {
                     self.deallocateIterator()
-                    throw error
+                    return nil
                 }
-            }
-            return element
+                
+                let action = self.stateMachine.withLockedValue { $0.storeOffset() }
+                switch action {
+                case .storeOffset(let client):
+                    do {
+                        try client.storeMessageOffset(element)
+                    } catch {
+                        self.deallocateIterator()
+                        throw error
+                    }
+                }
+                if element.eof {
+                    continue
+                }
+                return element
+            } while true
         }
 
         private mutating func deallocateIterator() {
@@ -206,7 +211,7 @@ public final class KafkaConsumer: Sendable, Service {
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch, .error]
         // Only listen to offset commit events when autoCommit is false
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
@@ -246,7 +251,7 @@ public final class KafkaConsumer: Sendable, Service {
     ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch, .error]
         // Only listen to offset commit events when autoCommit is false
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)

@@ -27,7 +27,25 @@ public struct KafkaConsumerMessage {
     public var value: ByteBuffer
     /// The offset of the message in its partition.
     public var offset: KafkaOffset
+    
+    
+    var eof: Bool {
+        self.value.readableBytesView.isEmpty
+    }
 
+    /// Initialize ``KafkaConsumerMessage`` as EOF from `rd_kafka_topic_partition_t` pointer.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
+    internal init(topicPartitionPointer: UnsafePointer<rd_kafka_topic_partition_t>) {
+        let topicPartition = topicPartitionPointer.pointee
+        guard let topic = String(validatingUTF8: topicPartition.topic) else {
+            fatalError("Received topic name that is non-valid UTF-8")
+        }
+        self.topic = topic
+        self.partition = KafkaPartition(rawValue: Int(topicPartition.partition))
+        self.offset = KafkaOffset(rawValue: Int(topicPartition.offset))
+        self.value = ByteBuffer()
+    }
+    
     /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {

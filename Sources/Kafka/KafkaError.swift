@@ -163,6 +163,14 @@ public struct KafkaError: Error, CustomStringConvertible {
             )
         )
     }
+    
+    static func partitionEOF(file: String = #fileID, line: UInt = #line) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .partitionEOF, reason: "Partition EOF", file: file, line: line
+            )
+        )
+    }
 }
 
 extension KafkaError {
@@ -185,6 +193,7 @@ extension KafkaError {
             case transactionIncomplete
             case notInTransaction // FIXME: maybe add subcode ?
             case transactionOutOfAttempts
+            case partitionEOF
         }
 
         fileprivate var backingCode: BackingCode
@@ -215,6 +224,8 @@ extension KafkaError {
         public static let transactionIncomplete = ErrorCode(.transactionIncomplete)
         /// Out of provided number of attempts
         public static let transactionOutOfAttempts = ErrorCode(.transactionOutOfAttempts)
+        /// Out of provided number of attempts
+        public static let partitionEOF = ErrorCode(.partitionEOF)
 
         public var description: String {
             return String(describing: self.backingCode)

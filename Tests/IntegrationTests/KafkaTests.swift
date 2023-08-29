@@ -35,7 +35,7 @@ import Logging
 
 final class KafkaTests: XCTestCase {
     // Read environment variables to get information about the test Kafka server
-    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
+    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "linux-dev"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
     var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
     var producerConfig: KafkaProducerConfiguration!
@@ -652,6 +652,7 @@ final class KafkaTests: XCTestCase {
     
     
     */
+    
     func testOrdo() async throws {
 //        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
 //        let firstConsumerOffset = testMessages.count / 2
@@ -667,9 +668,12 @@ final class KafkaTests: XCTestCase {
         
         logger.info("unique group id \(uniqueGroupID)")
 
+//        let groupID = uniqueGroupID
+        let groupID = "test_group_id_1"
+        
         var consumer1Config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
-                id: uniqueGroupID,
+                id: groupID,
                 topics: ["transactions-pending-dc-1"] //["transactions-snapshots-dc-1"]
             ),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
@@ -678,11 +682,11 @@ final class KafkaTests: XCTestCase {
         consumer1Config.autoOffsetReset = .beginning // Read topic from beginning
         consumer1Config.broker.addressFamily = .v4
 //        consumer1Config.debugOptions = [.all]
-        consumer1Config.groupInstanceId = uniqueGroupID //"transactions-pending-dc-1-test-instance-id"
-        
+        consumer1Config.groupInstanceId = groupID + "_instance" //"transactions-pending-dc-1-test-instance-id"
+        consumer1Config.statisticsInterval = .value(.milliseconds(250))
         
 
-        let consumer1 = try KafkaConsumer(
+        let (consumer1, events) = try KafkaConsumer.makeConsumerWithEvents(
             configuration: consumer1Config,
             logger: logger
         )
@@ -703,13 +707,30 @@ final class KafkaTests: XCTestCase {
             group.addTask {
 //                try consumer1.subscribeTopics(topics: ["transactions-pending-dc-1"])
                 var count = 0
+                var totalCount = 0
                 var start = Date.now
+                var partitions = [Bool]()
                 for try await message in consumer1.messages {
+                    if message.eof {
+                        logger.info("Reached EOF for partition \(message.partition) and topic \(message.topic)! Read \(totalCount)")
+
+                        while partitions.count <= message.partition.rawValue {
+                            partitions.append(false)
+                        }
+                        partitions[message.partition.rawValue] = true
+                        let res = partitions.first { $0 == false }
+                        if partitions.count == 6 && res == nil {
+                            break
+                        }
+
+                        continue
+                    }
 //                    logger.info("Got msg: \(message)")
-//                    try await consumer1.commitSync(message)
+                    try await consumer1.commitSync(message)
                     count += 1
+                    totalCount += 1
                     let now = Date.now
-                    if count > 1000 && now > start {
+                    if count > 100 && now > start {
                         let diff = -start.timeIntervalSinceNow
                         let rate = Double(count) / diff
                         logger.info("Rate is \(rate) for last \(diff)")
@@ -718,8 +739,79 @@ final class KafkaTests: XCTestCase {
                         try await consumer1.commitSync(message)
                     }
                 }
+                logger.info("Finally read \(totalCount)")
             }
+            
+            group.addTask {
+                for try await event in events {
+                    switch event {
+                    case .statistics(let stat):
+//                        logger.info("stats: \(stat)")
+                        if let lag = stat.lag, lag == 0 {
+                            logger.info("In sync with lag = 0 with stat \(stat)")
+                            
+//                            await serviceGroup1.triggerGracefulShutdown()
+                            return
+                        }
+                        
+                    default:
+                        break
+                    }
+                }
+            }
+            
+            try await group.next()
+            
+            await serviceGroup1.triggerGracefulShutdown()
 
         }
+    }
+}
+
+//fileprivate let staticLogger = Logger(label: "")
+
+extension KafkaStatistics {
+    public var lag: Int? {
+        guard let json = try? self.json, // = try? str?.json,
+              let topics = json.topics
+        else {
+            return nil
+        }
+        
+        var maxLag: Int?
+        for (_, topic) in topics {
+            guard let partitions = topic.partitions else {
+                return nil
+            }
+            for (name, partition) in partitions {
+                if name == "-1" {
+                    continue
+                }
+//                guard let eofOffset = partition.eofOffset, eofOffset >= 0 else {
+//
+//                    return nil
+//                }
+                var lag: Int?
+                // There is no commits to the partition
+                if let lsOffset = partition.lsOffset, lsOffset == 0 {
+                    lag = 0
+                    // sometimes there is no stored offset, and we should check that we read everything before our start
+//                } else if let committedOffset = partition.committedOffset,
+//                          let eofOffset = partition.eofOffset,
+//                          committedOffset >= 0,
+//                          eofOffset >= 0,
+//                          eofOffset - committedOffset == 1 { // commited one before eof
+//                    lag = 0
+                } else if let consumerLag = partition.consumerLagStored,
+                          consumerLag >= 0 {
+                    lag = consumerLag
+                }
+                guard let lag else {
+                    return nil
+                }
+                maxLag = max(maxLag ?? Int.min, lag)
+            }
+        }
+        return maxLag
     }
 }
