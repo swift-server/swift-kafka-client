@@ -67,7 +67,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public typealias Element = KafkaConsumerMessage
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOThrowingAsyncSequenceProducer<
-        Element,
+        Result<KafkaConsumerMessage, Error>,
         Error,
         BackPressureStrategy,
         KafkaConsumerCloseOnTerminate
@@ -80,22 +80,31 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         var wrappedIterator: WrappedSequence.AsyncIterator?
 
         public mutating func next() async throws -> Element? {
-            guard let element = try await self.wrappedIterator?.next() else {
+            guard let result = try await self.wrappedIterator?.next() else {
                 self.deallocateIterator()
                 return nil
             }
 
-            let action = self.stateMachine.withLockedValue { $0.storeOffset() }
-            switch action {
-            case .storeOffset(let client):
-                do {
-                    try client.storeMessageOffset(element)
-                } catch {
+            switch result {
+            case .success(let message):
+                let action = self.stateMachine.withLockedValue { $0.storeOffset() }
+                switch action {
+                case .storeOffset(let client):
+                    do {
+                        try client.storeMessageOffset(message)
+                    } catch {
+                        self.deallocateIterator()
+                        throw error
+                    }
+                    return message
+                case .terminateConsumerSequence:
                     self.deallocateIterator()
-                    throw error
+                    return nil
                 }
+            case .failure(let error):
+                self.deallocateIterator()
+                throw error
             }
-            return element
         }
 
         private mutating func deallocateIterator() {
@@ -116,7 +125,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 /// A ``KafkaConsumer `` can be used to consume messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     typealias Producer = NIOThrowingAsyncSequenceProducer<
-        KafkaConsumerMessage,
+        Result<KafkaConsumerMessage, Error>,
         Error,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaConsumerCloseOnTerminate
@@ -159,7 +168,7 @@ public final class KafkaConsumer: Sendable, Service {
         self.logger = logger
 
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
-            elementType: KafkaConsumerMessage.self,
+            elementType: Result<KafkaConsumerMessage, Error>.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             delegate: KafkaConsumerCloseOnTerminate(stateMachine: self.stateMachine)
         )
@@ -261,14 +270,6 @@ public final class KafkaConsumer: Sendable, Service {
             logger: logger
         )
 
-        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: KafkaConsumerEvent.self,
-            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: KafkaConsumerCloseOnTerminate(stateMachine: stateMachine)
-        )
-
-        let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
-
         let consumer = try KafkaConsumer(
             client: client,
             stateMachine: stateMachine,
@@ -276,6 +277,18 @@ public final class KafkaConsumer: Sendable, Service {
             logger: logger
         )
 
+        // Note:
+        // It's crucial to initialize the `sourceAndSequence` variable AFTER `client`.
+        // This order is important to prevent the accidental triggering of `KafkaConsumerCloseOnTerminate.didTerminate()`.
+        // If this order is not met and `RDKafkaClient.makeClient()` fails,
+        // it leads to a call to `stateMachine.messageSequenceTerminated()` while it's still in the `.uninitialized` state.
+        let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
+            elementType: KafkaConsumerEvent.self,
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            delegate: KafkaConsumerCloseOnTerminate(stateMachine: stateMachine)
+        )
+
+        let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
         return (consumer, eventsSequence)
     }
 
@@ -338,14 +351,8 @@ public final class KafkaConsumer: Sendable, Service {
                 for event in events {
                     switch event {
                     case .consumerMessages(let result):
-                        switch result {
-                        case .success(let message):
-                            // We do not support back pressure, we can ignore the yield result
-                            _ = source.yield(message)
-                        case .failure(let error):
-                            source.finish()
-                            throw error
-                        }
+                        // We do not support back pressure, we can ignore the yield result
+                        _ = source.yield(result)
                     case .statistics(let statistics):
                         switch self.configuration.metrics {
                         case .enabled(_, let options):
@@ -588,6 +595,9 @@ extension KafkaConsumer {
             /// Store the message offset with the given `client`.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case storeOffset(client: RDKafkaClient)
+            /// The consumer is in the process of `.finishing` or even `.finished`.
+            /// Stop yielding new elements and terminate the asynchronous sequence.
+            case terminateConsumerSequence
         }
 
         /// Get action to take when wanting to store a message offset (to be auto-committed by `librdkafka`).
@@ -602,7 +612,7 @@ extension KafkaConsumer {
             case .consuming(let client, _):
                 return .storeOffset(client: client)
             case .finishing, .finished:
-                fatalError("\(#function) invoked while still in state \(self.state)")
+                return .terminateConsumerSequence
             }
         }
 

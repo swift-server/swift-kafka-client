@@ -25,6 +25,9 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     /// This means the message will be automatically assigned a partition using the topic's partitioner function.
     public var partition: KafkaPartition
 
+    /// The headers of the message.
+    public var headers: [KafkaHeader]
+
     /// The optional key associated with the message.
     /// If the ``KafkaPartition`` is ``KafkaPartition/unassigned``, the ``KafkaProducerMessage/key`` is used to ensure
     /// that two ``KafkaProducerMessage``s with the same key still get sent to the same ``KafkaPartition``.
@@ -38,18 +41,21 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     /// - Parameters:
     ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
     ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
+    ///     - headers: The headers of the message.
     ///     - key: Used to guarantee that messages with the same key will be sent to the same partition so that their order is preserved.
     ///     - value: The message's value.
     public init(
         topic: String,
         partition: KafkaPartition = .unassigned,
+        headers: [KafkaHeader] = [],
         key: Key,
         value: Value
     ) {
         self.topic = topic
+        self.partition = partition
+        self.headers = headers
         self.key = key
         self.value = value
-        self.partition = partition
     }
 }
 
@@ -59,16 +65,19 @@ extension KafkaProducerMessage where Key == Never {
     /// - Parameters:
     ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
     ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
+    ///     - headers: The headers of the message.
     ///     - value: The message body.
     public init(
         topic: String,
         partition: KafkaPartition = .unassigned,
+        headers: [KafkaHeader] = [],
         value: Value
     ) {
         self.topic = topic
-        self.value = value
-        self.key = nil
         self.partition = partition
+        self.headers = headers
+        self.key = nil
+        self.value = value
     }
 }
 
