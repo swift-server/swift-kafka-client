@@ -359,6 +359,32 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Mark all messages up to the passed message in the topic as read.
+    /// Schedules a commit and returns immediately.
+    /// Any errors encountered after scheduling the commit will be discarded.
+    ///
+    /// This method is only used for manual offset management.
+    ///
+    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    ///
+    /// - Parameters:
+    ///     - message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
+    public func commitAsync(_ message: KafkaConsumerMessage) throws {
+        let action = self.stateMachine.withLockedValue { $0.commit() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
+        case .commit(let client):
+            guard self.configuration.isAutoCommitEnabled == false else {
+                throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
+            }
+
+            try client.commitAsync(message)
+        }
+    }
+
+    /// Mark all messages up to the passed message in the topic as read.
+    /// Awaits until the commit succeeds or an error is encountered.
     ///
     /// This method is only used for manual offset management.
     ///
@@ -368,11 +394,11 @@ public final class KafkaConsumer: Sendable, Service {
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
-        let action = self.stateMachine.withLockedValue { $0.commitSync() }
+        let action = self.stateMachine.withLockedValue { $0.commit() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
-        case .commitSync(let client):
+        case .commit(let client):
             guard self.configuration.isAutoCommitEnabled == false else {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
@@ -596,23 +622,23 @@ extension KafkaConsumer {
             }
         }
 
-        /// Action to be taken when wanting to do a synchronous commit.
-        enum CommitSyncAction {
-            /// Do a synchronous commit.
+        /// Action to be taken when wanting to do a commit.
+        enum CommitAction {
+            /// Do a commit.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case commitSync(
+            case commit(
                 client: RDKafkaClient
             )
             /// Throw an error. The ``KafkaConsumer`` is closed.
             case throwClosedError
         }
 
-        /// Get action to be taken when wanting to do a synchronous commit.
+        /// Get action to be taken when wanting to do a commit.
         /// - Returns: The action to be taken.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        func commitSync() -> CommitSyncAction {
+        func commit() -> CommitAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
@@ -621,7 +647,7 @@ extension KafkaConsumer {
             case .consumptionStopped:
                 fatalError("Cannot commit when consumption has been stopped")
             case .consuming(let client, _):
-                return .commitSync(client: client)
+                return .commit(client: client)
             case .finishing, .finished:
                 return .throwClosedError
             }

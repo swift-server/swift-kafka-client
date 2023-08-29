@@ -214,6 +214,64 @@ final class KafkaTests: XCTestCase {
         }
     }
 
+    func testProduceAndConsumeWithCommitAsync() async throws {
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.isAutoCommitEnabled = false
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.broker.addressFamily = .v4
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Consumer Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+
+            // Consumer Task
+            group.addTask {
+                var consumedMessages = [KafkaConsumerMessage]()
+                for try await message in consumer.messages {
+                    consumedMessages.append(message)
+                    try consumer.commitAsync(message)
+
+                    if consumedMessages.count >= testMessages.count {
+                        break
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+            }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
     func testProduceAndConsumeWithCommitSync() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
