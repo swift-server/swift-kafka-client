@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Atomics
 import struct Foundation.UUID
 @testable import Kafka
 import Logging
@@ -97,15 +96,12 @@ final class KafkaConsumerTests: XCTestCase {
         let handler = MockTimerHandler()
         metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
 
-        config.metrics = .enabled(updateInterval: .milliseconds(10), options: metricsOptions)
+        config.metrics = .enabled(updateInterval: .milliseconds(10), metrics: metricsOptions)
 
-        let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
+        let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
 
-        let serviceGroup = ServiceGroup(
-            services: [consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -119,7 +115,7 @@ final class KafkaConsumerTests: XCTestCase {
                     break
                 }
             }
-            
+
             try await group.next()
 
             // Shutdown the serviceGroup

@@ -347,18 +347,15 @@ final class KafkaProducerTests: XCTestCase {
         let handler = MockTimerHandler()
         metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
 
-        self.config.metrics = .enabled(updateInterval: .milliseconds(10), options: metricsOptions)
+        self.config.metrics = .enabled(updateInterval: .milliseconds(10), metrics: metricsOptions)
 
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+        let producer = try KafkaProducer(
             configuration: self.config,
             logger: .kafkaTest
         )
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -372,7 +369,7 @@ final class KafkaProducerTests: XCTestCase {
                     break
                 }
             }
-            
+
             try await group.next()
 
             // Shutdown the serviceGroup

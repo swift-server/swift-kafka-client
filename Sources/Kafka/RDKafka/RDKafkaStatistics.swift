@@ -15,24 +15,24 @@
 // This file was generated from JSON Schema using quicktype, do not modify it directly.
 // To parse the JSON, add this file to your project and do:
 //
-//   let statistics = try? newJSONDecoder().decode(KafkaStatisticsJsonModel.self, from: jsonData)
+//   let statistics = try? newJSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
 
 // MARK: - Statistics
 
-struct KafkaStatisticsJson: Hashable, Codable {
+struct RDKafkaStatistics: Hashable, Codable {
     let name, clientID, type: String?
     let timestamp, time, age, replyQueue: Int?
     let messageCount, messageSize, messageMax, messageSizeMax: Int?
     let simpleCnt, metadataCacheCount: Int?
 //    let brokers: [String: Broker]?
 //    let topics: [String: Topic]?
-    let cgrp: Cgrp?
+//    let cgrp: Cgrp?
     let totalRequestsSent, totalBytesSent, totalResponsesRecieved, totalBytesReceived: Int?
     let totalMessagesSent, totalMessagesBytesSent, totalMessagesRecieved, totalMessagesBytesRecieved: Int?
 
     enum CodingKeys: String, CodingKey {
         case name // unused
-        case clientID = "client_id"  // unused
+        case clientID = "client_id" // unused
         case type // unused
         case timestamp = "ts"
         case time, age
@@ -44,7 +44,7 @@ struct KafkaStatisticsJson: Hashable, Codable {
         case simpleCnt = "simple_cnt" // unused
         case metadataCacheCount = "metadata_cache_cnt"
 //        case brokers, topics
-        case cgrp
+//        case cgrp
         case totalRequestsSent = "tx"
         case totalBytesSent = "tx_bytes"
         case totalResponsesRecieved = "rx"
@@ -57,6 +57,7 @@ struct KafkaStatisticsJson: Hashable, Codable {
 }
 
 // FIXME: for future use
+
 // MARK: - Broker
 
 // struct Broker: Hashable, Codable {
@@ -93,34 +94,34 @@ struct KafkaStatisticsJson: Hashable, Codable {
 
 // MARK: - Toppars
 
-struct Toppar: Hashable, Codable {
-    let topic: String?
-    let partition: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case topic, partition
-    }
-}
+// struct Toppar: Hashable, Codable {
+//    let topic: String?
+//    let partition: Int?
+//
+//    enum CodingKeys: String, CodingKey {
+//        case topic, partition
+//    }
+// }
 
 // MARK: - Cgrp
 
-struct Cgrp: Hashable, Codable {
-    let state: String?
-    let stateage: Int?
-    let joinState: String?
-    let rebalanceAge, rebalanceCnt: Int?
-    let rebalanceReason: String?
-    let assignmentSize: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case state, stateage
-        case joinState = "join_state"
-        case rebalanceAge = "rebalance_age"
-        case rebalanceCnt = "rebalance_cnt"
-        case rebalanceReason = "rebalance_reason"
-        case assignmentSize = "assignment_size"
-    }
-}
+// struct Cgrp: Hashable, Codable {
+//    let state: String?
+//    let stateage: Int?
+//    let joinState: String?
+//    let rebalanceAge, rebalanceCnt: Int?
+//    let rebalanceReason: String?
+//    let assignmentSize: Int?
+//
+//    enum CodingKeys: String, CodingKey {
+//        case state, stateage
+//        case joinState = "join_state"
+//        case rebalanceAge = "rebalance_age"
+//        case rebalanceCnt = "rebalance_cnt"
+//        case rebalanceReason = "rebalance_reason"
+//        case assignmentSize = "assignment_size"
+//    }
+// }
 
 // MARK: - Topic
 

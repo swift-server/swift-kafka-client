@@ -226,13 +226,7 @@ public final class KafkaProducer: Service, Sendable {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        switch self.configuration.metrics {
-                        case .enabled(_, let options):
-                            assert(options.someMetricsSet, "Unexpected statistics received when no metrics configured")
-                            statistics.fill(options)
-                        case .disabled:
-                            assertionFailure("Unexpected statistics received when metrics disabled")
-                        }
+                        self.configuration.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
                         _ = source?.yield(.deliveryReports(reports))
                     case .consumerMessages:

@@ -130,11 +130,6 @@ public final class KafkaConsumer: Sendable, Service {
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaConsumerCloseOnTerminate
     >
-    typealias ProducerEvents = NIOAsyncSequenceProducer<
-        KafkaConsumerEvent,
-        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        KafkaConsumerCloseOnTerminate
-    >
 
     /// The configuration object of the consumer client.
     private let configuration: KafkaConsumerConfiguration
@@ -354,13 +349,7 @@ public final class KafkaConsumer: Sendable, Service {
                         // We do not support back pressure, we can ignore the yield result
                         _ = source.yield(result)
                     case .statistics(let statistics):
-                        switch self.configuration.metrics {
-                        case .enabled(_, let options):
-                            assert(options.someMetricsSet, "Unexpected statistics received when no metrics configured")
-                            statistics.fill(options)
-                        case .disabled:
-                            assertionFailure("Unexpected statistics received when metrics disabled")
-                        }
+                        self.configuration.metrics.update(with: statistics)
                     default:
                         break // Ignore
                     }

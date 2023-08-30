@@ -164,13 +164,13 @@ public struct KafkaProducerConfiguration {
     /// Options for librdkafka metrics updates
     public var metrics: KafkaConfiguration.Metrics = .disabled {
         didSet {
-            if case .enabled(let updateInterval, let options) = metrics {
+            if case .enabled(let updateInterval, let metrics) = metrics {
                 precondition(
                     updateInterval.canBeRepresentedAsMilliseconds,
                     "Lowest granularity is milliseconds"
                 )
                 precondition(
-                    options.someMetricsSet,
+                    metrics.someMetricsSet,
                     "No metrics set but enabled"
                 )
             }
@@ -230,7 +230,7 @@ extension KafkaProducerConfiguration {
 
         switch self.metrics {
         case .disabled:
-            resultDict["statistics.interval.ms"] = "0"
+            resultDict["statistics.interval.ms"] = "0" // Disables metrics
         case .enabled(let interval, _):
             resultDict["statistics.interval.ms"] = String(interval.inMilliseconds)
         }

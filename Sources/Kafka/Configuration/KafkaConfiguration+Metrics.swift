@@ -75,10 +75,59 @@ extension KafkaConfiguration {
 
         /// Number of topics in the metadata cache.
         public var metadataCacheCount: Gauge?
+
+        private static func record<T: BinaryInteger>(_ value: T?, to: Gauge?) {
+            guard let value,
+                  let to else {
+                return
+            }
+            to.record(value)
+        }
+
+        private static func recordMircoseconds<T: BinaryInteger>(_ value: T?, to: Timer?) {
+            guard let value,
+                  let to else {
+                return
+            }
+            to.recordMicroseconds(value)
+        }
+
+        internal func update(with rdKafkaStatistics: RDKafkaStatistics) {
+            Self.record(rdKafkaStatistics.timestamp, to: self.timestamp)
+            Self.recordMircoseconds(rdKafkaStatistics.time, to: self.time)
+            Self.recordMircoseconds(rdKafkaStatistics.age, to: self.age)
+            Self.record(rdKafkaStatistics.replyQueue, to: self.replyQueue)
+            Self.record(rdKafkaStatistics.messageCount, to: self.messageCount)
+            Self.record(rdKafkaStatistics.messageSize, to: self.messageSize)
+            Self.record(rdKafkaStatistics.messageMax, to: self.messageMax)
+            Self.record(rdKafkaStatistics.messageSizeMax, to: self.messageSizeMax)
+            Self.record(rdKafkaStatistics.totalRequestsSent, to: self.totalRequestsSent)
+            Self.record(rdKafkaStatistics.totalBytesSent, to: self.totalBytesSent)
+
+            Self.record(rdKafkaStatistics.totalResponsesRecieved, to: self.totalResponsesRecieved)
+            Self.record(rdKafkaStatistics.totalBytesReceived, to: self.totalBytesReceived)
+            Self.record(rdKafkaStatistics.totalMessagesSent, to: self.totalMessagesSent)
+            Self.record(rdKafkaStatistics.totalBytesSent, to: self.totalBytesSent)
+
+            Self.record(rdKafkaStatistics.totalMessagesBytesSent, to: self.totalMessagesBytesSent)
+            Self.record(rdKafkaStatistics.totalMessagesRecieved, to: self.totalMessagesRecieved)
+            Self.record(rdKafkaStatistics.totalMessagesBytesRecieved, to: self.totalMessagesBytesRecieved)
+            Self.record(rdKafkaStatistics.metadataCacheCount, to: self.metadataCacheCount)
+        }
     }
 
     public enum Metrics: Sendable {
         case disabled
-        case enabled(updateInterval: Duration, options: KafkaMetrics)
+        case enabled(updateInterval: Duration, metrics: KafkaMetrics)
+
+        internal func update(with rdKafkaStatistics: RDKafkaStatistics) {
+            switch self {
+            case .enabled(_, let metrics):
+                assert(metrics.someMetricsSet, "Unexpected statistics received when no metrics configured")
+                metrics.update(with: rdKafkaStatistics)
+            case .disabled:
+                assertionFailure("Unexpected statistics received when metrics disabled")
+            }
+        }
     }
 }

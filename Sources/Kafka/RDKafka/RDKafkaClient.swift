@@ -14,6 +14,7 @@
 
 import Crdkafka
 import Dispatch
+import ExtrasJSON
 import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
@@ -311,7 +312,7 @@ final class RDKafkaClient: Sendable {
     enum KafkaEvent {
         case deliveryReport(results: [KafkaDeliveryReport])
         case consumerMessages(result: Result<KafkaConsumerMessage, Error>)
-        case statistics(KafkaStatistics)
+        case statistics(RDKafkaStatistics)
     }
 
     /// Poll the event `rd_kafka_queue_t` for new events.
@@ -343,7 +344,9 @@ final class RDKafkaClient: Sendable {
             case .offsetCommit:
                 self.handleOffsetCommitEvent(event)
             case .statistics:
-                events.append(self.handleStatistics(event))
+                if let forwardEvent = self.handleStatistics(event) {
+                    events.append(forwardEvent)
+                }
             case .none:
                 // Finished reading events, return early
                 return events
@@ -395,9 +398,18 @@ final class RDKafkaClient: Sendable {
         // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
     }
 
-    private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent {
+    /// Handle event of type `RDKafkaEvent.statistics`.
+    ///
+    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
+    private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent? {
         let jsonStr = String(cString: rd_kafka_event_stats(event))
-        return .statistics(KafkaStatistics(jsonString: jsonStr))
+        do {
+            let json = try XJSONDecoder().decode(RDKafkaStatistics.self, from: jsonStr.utf8)
+            return .statistics(json)
+        } catch {
+            assertionFailure("Error occurred when decoding JSON statistics: \(error) when decoding \(jsonStr)")
+        }
+        return nil
     }
 
     /// Handle event of type `RDKafkaEvent.log`.
