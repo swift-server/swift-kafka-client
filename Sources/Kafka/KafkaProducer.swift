@@ -264,14 +264,12 @@ public final class KafkaProducer: Service, Sendable {
 //                let _ = client.eventPoll()
                 client.eventPoll(events: &events, maxEvents: &maxEvents)
             case .pollAndYield(let client, let source):
-                var shouldSleep = true
-                client.eventPoll(events: &events, maxEvents: &maxEvents)
+                let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
                     switch event {
                     case .deliveryReport(let reports):
                         // Ignore YieldResult as we don't support back pressure in KafkaProducer
                         _ = source?.yield(.deliveryReports(reports))
-                        shouldSleep = false
                     case .statistics(let stats):
                         // Ignore YieldResult as we don't support back pressure in KafkaProducer
                         _ = source?.yield(.statistics(stats))
@@ -283,7 +281,7 @@ public final class KafkaProducer: Service, Sendable {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
                     try await Task.sleep(for: pollInterval)
                 } else {
-                    pollInterval = max(pollInterval / 2, .milliseconds(1))
+                    pollInterval = max(pollInterval / 3, .microseconds(1))
                     await Task.yield()
                 }
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):

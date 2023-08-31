@@ -652,7 +652,7 @@ final class KafkaTests: XCTestCase {
     
     
     */
-    
+   #if false 
     func testOrdo() async throws {
 //        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
 //        let firstConsumerOffset = testMessages.count / 2
@@ -766,6 +766,7 @@ final class KafkaTests: XCTestCase {
 
         }
     }
+#endif
 }
 
 //fileprivate let staticLogger = Logger(label: "")

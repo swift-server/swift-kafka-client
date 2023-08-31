@@ -418,8 +418,7 @@ public final class KafkaConsumer: Sendable, Service {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source, let eventSource):
-                var shouldSleep = true
-                client.eventPoll(events: &events, maxEvents: &maxEvents)
+                let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
                     switch event {
                     case .consumerMessages(let result):
@@ -432,22 +431,21 @@ public final class KafkaConsumer: Sendable, Service {
                             eventSource?.finish()
                             throw error
                         }
-                        shouldSleep = false
                     case .statistics(let statistics):
                         _ = eventSource?.yield(.statistics(statistics))
                     case .rebalance(let rebalance):
                         self.logger.info("rebalance received \(rebalance)")
                         _ = eventSource?.yield(.rebalance(rebalance))
-                        shouldSleep = false
                     default:
                         break // Ignore
                     }
                 }
+                logger.trace("Processed \(events.count) shouldSleep: \(shouldSleep), pollInterval: \(pollInterval), maxEvents: \(maxEvents)")
                 if shouldSleep {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
                     try await Task.sleep(for: pollInterval)
                 } else {
-                    pollInterval = max(pollInterval / 2, .milliseconds(1))
+                    pollInterval = max(pollInterval / 3, .microseconds(1))
                     await Task.yield()
                 }
             case .pollWithoutYield(let client):
@@ -455,7 +453,7 @@ public final class KafkaConsumer: Sendable, Service {
                 // We are just polling to serve any remaining events queued inside of `librdkafka`.
                 // All remaining queued consumer messages will get dropped and not be committed (marked as read).
                 //let events =
-                client.eventPoll(events: &events, maxEvents: &maxEvents)
+                let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
                     switch event {
                     case .rebalance(let type):
@@ -473,7 +471,16 @@ public final class KafkaConsumer: Sendable, Service {
                         continue
                     }
                 }
-                try await Task.sleep(for: self.configuration.pollInterval)
+//                logger.info("Processed without yield \(events.count) shouldSleep: \(true), pollInterval: \(pollInterval)")
+                
+                if shouldSleep {
+                    pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
+                    try await Task.sleep(for: pollInterval)
+                } else {
+                    pollInterval = max(pollInterval / 2, .milliseconds(1))
+                    await Task.yield()
+                }
+//                try await Task.sleep(for: self.configuration.pollInterval)
             case .terminatePollLoop:
                 return
             }

@@ -183,10 +183,12 @@ final class RDKafkaClient: Sendable {
     /// Poll the event `rd_kafka_queue_t` for new events.
     ///
     /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
-    func eventPoll(events: inout [KafkaEvent], maxEvents: inout Int)/* -> [KafkaEvent] */{
+    func eventPoll(events: inout [KafkaEvent], maxEvents: inout Int) -> Bool /* -> [KafkaEvent] */{
 //        var events = [KafkaEvent]()
         events.removeAll(keepingCapacity: true)
         events.reserveCapacity(maxEvents)
+        
+        var shouldSleep = true
         
         defer {
             if events.count >= maxEvents {
@@ -210,21 +212,25 @@ final class RDKafkaClient: Sendable {
             case .deliveryReport:
                 let forwardEvent = self.handleDeliveryReportEvent(event)
                 events.append(forwardEvent)
+                shouldSleep = false
             case .fetch:
 //                logger.debug("Received event \(eventType)")
                 if let forwardEvent = self.handleFetchEvent(event) {
                     events.append(forwardEvent)
+                    shouldSleep = false
                 }
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
 //                logger.debug("Received event \(eventType)")
                 self.handleOffsetCommitEvent(event)
+                shouldSleep = false
             case .statistics:
                 events.append(self.handleStatistics(event))
             case .rebalance:
                 self.logger.info("rebalance received (RDClient)")
                 events.append(self.handleRebalance(event))
+                shouldSleep = false
             case .error:
                 #if true
                 let err = rd_kafka_event_error(event)
@@ -248,7 +254,7 @@ final class RDKafkaClient: Sendable {
                 break
             case .none:
                 // Finished reading events, return early
-                return //events
+                return shouldSleep
             default:
                 break // Ignored Event
             }
@@ -256,7 +262,7 @@ final class RDKafkaClient: Sendable {
         
 
 
-//        return events
+        return shouldSleep
     }
 
     /// Handle event of type `RDKafkaEvent.deliveryReport`.
