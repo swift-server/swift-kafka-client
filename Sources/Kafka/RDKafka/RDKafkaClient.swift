@@ -520,6 +520,14 @@ final class RDKafkaClient: Sendable {
         }
 
         if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            // Ignore RD_KAFKA_RESP_ERR__STATE error.
+            // RD_KAFKA_RESP_ERR__STATE indicates an attempt to commit to an unassigned partition,
+            // which can occur during rebalancing or when the consumer is shutting down.
+            // See "Upgrade considerations" for more details: https://github.com/confluentinc/librdkafka/releases/tag/v1.9.0
+            // Since Kafka Consumers are designed for at-least-once processing, failing to commit here is acceptable.
+            if error != RD_KAFKA_RESP_ERR__STATE {
+                return
+            }
             throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
