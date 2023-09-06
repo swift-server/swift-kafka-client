@@ -538,7 +538,7 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if scheduling the commit failed.
-    func commitAsync(_ message: KafkaConsumerMessage) throws {
+    func scheduleCommit(_ message: KafkaConsumerMessage) throws {
         // The offset committed is always the offset of the next requested message.
         // Thus, we increase the offset of the current message by one before committing it.
         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
@@ -566,12 +566,12 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if the commit failed.
-    func commitSync(_ message: KafkaConsumerMessage) async throws {
+    func commit(_ message: KafkaConsumerMessage) async throws {
         // Declare captured closure outside of withCheckedContinuation.
         // We do that because do an unretained pass of the captured closure to
         // librdkafka which means we have to keep a reference to the closure
         // ourselves to make sure it does not get deallocated before
-        // commitSync returns.
+        // commit returns.
         var capturedClosure: CapturedCommitCallback!
         try await withCheckedThrowingContinuation { continuation in
             capturedClosure = CapturedCommitCallback { result in

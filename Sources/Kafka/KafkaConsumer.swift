@@ -369,7 +369,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
-    public func commitAsync(_ message: KafkaConsumerMessage) throws {
+    public func scheduleCommit(_ message: KafkaConsumerMessage) throws {
         let action = self.stateMachine.withLockedValue { $0.commit() }
         switch action {
         case .throwClosedError:
@@ -379,8 +379,13 @@ public final class KafkaConsumer: Sendable, Service {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
 
-            try client.commitAsync(message)
+            try client.scheduleCommit(message)
         }
+    }
+
+    @available(*, deprecated, renamed: "commit")
+    public func commitSync(_ message: KafkaConsumerMessage) async throws {
+        try await self.commit(message)
     }
 
     /// Mark all messages up to the passed message in the topic as read.
@@ -393,7 +398,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
-    public func commitSync(_ message: KafkaConsumerMessage) async throws {
+    public func commit(_ message: KafkaConsumerMessage) async throws {
         let action = self.stateMachine.withLockedValue { $0.commit() }
         switch action {
         case .throwClosedError:
@@ -403,7 +408,7 @@ public final class KafkaConsumer: Sendable, Service {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
 
-            try await client.commitSync(message)
+            try await client.commit(message)
         }
     }
 

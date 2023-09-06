@@ -214,7 +214,7 @@ final class KafkaTests: XCTestCase {
         }
     }
 
-    func testProduceAndConsumeWithCommitAsync() async throws {
+    func testProduceAndConsumeWithScheduleCommit() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
@@ -254,7 +254,7 @@ final class KafkaTests: XCTestCase {
                 var consumedMessages = [KafkaConsumerMessage]()
                 for try await message in consumer.messages {
                     consumedMessages.append(message)
-                    try consumer.commitAsync(message)
+                    try consumer.scheduleCommit(message)
 
                     if consumedMessages.count >= testMessages.count {
                         break
@@ -272,7 +272,7 @@ final class KafkaTests: XCTestCase {
         }
     }
 
-    func testProduceAndConsumeWithCommitSync() async throws {
+    func testProduceAndConsumeWithCommit() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
@@ -312,7 +312,7 @@ final class KafkaTests: XCTestCase {
                 var consumedMessages = [KafkaConsumerMessage]()
                 for try await message in consumer.messages {
                     consumedMessages.append(message)
-                    try await consumer.commitSync(message)
+                    try await consumer.commit(message)
 
                     if consumedMessages.count >= testMessages.count {
                         break
@@ -381,7 +381,7 @@ final class KafkaTests: XCTestCase {
                         continue
                     }
                     consumedMessages.append(message)
-                    try await consumer.commitSync(message)
+                    try await consumer.commit(message)
 
                     if consumedMessages.count >= testMessages.count {
                         break
