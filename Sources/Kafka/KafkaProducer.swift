@@ -235,7 +235,7 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
     /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
-    private func triggerGracefulShutdown() {
+    public func triggerGracefulShutdown() {
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
