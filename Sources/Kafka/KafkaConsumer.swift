@@ -67,11 +67,12 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
 
     public typealias Element = KafkaConsumerMessage
-    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+//    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOThrowingAsyncSequenceProducer<
         Element,
         Error,
-        BackPressureStrategy,
+        NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
+//        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaConsumerCloseOnTerminate
     >
     let wrappedSequence: WrappedSequence
@@ -125,7 +126,8 @@ public final class KafkaConsumer: Sendable, Service {
     typealias Producer = NIOThrowingAsyncSequenceProducer<
         KafkaConsumerMessage,
         Error,
-        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
+        NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
+//        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaConsumerCloseOnTerminate
     >
     typealias ProducerEvents = NIOAsyncSequenceProducer<
@@ -168,7 +170,8 @@ public final class KafkaConsumer: Sendable, Service {
                 // TODO:+ [.rebalance]
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerMessage.self,
-            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(lowWatermark: 50, highWatermark: 100),
+//            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             delegate: KafkaConsumerCloseOnTerminate(isMessageSequence: true, stateMachine: self.stateMachine)
         )
 
@@ -414,10 +417,16 @@ public final class KafkaConsumer: Sendable, Service {
         var events = [RDKafkaClient.KafkaEvent]()
         var maxEvents = 100
         var pollInterval = self.configuration.pollInterval
+        var producing = true
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source, let eventSource):
+                if !producing {
+                    maxEvents = 1
+                } else {
+                    maxEvents = 100
+                }
                 let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
                     switch event {
@@ -425,7 +434,15 @@ public final class KafkaConsumer: Sendable, Service {
                         switch result {
                         case .success(let message):
                             // We do not support back pressure, we can ignore the yield result
-                            _ = source.yield(message)
+                            let result = source.yield(message)
+                            switch result {
+                            case .stopProducing:
+                                producing = false
+                            case .produceMore:
+                                producing = true
+                            case .dropped:
+                                break // ignore, sequence terminated
+                            }
                         case .failure(let error):
                             source.finish()
                             eventSource?.finish()
@@ -441,7 +458,10 @@ public final class KafkaConsumer: Sendable, Service {
                     }
                 }
                 logger.trace("Processed \(events.count) shouldSleep: \(shouldSleep), pollInterval: \(pollInterval), maxEvents: \(maxEvents)")
-                if shouldSleep {
+                /*if !producing {
+                    try await Task.sleep(for: configuration.maximumPollInterval - .milliseconds(100))
+                }
+                else */if shouldSleep || !producing {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
                     try await Task.sleep(for: pollInterval)
                 } else {
