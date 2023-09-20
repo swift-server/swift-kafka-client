@@ -181,13 +181,6 @@ public final class KafkaConsumer: Sendable, Service {
 
         // Forward main queue events to the consumer queue.
         try client.pollSetConsumer()
-
-        switch configuration.consumptionStrategy._internal {
-        case .partition(topic: let topic, partition: let partition, offset: let offset):
-            try self.assign(topic: topic, partition: partition, offset: offset)
-        case .group(groupID: _, topics: let topics):
-            try self.subscribe(topics: topics)
-        }
     }
 
     /// Initialize a new ``KafkaConsumer``.
@@ -331,6 +324,13 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     private func _run() async throws {
+        switch self.configuration.consumptionStrategy._internal {
+        case .partition(topic: let topic, partition: let partition, offset: let offset):
+            try self.assign(topic: topic, partition: partition, offset: offset)
+        case .group(groupID: _, topics: let topics):
+            try self.subscribe(topics: topics)
+        }
+
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
