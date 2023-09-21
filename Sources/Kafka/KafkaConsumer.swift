@@ -416,7 +416,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
     /// will already shut down when consumption of the ``KafkaConsumerMessages`` has ended.
-    private func triggerGracefulShutdown() {
+    public func triggerGracefulShutdown() {
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
         case .triggerGracefulShutdown(let client):
