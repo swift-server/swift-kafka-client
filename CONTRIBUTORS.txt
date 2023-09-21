@@ -17,6 +17,7 @@ needs to be listed here.
 - FranzBusch <f.busch@apple.com>
 - SHILPEE GUPTA <78029920+shilpeegupta14@users.noreply.github.com>
 - Yim Lee <yim_lee@apple.com>
+- blindspotbounty <127803250+blindspotbounty@users.noreply.github.com>
 - mr-swifter <103502437+mr-swifter@users.noreply.github.com>
 
 **Updating this list**
