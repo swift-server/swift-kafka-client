@@ -52,6 +52,7 @@ let package = Package(
         // The zstd Swift package produces warnings that we cannot resolve:
         // https://github.com/facebook/zstd/issues/3328
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.0"),
+        .package(url: "https://github.com/ordo-one/package-benchmark", from: "1.11.2"),
     ],
     targets: [
         .target(
@@ -98,6 +99,17 @@ let package = Package(
         .testTarget(
             name: "IntegrationTests",
             dependencies: ["Kafka"]
+        ),
+        .executableTarget(
+              name: "SwiftKafkaBenchmark",
+              dependencies: [
+                  "Kafka",
+                  .product(name: "Benchmark", package: "package-benchmark"),
+              ],
+              path: "Benchmarks/SwiftKafkaBenchmark",
+              plugins: [
+                  .plugin(name: "BenchmarkPlugin", package: "package-benchmark"),
+              ]
         ),
     ]
 )

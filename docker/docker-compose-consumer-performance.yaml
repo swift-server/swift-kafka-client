@@ -1,0 +1,66 @@
+# this file is not designed to be run directly
+# instead, use the docker-compose.<os>.<swift> files
+# eg docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.2204.57.yaml run test
+version: "3.9"
+services:
+
+  zookeeper:
+    image: ubuntu/zookeeper
+
+  kafka:
+    image: ubuntu/kafka
+    depends_on:
+      - zookeeper
+    environment:
+      ZOOKEEPER_HOST: zookeeper
+
+  swift-kafka-client:
+    depends_on:
+      - kafka
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      KAFKA_HOST: kafka
+
+  runtime-setup:
+    image: swift-kafka-client:default
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+  common: &common
+    image: swift-kafka-client:default
+    depends_on: [runtime-setup]
+    volumes:
+      - ~/.ssh:/root/.ssh
+      - ..:/code:z
+    working_dir: /code
+
+  soundness:
+    <<: *common
+    command: /bin/bash -xcl "swift -version && uname -a && ./scripts/soundness.sh"
+
+  build:
+    <<: *common
+    environment: []
+    command: /bin/bash -cl "swift build"
+
+  perf-test:
+    <<: *common
+    depends_on: [kafka, runtime-setup]
+    environment:
+      KAFKA_HOST: kafka
+      BENCHMARK_DISABLE_JEMALLOC: true
+      MESSAGES_NUMBER: 3000000
+    command: >
+      /bin/bash -xcl "
+        swift build -c release  && \
+        swift package --disable-sandbox benchmark
+      "
+
+  # util
+
+  shell:
+    <<: *common
+    entrypoint: /bin/bash
