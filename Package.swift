@@ -68,6 +68,7 @@ let package = Package(
                 .headerSearchPath("./custom/config/dummy"),
                 .headerSearchPath("./custom/include"),
                 .headerSearchPath("./librdkafka/src"),
+                .define("_GNU_SOURCE", to: "1"), // Fix build error for Swift 5.9 onwards
             ],
             linkerSettings: [
                 .linkedLibrary("curl"),
