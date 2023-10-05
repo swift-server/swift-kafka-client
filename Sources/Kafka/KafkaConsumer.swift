@@ -19,21 +19,38 @@ import ServiceLifecycle
 
 // MARK: - KafkaConsumerCloseOnTerminate
 
+internal enum ResumeOrigin {
+    case delegate
+    case timer(id: Int)
+}
+
 /// `NIOAsyncSequenceProducerDelegate` that terminates the closes the producer when
 /// `didTerminate()` is invoked.
 internal struct KafkaConsumerCloseOnTerminate: Sendable {
+    let logger: Logger?
     let isMessageSequence: Bool
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
+    let produceResumingContinuation: AsyncStream<ResumeOrigin>.Continuation?
+    
+    init(logger: Logger? = nil, isMessageSequence: Bool, stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>, produceResumingContinuation: AsyncStream<ResumeOrigin>.Continuation? = nil) {
+        self.logger = logger
+        self.isMessageSequence = isMessageSequence
+        self.stateMachine = stateMachine
+        self.produceResumingContinuation = produceResumingContinuation
+    }
 }
 
 extension KafkaConsumerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        return // No back pressure
+        logger?.debug("produceMore() called for \(isMessageSequence ? "message" : "event") sequence")
+        produceResumingContinuation?.yield(.delegate)
     }
 
     func didTerminate() {
+        logger?.debug("didTerminate() called for \(isMessageSequence ? "message" : "event") sequence")
         let seq = self.stateMachine.withLockedValue { $0.messageSequenceTerminated(isMessageSequence: isMessageSequence) }
         seq?.finish()
+        produceResumingContinuation?.yield(.delegate) // just in case
     }
 }
 
@@ -98,6 +115,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                         self.deallocateIterator()
                         throw error
                     }
+                case .terminateConsumerSequence:
+                    self.deallocateIterator()
+                    return nil
                 }
                 if element.eof {
                     continue
@@ -142,6 +162,9 @@ public final class KafkaConsumer: Sendable, Service {
     private let logger: Logger
     /// State of the `KafkaConsumer`.
     private let stateMachine: NIOLockedValueBox<StateMachine>
+    
+    private let resumeProducingStream: AsyncStream<ResumeOrigin>
+    private let resumeProducingContinuation: AsyncStream<ResumeOrigin>.Continuation
 
     /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
@@ -167,17 +190,19 @@ public final class KafkaConsumer: Sendable, Service {
         self.configuration = configuration
         self.stateMachine = stateMachine
         self.logger = logger
-                // TODO:+ [.rebalance]
+        
+        
+        (self.resumeProducingStream, self.resumeProducingContinuation) = AsyncStream<ResumeOrigin>.makeStream()
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerMessage.self,
-            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(lowWatermark: 50, highWatermark: 100),
-//            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: KafkaConsumerCloseOnTerminate(isMessageSequence: true, stateMachine: self.stateMachine)
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(lowWatermark: 512, highWatermark: 1024),
+            delegate: KafkaConsumerCloseOnTerminate(logger: logger, isMessageSequence: true, stateMachine: self.stateMachine, produceResumingContinuation: resumeContinuation)
         )
 
         self.messages = KafkaConsumerMessages(
             stateMachine: self.stateMachine,
-            wrappedSequence: sourceAndSequence.sequence
+            wrappedSequence: sourceAndSequence.sequence,
+            logger: logger
         )
 
         self.stateMachine.withLockedValue {
@@ -417,17 +442,15 @@ public final class KafkaConsumer: Sendable, Service {
         var events = [RDKafkaClient.KafkaEvent]()
         var maxEvents = 100
         var pollInterval = self.configuration.pollInterval
-        var producing = true
+        var producingEpoch = 0
+        var backpressureResumeIterator = self.resumeProducingStream.makeAsyncIterator()
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessage(let client, let source, let eventSource):
-                if !producing {
-                    maxEvents = 1
-                } else {
-                    maxEvents = 100
-                }
+                var ignoreStopProducing = false
                 let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
+                let pollTime = ContinuousClock.now
                 for event in events {
                     switch event {
                     case .consumerMessages(let result):
@@ -437,9 +460,16 @@ public final class KafkaConsumer: Sendable, Service {
                             let result = source.yield(message)
                             switch result {
                             case .stopProducing:
-                                producing = false
+                                if ignoreStopProducing {
+                                    break
+                                }
+                                let resumeOrigin = await waitForBackpressue(epoch: producingEpoch, backpressureResumeIterator: &backpressureResumeIterator, allowedTimeToWait: (.now - pollTime) + (self.configuration.maximumPollInterval - .milliseconds(100)))
+                                if case .timer = resumeOrigin {
+                                    ignoreStopProducing = true // we have to do next poll
+                                }
+                                producingEpoch += 1
                             case .produceMore:
-                                producing = true
+                                break
                             case .dropped:
                                 break // ignore, sequence terminated
                             }
@@ -457,14 +487,13 @@ public final class KafkaConsumer: Sendable, Service {
                         break // Ignore
                     }
                 }
-                logger.trace("Processed \(events.count) shouldSleep: \(shouldSleep), pollInterval: \(pollInterval), maxEvents: \(maxEvents)")
-                /*if !producing {
-                    try await Task.sleep(for: configuration.maximumPollInterval - .milliseconds(100))
-                }
-                else */if shouldSleep || !producing {
+                logger.debug("Processed \(events.count) shouldSleep: \(shouldSleep), pollInterval: \(pollInterval), maxEvents: \(maxEvents), ignoreStopProducing: \(ignoreStopProducing)")
+                if shouldSleep {
+                    maxEvents = min(100, maxEvents * 2)
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
                     try await Task.sleep(for: pollInterval)
                 } else {
+                    maxEvents = min(100, maxEvents * 2)
                     pollInterval = max(pollInterval / 3, .microseconds(1))
                     await Task.yield()
                 }
@@ -504,6 +533,48 @@ public final class KafkaConsumer: Sendable, Service {
             case .terminatePollLoop:
                 return
             }
+        }
+    }
+    
+    private func waitForBackpressue(epoch currentEpoch: Int, backpressureResumeIterator: inout AsyncStream<ResumeOrigin>.AsyncIterator, allowedTimeToWait: Duration) async -> ResumeOrigin? {
+        self.logger.debug("Waiting for backpressure ease up for epoch \(currentEpoch)")
+        defer {
+            self.logger.debug("Ease backpressure for \(currentEpoch)")
+        }
+        guard allowedTimeToWait > .zero else {
+            self.logger.debug("No time to wait for backpressure")
+            return nil
+        }
+        let sleepTask = Task {
+            try await Task.sleep(for: self.configuration.maximumPollInterval - .milliseconds(100))
+            while true {
+                let res = self.resumeProducingContinuation.yield(.timer(id: currentEpoch))
+                switch res {
+                case .enqueued, .terminated:
+                    return
+                case .dropped:
+                    try await Task.yield()
+                    continue
+                }
+            }
+        }
+        defer {
+            sleepTask.cancel()
+        }
+        while true {
+            let resumeOrigin = await backpressureResumeIterator.next()
+            self.logger.debug("Got resume current epoch \(currentEpoch)")
+            switch resumeOrigin {
+            case .none:
+                return nil
+            case .delegate:
+                return .delegate
+            case .timer(let epoch):
+                if epoch != currentEpoch { // timer from previous epoch, wait for next event
+                    continue
+                }
+            }
+            return resumeOrigin
         }
     }
 
@@ -752,6 +823,7 @@ extension KafkaConsumer {
             /// Store the message offset with the given `client`.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case storeOffset(client: RDKafkaClient)
+            case terminateConsumerSequence
         }
 
         /// Get action to take when wanting to store a message offset (to be auto-committed by `librdkafka`).
@@ -765,10 +837,8 @@ extension KafkaConsumer {
                 fatalError("Cannot store offset when consumption has been stopped")
             case .consuming(let client, _, _):
                 return .storeOffset(client: client)
-            case .finishing(let client):
-                return .storeOffset(client: client)
-            case .finished:
-                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .finishing, .finished:
+                return .terminateConsumerSequence
             }
         }
 

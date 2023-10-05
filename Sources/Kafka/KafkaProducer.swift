@@ -262,7 +262,7 @@ public final class KafkaProducer: Service, Sendable {
             case .pollWithoutYield(let client):
                 // Drop any incoming events
 //                let _ = client.eventPoll()
-                client.eventPoll(events: &events, maxEvents: &maxEvents)
+                _ = client.eventPoll(events: &events, maxEvents: &maxEvents)
             case .pollAndYield(let client, let source):
                 let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
                 for event in events {
