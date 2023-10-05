@@ -196,13 +196,12 @@ public final class KafkaConsumer: Sendable, Service {
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerMessage.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(lowWatermark: 512, highWatermark: 1024),
-            delegate: KafkaConsumerCloseOnTerminate(logger: logger, isMessageSequence: true, stateMachine: self.stateMachine, produceResumingContinuation: resumeContinuation)
+            delegate: KafkaConsumerCloseOnTerminate(logger: logger, isMessageSequence: true, stateMachine: self.stateMachine, produceResumingContinuation: self.resumeProducingContinuation)
         )
 
         self.messages = KafkaConsumerMessages(
             stateMachine: self.stateMachine,
-            wrappedSequence: sourceAndSequence.sequence,
-            logger: logger
+            wrappedSequence: sourceAndSequence.sequence
         )
 
         self.stateMachine.withLockedValue {
