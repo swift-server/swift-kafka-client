@@ -3,21 +3,26 @@ import Logging
 public final class KafkaTransaction {
     let client: RDKafkaClient
     let producer: KafkaProducer
-//    let logger: Logger
+    let logger: Logger
     
     var offsetSend = 0
     var offsetNum = 0
+    var sendTries = 0
     var msgNum = 0
+    var totalBytes = 0
+    var firstRetryFound = false
 
     init(client: RDKafkaClient, producer: KafkaProducer, logger: Logger) throws {
         self.client = client
         self.producer = producer
-//        self.logger = logger
+        self.logger = logger
 
         try client.beginTransaction()
     }
 
-    deinit {}
+    deinit {
+        self.logger.info("Destructing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
+    }
 
     public func send(
         offsets: KafkaTopicList,
@@ -36,9 +41,17 @@ public final class KafkaTransaction {
 
     @discardableResult
     public func send<Key, Value>(_ message: KafkaProducerMessage<Key, Value>) throws -> KafkaProducerMessageID {
+        if !firstRetryFound && sendTries == msgNum + 1 {
+            firstRetryFound = true
+            self.logger.info("retry found on sending message \(msgNum + 1)")
+        }
+        sendTries += 1
 //        self.logger.info("Sending message \(message)")
+        let id = try self.producer.send(message)
+//        self.logger.info("sent message \(msgNum + 1)")
+        totalBytes += message.value.withUnsafeBytes({ $0.count })
         msgNum += 1
-        return try self.producer.send(message)
+        return id
     }
     
     
@@ -49,11 +62,12 @@ public final class KafkaTransaction {
 
 
     func commit() async throws {
-//        self.logger.info("Committing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum)")
+        self.logger.info("Committing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
         try await self.client.commitTransaction(attempts: .max, timeout: .kafkaUntilEndOfTransactionTimeout)
     }
 
     func abort() async throws {
+        self.logger.info("Aborting transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
 //        self.logger.info("Aborting transaction")
         try await self.client.abortTransaction(attempts: .max, timeout: .kafkaUntilEndOfTransactionTimeout)
     }
