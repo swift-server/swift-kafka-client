@@ -69,8 +69,8 @@ let package = Package(
                 .headerSearchPath("./librdkafka/src"),
             ],
             linkerSettings: [
-                .linkedLibrary("curl"),
-                .linkedLibrary("sasl2"),
+                .linkedLibrary("curl", .when(platforms: [.macOS, .linux]),
+                .linkedLibrary("sasl2", .when(platforms: [.macOS, .linux]),
                 .linkedLibrary("z"), // zlib
             ]
         ),
