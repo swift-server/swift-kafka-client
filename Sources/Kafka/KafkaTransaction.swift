@@ -40,6 +40,13 @@ public final class KafkaTransaction {
         msgNum += 1
         return try self.producer.send(message)
     }
+    
+    
+    public func flush(timeout: Duration) async {
+        self.logger.info("Flushing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
+        await self.producer.flush(timeout: timeout)
+    }
+
 
     func commit() async throws {
 //        self.logger.info("Committing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum)")
