@@ -61,13 +61,14 @@ public final class KafkaTransactionalProducer: Service, Sendable {
 
     //
     public func withTransaction(_ body: @Sendable (KafkaTransaction) async throws -> Void) async throws {
-        let id = id.wrappingIncrementThenLoad(ordering: .relaxed)
-//        var logger = Logger(label: "Transaction \(id)")
-//
-//        logger.info("Begin txn \(id)")
-//        defer {
-//            logger.info("End txn \(id)")
-//        }
+        let id = id.loadThenWrappingIncrement(ordering: .relaxed)
+        var logger = Logger(label: "Transaction \(id)")
+        logger.logLevel = self.logger.logLevel
+
+        logger.debug("Begin txn \(id)")
+        defer {
+            logger.debug("End txn \(id)")
+        }
         let transaction = try KafkaTransaction(
             client: try producer.client(),
             producer: self.producer,
@@ -75,20 +76,23 @@ public final class KafkaTransactionalProducer: Service, Sendable {
         )
 
         do { // need to think here a little bit how to abort transaction
-//            logger.info("Fill the transaction \(id)")
+            logger.debug("Fill the transaction \(id)")
             try await body(transaction)
-//            logger.info("Committing the transaction \(id)")
+            logger.debug("Committing the transaction \(id)")
             try await transaction.commit()
+        } catch let error as KafkaError  where error.code == .transactionAborted {
+            logger.debug("Transaction aborted by librdkafa")
+            throw error // transaction already aborted
         } catch { // FIXME: maybe catch AbortTransaction?
-//            logger.info("Caught error for transaction \(id): \(error), aborting")
+            logger.debug("Caught error for transaction \(id): \(error), aborting")
             do {
                 try await transaction.abort()
-//                logger.info("Transaction \(id) aborted")
+                logger.debug("Transaction \(id) aborted")
             } catch {
-//                logger.info("Failed to perform abort for transaction \(id): \(error)")
+                logger.debug("Failed to perform abort for transaction \(id): \(error)")
                 // FIXME: that some inconsistent state
                 // should we emit fatalError(..)
-                // or propagate error as exception with isFatal flag?
+                // or propagate error as exception with isFgsatal flag?
             }
             throw error
         }
