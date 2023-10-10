@@ -294,7 +294,7 @@ extension KafkaProducer {
             /// All incoming events will be dropped.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case consumptionStopped(client: RDKafkaClient)
+            case eventConsumptionFinished(client: RDKafkaClient)
             /// ``KafkaProducer/triggerGracefulShutdown()`` was invoked so we are flushing
             /// any messages that wait to be sent and serve any remaining queued callbacks.
             ///
@@ -359,7 +359,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
                 return .pollAndYield(client: client, source: source)
-            case .consumptionStopped(let client):
+            case .eventConsumptionFinished(let client):
                 return .pollWithoutYield(client: client)
             case .finishing(let client, let source):
                 return .flushFinishSourceAndTerminatePollLoop(client: client, source: source)
@@ -400,7 +400,7 @@ extension KafkaProducer {
                     newMessageID: newMessageID,
                     topicHandles: topicHandles
                 )
-            case .consumptionStopped:
+            case .eventConsumptionFinished:
                 throw KafkaError.connectionClosed(reason: "Sequence consuming events was abruptly terminated, producer closed")
             case .finishing:
                 throw KafkaError.connectionClosed(reason: "Producer in the process of finishing")
@@ -423,10 +423,10 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .consumptionStopped:
+            case .eventConsumptionFinished:
                 fatalError("messageSequenceTerminated() must not be invoked more than once")
             case .started(let client, _, let source, _):
-                self.state = .consumptionStopped(client: client)
+                self.state = .eventConsumptionFinished(client: client)
                 return .finishSource(source: source)
             case .finishing(let client, let source):
                 // Setting source to nil to prevent incoming events from buffering in `source`
@@ -447,7 +447,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
                 self.state = .finishing(client: client, source: source)
-            case .consumptionStopped(let client):
+            case .eventConsumptionFinished(let client):
                 self.state = .finishing(client: client, source: nil)
             case .finishing, .finished:
                 break
