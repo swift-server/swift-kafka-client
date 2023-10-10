@@ -1,12 +1,12 @@
 //===----------------------------------------------------------------------===//
 //
-// This source file is part of the swift-kafka-gsoc open source project
+// This source file is part of the swift-kafka-client open source project
 //
-// Copyright (c) 2023 Apple Inc. and the swift-kafka-gsoc project authors
+// Copyright (c) 2023 Apple Inc. and the swift-kafka-client project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
-// See CONTRIBUTORS.txt for the list of swift-kafka-gsoc project authors
+// See CONTRIBUTORS.txt for the list of swift-kafka-client project authors
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -20,165 +20,31 @@
 // MARK: - Statistics
 
 struct RDKafkaStatistics: Hashable, Codable {
-    let name, clientID, type: String?
-    let timestamp, time, age, replyQueue: Int?
-    let messageCount, messageSize, messageMax, messageSizeMax: Int?
-    let simpleCnt, metadataCacheCount: Int?
-//    let brokers: [String: Broker]?
-//    let topics: [String: Topic]?
-//    let cgrp: Cgrp?
-    let totalRequestsSent, totalBytesSent, totalResponsesRecieved, totalBytesReceived: Int?
-    let totalMessagesSent, totalMessagesBytesSent, totalMessagesRecieved, totalMessagesBytesRecieved: Int?
+    let queuedOperation: Int?
+    let queuedProducerMessages: Int?
+    let queuedProducerMessagesSize: Int?
+    let topicsInMetadataCache: Int?
+    let totalKafkaBrokerRequests: Int?
+    let totalKafkaBrokerBytesSent: Int?
+    let totalKafkaBrokerResponses: Int?
+    let totalKafkaBrokerResponsesSize: Int?
+    let totalKafkaBrokerMessagesSent: Int?
+    let totalKafkaBrokerMessagesBytesSent: Int?
+    let totalKafkaBrokerMessagesRecieved: Int?
+    let totalKafkaBrokerMessagesBytesRecieved: Int?
 
     enum CodingKeys: String, CodingKey {
-        case name // unused
-        case clientID = "client_id" // unused
-        case type // unused
-        case timestamp = "ts"
-        case time, age
-        case replyQueue = "replyq"
-        case messageCount = "msg_cnt"
-        case messageSize = "msg_size"
-        case messageMax = "msg_max"
-        case messageSizeMax = "msg_size_max"
-        case simpleCnt = "simple_cnt" // unused
-        case metadataCacheCount = "metadata_cache_cnt"
-//        case brokers, topics
-//        case cgrp
-        case totalRequestsSent = "tx"
-        case totalBytesSent = "tx_bytes"
-        case totalResponsesRecieved = "rx"
-        case totalBytesReceived = "rx_bytes"
-        case totalMessagesSent = "txmsgs"
-        case totalMessagesBytesSent = "txmsg_bytes"
-        case totalMessagesRecieved = "rxmsgs"
-        case totalMessagesBytesRecieved = "rxmsg_bytes"
+        case queuedOperation = "replyq"
+        case queuedProducerMessages = "msg_cnt"
+        case queuedProducerMessagesSize = "msg_size"
+        case topicsInMetadataCache = "metadata_cache_cnt"
+        case totalKafkaBrokerRequests = "tx"
+        case totalKafkaBrokerBytesSent = "tx_bytes"
+        case totalKafkaBrokerResponses = "rx"
+        case totalKafkaBrokerResponsesSize = "rx_bytes"
+        case totalKafkaBrokerMessagesSent = "txmsgs"
+        case totalKafkaBrokerMessagesBytesSent = "txmsg_bytes"
+        case totalKafkaBrokerMessagesRecieved = "rxmsgs"
+        case totalKafkaBrokerMessagesBytesRecieved = "rxmsg_bytes"
     }
 }
-
-// FIXME: for future use
-
-// MARK: - Broker
-
-// struct Broker: Hashable, Codable {
-//    let name: String?
-//    let nodeid: Int?
-//    let nodename, source, state: String?
-//    let stateage, outbufCnt, outbufMsgCnt, waitrespCnt: Int?
-//    let waitrespMsgCnt, tx, txbytes, txerrs: Int?
-//    let txretries, txidle, reqTimeouts, rx: Int?
-//    let rxbytes, rxerrs, rxcorriderrs, rxpartial: Int?
-//    let rxidle, zbufGrow, bufGrow, wakeups: Int?
-//    let connects, disconnects: Int?
-//    let intLatency, outbufLatency, rtt, throttle: [String: Int]?
-//    let req: [String: Int]?
-//    let toppars: [String: Toppar]?
-//
-//    enum CodingKeys: String, CodingKey {
-//        case name, nodeid, nodename, source, state, stateage
-//        case outbufCnt = "outbuf_cnt"
-//        case outbufMsgCnt = "outbuf_msg_cnt"
-//        case waitrespCnt = "waitresp_cnt"
-//        case waitrespMsgCnt = "waitresp_msg_cnt"
-//        case tx, txbytes, txerrs, txretries, txidle
-//        case reqTimeouts = "req_timeouts"
-//        case rx, rxbytes, rxerrs, rxcorriderrs, rxpartial, rxidle
-//        case zbufGrow = "zbuf_grow"
-//        case bufGrow = "buf_grow"
-//        case wakeups, connects, disconnects
-//        case intLatency = "int_latency"
-//        case outbufLatency = "outbuf_latency"
-//        case rtt, throttle, req, toppars
-//    }
-// }
-
-// MARK: - Toppars
-
-// struct Toppar: Hashable, Codable {
-//    let topic: String?
-//    let partition: Int?
-//
-//    enum CodingKeys: String, CodingKey {
-//        case topic, partition
-//    }
-// }
-
-// MARK: - Cgrp
-
-// struct Cgrp: Hashable, Codable {
-//    let state: String?
-//    let stateage: Int?
-//    let joinState: String?
-//    let rebalanceAge, rebalanceCnt: Int?
-//    let rebalanceReason: String?
-//    let assignmentSize: Int?
-//
-//    enum CodingKeys: String, CodingKey {
-//        case state, stateage
-//        case joinState = "join_state"
-//        case rebalanceAge = "rebalance_age"
-//        case rebalanceCnt = "rebalance_cnt"
-//        case rebalanceReason = "rebalance_reason"
-//        case assignmentSize = "assignment_size"
-//    }
-// }
-
-// MARK: - Topic
-
-// struct Topic: Hashable, Codable {
-//    let topic: String?
-//    let age, metadataAge: Int?
-//    let batchsize, batchcnt: [String: Int]?
-//    let partitions: [String: Partition]?
-//
-//    enum CodingKeys: String, CodingKey {
-//        case topic, age
-//        case metadataAge = "metadata_age"
-//        case batchsize, batchcnt, partitions
-//    }
-// }
-
-// MARK: - Partition
-
-// struct Partition: Hashable, Codable {
-//    let partition, broker, leader: Int?
-//    let desired, unknown: Bool?
-//    let msgqCnt, msgqBytes, xmitMsgqCnt, xmitMsgqBytes: Int?
-//    let fetchqCnt, fetchqSize: Int?
-//    let fetchState: String?
-//    let queryOffset, nextOffset, appOffset, storedOffset: Int?
-//    let commitedOffset, committedOffset, eofOffset, loOffset: Int?
-//    let hiOffset, lsOffset, consumerLag, consumerLagStored: Int?
-//    let txmsgs, txbytes, rxmsgs, rxbytes: Int?
-//    let msgs, rxVerDrops, msgsInflight, nextACKSeq: Int?
-//    let nextErrSeq, ackedMsgid: Int?
-//
-//    enum CodingKeys: String, CodingKey {
-//        case partition, broker, leader, desired, unknown
-//        case msgqCnt = "msgq_cnt"
-//        case msgqBytes = "msgq_bytes"
-//        case xmitMsgqCnt = "xmit_msgq_cnt"
-//        case xmitMsgqBytes = "xmit_msgq_bytes"
-//        case fetchqCnt = "fetchq_cnt"
-//        case fetchqSize = "fetchq_size"
-//        case fetchState = "fetch_state"
-//        case queryOffset = "query_offset"
-//        case nextOffset = "next_offset"
-//        case appOffset = "app_offset"
-//        case storedOffset = "stored_offset"
-//        case commitedOffset = "commited_offset"
-//        case committedOffset = "committed_offset"
-//        case eofOffset = "eof_offset"
-//        case loOffset = "lo_offset"
-//        case hiOffset = "hi_offset"
-//        case lsOffset = "ls_offset"
-//        case consumerLag = "consumer_lag"
-//        case consumerLagStored = "consumer_lag_stored"
-//        case txmsgs, txbytes, rxmsgs, rxbytes, msgs
-//        case rxVerDrops = "rx_ver_drops"
-//        case msgsInflight = "msgs_inflight"
-//        case nextACKSeq = "next_ack_seq"
-//        case nextErrSeq = "next_err_seq"
-//        case ackedMsgid = "acked_msgid"
-//    }
-// }

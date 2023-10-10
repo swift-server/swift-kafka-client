@@ -12,10 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+@testable import CoreMetrics // for MetricsSystem.bootstrapInternal
 import struct Foundation.UUID
 @testable import Kafka
 import Logging
 import Metrics
+import MetricsTestKit
 import ServiceLifecycle
 import XCTest
 
@@ -34,6 +36,17 @@ import XCTest
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
 final class KafkaConsumerTests: XCTestCase {
+    var metrics: TestMetrics! = TestMetrics()
+
+    override func setUp() async throws {
+        MetricsSystem.bootstrapInternal(self.metrics)
+    }
+
+    override func tearDown() async throws {
+        self.metrics = nil
+        MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
+    }
+    
     func testConsumerLog() async throws {
         let recorder = LogEventRecorder()
         let mockLogger = Logger(label: "kafka.test.consumer.log") {
@@ -91,12 +104,8 @@ final class KafkaConsumerTests: XCTestCase {
             bootstrapBrokerAddresses: []
         )
 
-        var metricsOptions = KafkaConfiguration.KafkaMetrics()
-
-        let handler = MockTimerHandler()
-        metricsOptions.age = .init(label: "age", dimensions: [], handler: handler)
-
-        config.metrics = .enabled(updateInterval: .milliseconds(10), metrics: metricsOptions)
+        config.metrics.updateInterval = .milliseconds(100)
+        config.metrics.queuedOperation = .init(label: "operations")
 
         let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
 
@@ -109,17 +118,13 @@ final class KafkaConsumerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            group.addTask {
-                for await value in handler.expectation {
-                    XCTAssertNotEqual(value, 0)
-                    break
-                }
-            }
-
-            try await group.next()
+            try await Task.sleep(for: .seconds(1))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
+        
+        let value = try metrics.expectGauge("operations").lastValue
+        XCTAssertNotNil(value)
     }
 }

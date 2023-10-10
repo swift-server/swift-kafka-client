@@ -14,8 +14,8 @@
 
 import Crdkafka
 import Dispatch
-import ExtrasJSON
 import Logging
+import class Foundation.JSONDecoder
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
@@ -404,8 +404,10 @@ final class RDKafkaClient: Sendable {
     private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent? {
         let jsonStr = String(cString: rd_kafka_event_stats(event))
         do {
-            let json = try XJSONDecoder().decode(RDKafkaStatistics.self, from: jsonStr.utf8)
-            return .statistics(json)
+            if let jsonData = jsonStr.data(using: .utf8) {
+                let json = try JSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
+                return .statistics(json)
+            }
         } catch {
             assertionFailure("Error occurred when decoding JSON statistics: \(error) when decoding \(jsonStr)")
         }

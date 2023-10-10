@@ -17,64 +17,53 @@ import Metrics
 extension KafkaConfiguration {
     // MARK: - Metrics
 
-    /// Use to configure metrics.
-    public struct KafkaMetrics: Sendable {
-        internal var someMetricsSet: Bool {
-            self.timestamp != nil ||
-                self.time != nil ||
-                self.age != nil ||
-                self.replyQueue != nil ||
-                self.messageCount != nil ||
-                self.messageSize != nil ||
-                self.messageMax != nil ||
-                self.messageSizeMax != nil ||
-                self.totalRequestsSent != nil ||
-                self.totalBytesSent != nil ||
-                self.totalResponsesRecieved != nil ||
-                self.totalBytesReceived != nil ||
-                self.totalMessagesSent != nil ||
-                self.totalMessagesBytesSent != nil ||
-                self.totalBytesReceived != nil ||
-                self.metadataCacheCount != nil
+    /// Configuration for the metrics emitted by `SwiftKafka`.
+    public struct Metrics: Sendable {
+        internal var enabled: Bool {
+            self.updateInterval != nil &&
+                (self.queuedOperation != nil ||
+                self.queuedProducerMessages != nil ||
+                self.queuedProducerMessagesSize != nil ||
+                self.totalKafkaBrokerRequests != nil ||
+                self.totalKafkaBrokerBytesSent != nil ||
+                self.totalKafkaBrokerResponses != nil ||
+                self.totalKafkaBrokerResponsesSize != nil ||
+                self.totalKafkaBrokerMessagesSent != nil ||
+                self.totalKafkaBrokerMessagesBytesSent != nil ||
+                self.totalKafkaBrokerMessagesBytesRecieved != nil ||
+                self.topicsInMetadataCache != nil)
         }
+        
+        /// Update interval for statistics.
+        public var updateInterval: Duration?
 
-        /// librdkafka's internal monotonic clock (microseconds)
-        public var timestamp: Gauge?
-        /// Wall clock time in seconds since the epoch
-        public var time: Timer?
-        /// Time since this client instance was created
-        public var age: Timer?
-        /// Number of ops (callbacks, events, etc) waiting in queue for application to serve
-        public var replyQueue: Gauge?
-        /// Current number of messages in producer queues
-        public var messageCount: Gauge?
-        /// Current total size of messages in producer queues
-        public var messageSize: Gauge?
-        /// Threshold: maximum number of messages allowed allowed on the producer queues
-        public var messageMax: Gauge?
-        /// Threshold: maximum total size of messages allowed on the producer queues
-        public var messageSizeMax: Gauge?
+        /// Number of operations (callbacks, events, etc) waiting in the queue.
+        public var queuedOperation: Gauge?
+        /// Current number of queued producer messages.
+        public var queuedProducerMessages: Gauge?
+        /// Current total size in bytes of queued producer messages.
+        public var queuedProducerMessagesSize: Gauge?
 
-        /// Total number of requests sent to Kafka brokers
-        public var totalRequestsSent: Gauge?
-        /// Total number of bytes transmitted to Kafka brokers
-        public var totalBytesSent: Gauge?
-        /// Total number of responses received from Kafka brokers
-        public var totalResponsesRecieved: Gauge?
-        /// Total number of bytes received from Kafka brokers
-        public var totalBytesReceived: Gauge?
+        /// Total number of requests sent to Kafka brokers.
+        public var totalKafkaBrokerRequests: Gauge?
+        /// Total number of bytes transmitted to Kafka brokers.
+        public var totalKafkaBrokerBytesSent: Gauge?
+        /// Total number of responses received from Kafka brokers.
+        public var totalKafkaBrokerResponses: Gauge?
+        /// Total number of bytes received from Kafka brokers.
+        public var totalKafkaBrokerResponsesSize: Gauge?
 
-        /// Total number of messages transmitted (produced) to Kafka brokers
-        public var totalMessagesSent: Gauge?
-        /// Total number of message bytes (including framing, such as per-Message framing and MessageSet/batch framing) transmitted to Kafka brokers
-        public var totalMessagesBytesSent: Gauge?
+        /// Total number of messages transmitted (produced) to Kafka brokers.
+        public var totalKafkaBrokerMessagesSent: Gauge?
+        /// Total number of message bytes (including framing, such as per-Message framing and MessageSet/batch framing) transmitted to Kafka brokers.
+        public var totalKafkaBrokerMessagesBytesSent: Gauge?
         /// Total number of messages consumed, not including ignored messages (due to offset, etc), from Kafka brokers.
-        public var totalMessagesRecieved: Gauge?
-        /// Total number of message bytes (including framing) received from Kafka brokers
-        public var totalMessagesBytesRecieved: Gauge?
+        public var totalKafkaBrokerMessagesRecieved: Gauge?
+        /// Total number of message bytes (including framing) received from Kafka brokers.
+        public var totalKafkaBrokerMessagesBytesRecieved: Gauge?
 
         /// Number of topics in the metadata cache.
-        public var metadataCacheCount: Gauge?
+        public var topicsInMetadataCache: Gauge?
 
         private static func record<T: BinaryInteger>(_ value: T?, to: Gauge?) {
             guard let value,
@@ -84,50 +73,22 @@ extension KafkaConfiguration {
             to.record(value)
         }
 
-        private static func recordMircoseconds<T: BinaryInteger>(_ value: T?, to: Timer?) {
-            guard let value,
-                  let to else {
-                return
-            }
-            to.recordMicroseconds(value)
-        }
-
         internal func update(with rdKafkaStatistics: RDKafkaStatistics) {
-            Self.record(rdKafkaStatistics.timestamp, to: self.timestamp)
-            Self.recordMircoseconds(rdKafkaStatistics.time, to: self.time)
-            Self.recordMircoseconds(rdKafkaStatistics.age, to: self.age)
-            Self.record(rdKafkaStatistics.replyQueue, to: self.replyQueue)
-            Self.record(rdKafkaStatistics.messageCount, to: self.messageCount)
-            Self.record(rdKafkaStatistics.messageSize, to: self.messageSize)
-            Self.record(rdKafkaStatistics.messageMax, to: self.messageMax)
-            Self.record(rdKafkaStatistics.messageSizeMax, to: self.messageSizeMax)
-            Self.record(rdKafkaStatistics.totalRequestsSent, to: self.totalRequestsSent)
-            Self.record(rdKafkaStatistics.totalBytesSent, to: self.totalBytesSent)
+            Self.record(rdKafkaStatistics.queuedOperation, to: self.queuedOperation)
+            Self.record(rdKafkaStatistics.queuedProducerMessages, to: self.queuedProducerMessages)
+            Self.record(rdKafkaStatistics.queuedProducerMessagesSize, to: self.queuedProducerMessagesSize)
 
-            Self.record(rdKafkaStatistics.totalResponsesRecieved, to: self.totalResponsesRecieved)
-            Self.record(rdKafkaStatistics.totalBytesReceived, to: self.totalBytesReceived)
-            Self.record(rdKafkaStatistics.totalMessagesSent, to: self.totalMessagesSent)
-            Self.record(rdKafkaStatistics.totalBytesSent, to: self.totalBytesSent)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerRequests, to: self.totalKafkaBrokerRequests)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerBytesSent, to: self.totalKafkaBrokerBytesSent) // TODO: finish with KafkaBroker...
+            Self.record(rdKafkaStatistics.totalKafkaBrokerResponses, to: self.totalKafkaBrokerResponses)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerResponsesSize, to: self.totalKafkaBrokerResponsesSize)
 
-            Self.record(rdKafkaStatistics.totalMessagesBytesSent, to: self.totalMessagesBytesSent)
-            Self.record(rdKafkaStatistics.totalMessagesRecieved, to: self.totalMessagesRecieved)
-            Self.record(rdKafkaStatistics.totalMessagesBytesRecieved, to: self.totalMessagesBytesRecieved)
-            Self.record(rdKafkaStatistics.metadataCacheCount, to: self.metadataCacheCount)
-        }
-    }
-
-    public enum Metrics: Sendable {
-        case disabled
-        case enabled(updateInterval: Duration, metrics: KafkaMetrics)
-
-        internal func update(with rdKafkaStatistics: RDKafkaStatistics) {
-            switch self {
-            case .enabled(_, let metrics):
-                assert(metrics.someMetricsSet, "Unexpected statistics received when no metrics configured")
-                metrics.update(with: rdKafkaStatistics)
-            case .disabled:
-                assertionFailure("Unexpected statistics received when metrics disabled")
-            }
+            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesSent, to: self.totalKafkaBrokerMessagesSent)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesBytesSent, to: self.totalKafkaBrokerMessagesBytesSent)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesRecieved, to: self.totalKafkaBrokerMessagesRecieved)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesBytesRecieved, to: self.totalKafkaBrokerMessagesBytesRecieved)
+            
+            Self.record(rdKafkaStatistics.topicsInMetadataCache, to: self.topicsInMetadataCache)
         }
     }
 }

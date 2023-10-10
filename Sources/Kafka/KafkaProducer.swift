@@ -118,7 +118,7 @@ public final class KafkaProducer: Service, Sendable {
 
         var subscribedEvents: [RDKafkaEvent] = [.log] // No .deliveryReport here!
 
-        if case .enabled = configuration.metrics {
+        if configuration.metrics.enabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -164,7 +164,7 @@ public final class KafkaProducer: Service, Sendable {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
         // Listen to statistics events when statistics enabled
-        if case .enabled = configuration.metrics {
+        if configuration.metrics.enabled {
             subscribedEvents.append(.statistics)
         }
 
