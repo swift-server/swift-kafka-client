@@ -56,7 +56,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     }
 
     static func rdKafkaError(
-        wrapping error: rd_kafka_resp_err_t, file: String = #fileID, line: UInt = #line
+        wrapping error: rd_kafka_resp_err_t, isFatal: Bool = false, file: String = #fileID, line: UInt = #line
     ) -> KafkaError {
         let errorMessage = String(cString: rd_kafka_err2str(error))
         return KafkaError(
@@ -135,6 +135,36 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
             )
         )
     }
+
+    static func transactionAborted(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .transactionAborted, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func transactionIncomplete(
+        reason: String, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .transactionIncomplete, reason: reason, file: file, line: line
+            )
+        )
+    }
+
+    static func transactionOutOfAttempts(
+        numOfAttempts: UInt64, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .transactionOutOfAttempts, reason: "Out of \(numOfAttempts) attempts", file: file, line: line
+            )
+        )
+    }
 }
 
 extension KafkaError {
@@ -153,6 +183,10 @@ extension KafkaError {
             case messageConsumption
             case topicCreation
             case topicDeletion
+            case transactionAborted
+            case transactionIncomplete
+            case notInTransaction // FIXME: maybe add subcode ?
+            case transactionOutOfAttempts
         }
 
         fileprivate var backingCode: BackingCode
@@ -177,6 +211,12 @@ extension KafkaError {
         public static let topicCreationFailed = ErrorCode(.topicCreation)
         /// Deleting a topic failed.
         public static let topicDeletionFailed = ErrorCode(.topicDeletion)
+        /// Transaction was aborted (can be re-tried from scratch).
+        public static let transactionAborted = ErrorCode(.transactionAborted)
+        /// Transaction could not be completed
+        public static let transactionIncomplete = ErrorCode(.transactionIncomplete)
+        /// Out of provided number of attempts
+        public static let transactionOutOfAttempts = ErrorCode(.transactionOutOfAttempts)
 
         public var description: String {
             return String(describing: self.backingCode)
@@ -196,16 +236,20 @@ extension KafkaError {
 
         let line: UInt
 
+        let isFatal: Bool
+
         fileprivate init(
             code: KafkaError.ErrorCode,
             reason: String,
             file: String,
-            line: UInt
+            line: UInt,
+            isFatal: Bool = false
         ) {
             self.code = code
             self.reason = reason
             self.file = file
             self.line = line
+            self.isFatal = isFatal
         }
 
         // Only the error code matters for equality.

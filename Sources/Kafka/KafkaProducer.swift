@@ -41,6 +41,30 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
+// MARK: - KafkaProducerSharedSettings
+
+internal protocol KafkaProducerSharedProperties: Sendable {
+    /// If the ``isAutoCreateTopicsEnabled`` option is set to `true`,
+    /// the broker will automatically generate topics when producing data to non-existent topics.
+    /// The configuration specified in this ``KafkaTopicConfiguration`` will be applied to the newly created topic.
+    /// Default: See default values of ``KafkaTopicConfiguration``
+    var topicConfiguration: KafkaTopicConfiguration { get }
+
+    /// The time between two consecutive polls.
+    /// Effectively controls the rate at which incoming events are consumed.
+    /// Default: `.milliseconds(100)`
+    var pollInterval: Duration { get }
+
+    /// Maximum timeout for flushing outstanding produce requests when the ``KafkaProducer`` is shutting down.
+    /// Default: `10000`
+    var flushTimeoutMilliseconds: Int { get }
+    
+    var dictionary: [String: String] { get }
+}
+
+extension KafkaProducerConfiguration: KafkaProducerSharedProperties {}
+extension KafkaTransactionalProducerConfiguration: KafkaProducerSharedProperties {}
+
 // MARK: - KafkaProducerEvents
 
 /// `AsyncSequence` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
@@ -80,7 +104,7 @@ public final class KafkaProducer: Service, Sendable {
     private let stateMachine: NIOLockedValueBox<StateMachine>
 
     /// The configuration object of the producer client.
-    private let configuration: KafkaProducerConfiguration
+    private let configuration: KafkaProducerSharedProperties
     /// Topic configuration that is used when a new topic has to be created by the producer.
     private let topicConfiguration: KafkaTopicConfiguration
 
@@ -93,7 +117,7 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
-        configuration: KafkaProducerConfiguration,
+        configuration: KafkaProducerSharedProperties,
         topicConfiguration: KafkaTopicConfiguration
     ) {
         self.stateMachine = stateMachine
@@ -112,6 +136,13 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public convenience init(
         configuration: KafkaProducerConfiguration,
+        logger: Logger
+    ) throws {
+        try self.init(configuration: configuration as KafkaProducerSharedProperties, logger: logger)
+    }
+
+    internal convenience init(
+        configuration: KafkaProducerSharedProperties,
         logger: Logger
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
@@ -152,6 +183,14 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public static func makeProducerWithEvents(
         configuration: KafkaProducerConfiguration,
+        logger: Logger
+    ) throws -> (KafkaProducer, KafkaProducerEvents) {
+        return try self.makeProducerWithEvents(configuration: configuration as (any KafkaProducerSharedProperties), logger: logger)
+    }
+
+    internal static func makeProducerWithEvents(
+        configuration: KafkaProducerSharedProperties,
+        topicConfig: KafkaTopicConfiguration = KafkaTopicConfiguration(),
         logger: Logger
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
@@ -262,6 +301,10 @@ public final class KafkaProducer: Service, Sendable {
             )
             return KafkaProducerMessageID(rawValue: newMessageID)
         }
+    }
+
+    func client() throws -> RDKafkaClient {
+        try self.stateMachine.withLockedValue { try $0.client() }
     }
 }
 
@@ -451,6 +494,21 @@ extension KafkaProducer {
                 self.state = .finishing(client: client, source: nil)
             case .finishing, .finished:
                 break
+            }
+        }
+
+        func client() throws -> RDKafkaClient {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .started(let client, _, _, _):
+                return client
+            case .consumptionStopped(let client):
+                return client
+            case .finishing(let client, _):
+                return client
+            case .finished:
+                throw KafkaError.connectionClosed(reason: "Client stopped")
             }
         }
     }

@@ -39,6 +39,7 @@ final class KafkaTests: XCTestCase {
     var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
     var producerConfig: KafkaProducerConfiguration!
     var uniqueTestTopic: String!
+    var uniqueTestTopic2: String!
 
     override func setUpWithError() throws {
         self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
@@ -63,6 +64,7 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
         self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
+        self.uniqueTestTopic2 = try client._createUniqueTopic(timeout: 10 * 1000)
     }
 
     override func tearDownWithError() throws {
@@ -80,6 +82,7 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
+        try client._deleteTopic(self.uniqueTestTopic2, timeout: 10 * 1000)
 
         self.bootstrapBrokerAddress = nil
         self.producerConfig = nil
@@ -636,7 +639,8 @@ final class KafkaTests: XCTestCase {
                     receivedDeliveryReports.insert(deliveryReport)
                 }
             default:
-                break // Ignore any other events
+                continue
+//                break // Ignore any other events
             }
 
             if receivedDeliveryReports.count >= messages.count {
@@ -658,6 +662,113 @@ final class KafkaTests: XCTestCase {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
+        }
+    }
+
+    func testProduceAndConsumeWithTransaction() async throws {
+        let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: 10)
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        let transactionConfigProducer = KafkaTransactionalProducerConfiguration(
+            transactionalId: "1234",
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress])
+
+        let transactionalProducer = try await KafkaTransactionalProducer(config: transactionConfigProducer, logger: .kafkaTest)
+
+        let makeConsumerConfig = { (topic: String) -> KafkaConsumerConfiguration in
+            var consumerConfig = KafkaConsumerConfiguration(
+                consumptionStrategy: .group(id: "subscription-test-group-id", topics: [topic]),
+                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            )
+            consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+            consumerConfig.broker.addressFamily = .v4
+            consumerConfig.isAutoCommitEnabled = false
+            return consumerConfig
+        }
+
+        let consumer = try KafkaConsumer(
+            configuration: makeConsumerConfig(uniqueTestTopic),
+            logger: .kafkaTest
+        )
+
+        let consumerAfterTransaction = try KafkaConsumer(
+            configuration: makeConsumerConfig(uniqueTestTopic2),
+            logger: .kafkaTest
+        )
+
+        let serviceGroup = ServiceGroup(
+            services: [
+                producer,
+                consumer,
+                transactionalProducer,
+                consumerAfterTransaction,
+            ],
+            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
+            logger: .kafkaTest
+        )
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+
+            // Consumer Task
+            group.addTask {
+                var count = 0
+                for try await messageResult in consumer.messages {
+                    guard case let message = messageResult else {
+                        continue
+                    }
+                    count += 1
+                    try await transactionalProducer.withTransaction { transaction in
+                        let newMessage = KafkaProducerMessage(
+                            topic: self.uniqueTestTopic2,
+                            value: message.value.description + "_updated"
+                        )
+                        try transaction.send(newMessage)
+                        let partitionlist = RDKafkaTopicPartitionList()
+                        partitionlist.setOffset(topic: self.uniqueTestTopic, partition: message.partition, offset: message.offset)
+                        try await transaction.send(offsets: partitionlist, forConsumer: consumer)
+                    }
+
+                    if count >= testMessages.count {
+                        break
+                    }
+                }
+                print("Changed all messages \(count)")
+            }
+
+            group.addTask {
+                var count = 0
+                for try await messageAfterTransaction in consumerAfterTransaction.messages {
+                    let value = messageAfterTransaction.value.getString(at: 0, length: messageAfterTransaction.value.readableBytes)
+                    XCTAssert(value?.contains("_updated") ?? false)
+                    count += 1
+                    if count >= testMessages.count || Task.isCancelled {
+                        break
+                    }
+                }
+                XCTAssertEqual(count, testMessages.count)
+            }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            try await group.next()
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
 }
