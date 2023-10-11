@@ -13,7 +13,6 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import Metrics
 import NIOConcurrencyHelpers
 
 extension Logger {
