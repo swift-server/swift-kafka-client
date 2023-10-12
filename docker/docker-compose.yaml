@@ -58,6 +58,16 @@ services:
         cd Benchmarks && swift package --disable-sandbox benchmark baseline check --check-absolute-path Thresholds/$${SWIFT_VERSION-}/
       "
 
+  benchmark:
+    <<: *common
+    depends_on: [kafka, runtime-setup]
+    environment:
+      KAFKA_HOST: kafka
+    command: >
+      /bin/bash -xcl "
+        cd Benchmarks && swift package --disable-sandbox benchmark
+      "
+
   update-benchmark-baseline:
     <<: *common
     depends_on: [kafka, runtime-setup]
