@@ -6,7 +6,7 @@ import ServiceLifecycle
 import Logging
 import Benchmark
 
-private let numOfMessages: UInt =  .init(getFromEnv("MESSAGES_NUMBER") ?? "3000000")!
+private let numOfMessages: UInt =  .init(getFromEnv("MESSAGES_NUMBER") ?? "500000")!
 
 private var uniqueTestTopic: String!
 private var client: RDKafkaClientHolder!

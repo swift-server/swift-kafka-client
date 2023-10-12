@@ -20,5 +20,10 @@ services:
       - STRICT_CONCURRENCY_ARG=-Xswiftc -strict-concurrency=complete
       # - SANITIZER_ARG=--sanitize=thread # TSan broken still
 
+  update-benchmark-baseline:
+    image: swift-kafka-client:22.04-5.9
+    environment:
+      - SWIFT_VERSION=5.9
+
   shell:
     image: swift-kafka-client:22.04-5.9
