@@ -2,7 +2,7 @@
 //
 // This source file is part of the swift-kafka-client open source project
 //
-// Copyright (c) 2022 Apple Inc. and the swift-kafka-client project authors
+// Copyright (c) 2023 Apple Inc. and the swift-kafka-client project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -159,17 +159,6 @@ class RDKafkaClientHolder {
 
         return uniqueTopicName
     }
-
-//    func deleteTopic(_ topic: String, timeout: Int32 = 10000) async throws {
-//        try await withCheckedThrowingContinuation { continuation in
-//            do {
-//                try self._deleteTopic(topic, timeout: timeout)
-//                continuation.resume()
-//            } catch {
-//                continuation.resume(throwing: error)
-//            }
-//        }
-//    }
 
     /// Delete a topic.
     /// Blocks for a maximum of `timeout` milliseconds.
