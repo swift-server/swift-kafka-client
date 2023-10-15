@@ -599,56 +599,6 @@ final class KafkaTests: XCTestCase {
         }
     }
 
-    // TODO: remove
-    func testDelete() async throws {
-        var consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .partition(
-                KafkaPartition(rawValue: 0),
-                topic: "test-topic",
-                offset: KafkaOffset(rawValue: 0) // Important: Read from beginning!
-            ),
-            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-        )
-        consumerConfig.pollInterval = .milliseconds(100)
-        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
-        consumerConfig.broker.addressFamily = .v4
-
-        let consumer = try KafkaConsumer(
-            configuration: consumerConfig,
-            logger: .kafkaTest
-        )
-
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
-            group.addTask {
-                try await serviceGroup.run()
-            }
-
-            // Consumer Task
-            group.addTask {
-                var count = 0
-                for try await message in consumer.messages {
-                    _ = message // drop message
-                    count += 1
-//                    try await Task.sleep(for: .milliseconds(1))
-                    if count % 1000 == 0 {
-                        print(count)
-                    }
-                    if count == 1_000_000 {
-                        break
-                    }
-                }
-            }
-
-            // Wait for Consumer Task to complete
-            try await group.next()
-            // Shutdown the serviceGroup
-            await serviceGroup.triggerGracefulShutdown()
-        }
-    }
     // MARK: - Helpers
 
     private static func createTestMessages(
