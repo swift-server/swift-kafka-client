@@ -387,59 +387,75 @@ public final class KafkaConsumer: Sendable, Service {
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
             switch nextAction {
-            case .pollForAndYieldMessage(let client, let source):
-                // Poll for new consumer message.
-                var result: Result<KafkaConsumerMessage, Error>?
-                do {
-                    if let message = try client.consumerPoll() {
-                        result = .success(message)
-                    }
-                } catch {
-                    result = .failure(error)
-                }
-                if let result {
-                    let yieldResult = source.yield(result)
-                    switch yieldResult {
-                    case .produceMore:
-                        break
-                    case .stopProducing:
-                        self.stateMachine.withLockedValue { $0.stopProducing() }
-                    case .dropped:
-                        break
-                    }
-                } else {
+            case .pollForAndYieldMessages(let client, let source):
+                // Poll for new consumer messages.
+                let messageResults = self.batchConsumerPoll(client: client)
+                if messageResults.isEmpty {
                     self.stateMachine.withLockedValue { $0.waitForNewMessages() }
-                }
-            case .pollForMessageAndSleep(let client, let source):
-                var result: Result<KafkaConsumerMessage, Error>?
-                do {
-                    if let message = try client.consumerPoll() {
-                        result = .success(message)
-                    }
-                } catch {
-                    result = .failure(error)
-                }
-                if let result {
-                    self.stateMachine.withLockedValue { $0.produceMore() }
-                    let yieldResult = source.yield(result)
+                } else {
+                    let yieldResult = source.yield(contentsOf: messageResults)
                     switch yieldResult {
                     case .produceMore:
                         break
                     case .stopProducing:
                         self.stateMachine.withLockedValue { $0.stopProducing() }
                     case .dropped:
-                        break
+                        return
                     }
-
-                    self.stateMachine.withLockedValue { $0.newMessagesProduced() }
                 }
-                try await Task.sleep(for: self.configuration.pollInterval)
+            case .pollForMessagesIfAvailable(let client, let source):
+                let messageResults = self.batchConsumerPoll(client: client)
+                if messageResults.isEmpty {
+                    // Still no new messages, so sleep.
+                    try await Task.sleep(for: self.configuration.pollInterval)
+                } else {
+                    // New messages were produced to the partition that we previously finished reading.
+                    let yieldResult = source.yield(contentsOf: messageResults)
+                    switch yieldResult {
+                    case .produceMore:
+                        break
+                    case .stopProducing:
+                        self.stateMachine.withLockedValue { $0.stopProducing() }
+                    case .dropped:
+                        return
+                    }
+                }
             case .suspendPollLoop:
                 try await Task.sleep(for: self.configuration.pollInterval)
             case .terminatePollLoop:
                 return
             }
         }
+    }
+
+    /// Read `maxMessages` consumer messages from Kafka.
+    ///
+    /// - Parameters:
+    ///     - client: Client used for handling the connection to the Kafka cluster.
+    ///     - maxMessages: Maximum amount of consumer messages to read in this invocation.
+    private func batchConsumerPoll(
+        client: RDKafkaClient,
+        maxMessages: Int = 100
+    ) -> [Result<KafkaConsumerMessage, Error>] {
+        var messageResults = [Result<KafkaConsumerMessage, Error>]()
+        messageResults.reserveCapacity(maxMessages)
+
+        for _ in 0..<maxMessages {
+            var result: Result<KafkaConsumerMessage, Error>?
+            do {
+                if let message = try client.consumerPoll() {
+                    result = .success(message)
+                }
+            } catch {
+                result = .failure(error)
+            }
+
+            if let result {
+                messageResults.append(result)
+            }
+        }
+
+        return messageResults
     }
 
     /// Mark all messages up to the passed message in the topic as read.
@@ -639,15 +655,16 @@ extension KafkaConsumer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case pollForAndYieldMessage(
+            case pollForAndYieldMessages(
                 client: RDKafkaClient,
                 source: Producer.Source
             )
-            /// Poll for a new ``KafkaConsumerMessage`` and sleep for ``KafkaConsumerConfiguration/pollInterval``.
+            /// Poll for a new ``KafkaConsumerMessage`` or sleep for ``KafkaConsumerConfiguration/pollInterval``
+            /// if there are no new messages to read from the partition.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case pollForMessageAndSleep(
+            case pollForMessagesIfAvailable(
                 client: RDKafkaClient,
                 source: Producer.Source
             )
@@ -670,11 +687,11 @@ extension KafkaConsumer {
             case .running(let client, let consumerState):
                 switch consumerState {
                 case .running(let source):
-                    return .pollForAndYieldMessage(client: client, source: source)
+                    return .pollForAndYieldMessages(client: client, source: source)
                 case .suspended(source: _):
                     return .suspendPollLoop
                 case .waitingForMessages(let source):
-                    return .pollForMessageAndSleep(client: client, source: source)
+                    return .pollForMessagesIfAvailable(client: client, source: source)
                 case .finished:
                     return .terminatePollLoop
                 }
