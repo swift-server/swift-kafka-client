@@ -18,12 +18,14 @@ import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
-final class RDKafkaClient: Sendable {
+@_spi(Internal)
+final public class RDKafkaClient: Sendable {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
     /// Determines if client is a producer or a consumer.
-    enum ClientType {
+    @_spi(Internal)
+    public enum ClientType {
         case producer
         case consumer
     }
@@ -71,7 +73,8 @@ final class RDKafkaClient: Sendable {
     }
 
     /// Factory method creating a new instance of a ``RDKafkaClient``.
-    static func makeClient(
+    @_spi(Internal)
+    public static func makeClient(
         type: ClientType,
         configDictionary: [String: String],
         events: [RDKafkaEvent],
@@ -646,7 +649,17 @@ final class RDKafkaClient: Sendable {
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure will use the Kafka handle pointer.
     @discardableResult
-    func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
+    @_spi(Internal)
+    public func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
         return try body(self.kafkaHandle)
+    }
+    
+    /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the Kafka handle pointer.
+    @discardableResult
+    @_spi(Internal)
+    public func withKafkaHandlePointer<T>(_ body: (OpaquePointer) async throws -> T) async rethrows -> T {
+        return try await body(self.kafkaHandle)
     }
 }

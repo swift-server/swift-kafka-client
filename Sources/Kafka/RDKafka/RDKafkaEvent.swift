@@ -16,7 +16,8 @@ import Crdkafka
 
 /// Swift `enum` wrapping `librdkafka`'s `RD_KAFKA_EVENT_*` types.
 /// See `RD_KAFKA_EVENT_*` in rdkafka.h for reference.
-internal enum RDKafkaEvent: Int32 {
+@_spi(Internal)
+public enum RDKafkaEvent: Int32 {
     case none = 0x0
     case deliveryReport = 0x1
     case fetch = 0x2

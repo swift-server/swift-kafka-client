@@ -14,6 +14,7 @@
 
 import struct Foundation.UUID
 @testable import Kafka
+import KafkaTestUtils
 import Logging
 import ServiceLifecycle
 import XCTest

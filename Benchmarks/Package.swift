@@ -30,6 +30,7 @@ let package = Package(
             dependencies: [
                 .product(name: "Benchmark", package: "package-benchmark"),
                 .product(name: "Kafka", package: "swift-kafka-client"),
+                .product(name: "KafkaTestUtils", package: "swift-kafka-client")
             ],
             path: "Benchmarks/SwiftKafkaBenchmarks",
             plugins: [

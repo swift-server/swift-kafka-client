@@ -13,7 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 import struct Foundation.UUID
-@testable import Kafka
+import Kafka
+import KafkaTestUtils
 import NIOCore
 import ServiceLifecycle
 import XCTest
@@ -49,36 +50,18 @@ final class KafkaTests: XCTestCase {
         self.producerConfig = KafkaProducerConfiguration(bootstrapBrokerAddresses: [self.bootstrapBrokerAddress])
         self.producerConfig.broker.addressFamily = .v4
 
-        var basicConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: "no-group", topics: []),
-            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-        )
-        basicConfig.broker.addressFamily = .v4
+        let basicConfig = TestRDKafkaClient._createDummyConfig(bootstrapAddresses: bootstrapBrokerAddress, addressFamily: .v4)
 
         // TODO: ok to block here? How to make setup async?
-        let client = try RDKafkaClient.makeClient(
-            type: .consumer,
-            configDictionary: basicConfig.dictionary,
-            events: [],
-            logger: .kafkaTest
-        )
+        let client = try TestRDKafkaClient._makeRDKafkaClient(config: basicConfig)
         self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
     }
 
     override func tearDownWithError() throws {
-        var basicConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: "no-group", topics: []),
-            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-        )
-        basicConfig.broker.addressFamily = .v4
+        let basicConfig = TestRDKafkaClient._createDummyConfig(bootstrapAddresses: bootstrapBrokerAddress, addressFamily: .v4)
 
         // TODO: ok to block here? Problem: Tests may finish before topic is deleted
-        let client = try RDKafkaClient.makeClient(
-            type: .consumer,
-            configDictionary: basicConfig.dictionary,
-            events: [],
-            logger: .kafkaTest
-        )
+        let client = try TestRDKafkaClient._makeRDKafkaClient(config: basicConfig)
         try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
 
         self.bootstrapBrokerAddress = nil
@@ -87,7 +70,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithConsumerGroup() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = KafkaTestMessages.create(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
@@ -113,7 +96,7 @@ final class KafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
+                try await KafkaTestMessages.sendAndAcknowledge(
                     producer: producer,
                     events: events,
                     messages: testMessages
@@ -149,7 +132,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = KafkaTestMessages.create(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
@@ -179,7 +162,7 @@ final class KafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
+                try await KafkaTestMessages.sendAndAcknowledge(
                     producer: producer,
                     events: events,
                     messages: testMessages
@@ -215,7 +198,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithScheduleCommit() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = KafkaTestMessages.create(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
@@ -242,7 +225,7 @@ final class KafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
+                try await KafkaTestMessages.sendAndAcknowledge(
                     producer: producer,
                     events: events,
                     messages: testMessages
@@ -273,7 +256,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithCommit() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = KafkaTestMessages.create(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
@@ -300,7 +283,7 @@ final class KafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
+                try await KafkaTestMessages.sendAndAcknowledge(
                     producer: producer,
                     events: events,
                     messages: testMessages
@@ -331,7 +314,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testProduceAndConsumeWithMessageHeaders() async throws {
-        let testMessages = Self.createTestMessages(
+        let testMessages = KafkaTestMessages.create(
             topic: self.uniqueTestTopic,
             headers: [
                 KafkaHeader(key: "some.header", value: ByteBuffer(string: "some-header-value")),
@@ -366,7 +349,7 @@ final class KafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
+                try await KafkaTestMessages.sendAndAcknowledge(
                     producer: producer,
                     events: events,
                     messages: testMessages
@@ -404,7 +387,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testNoNewConsumerMessagesAfterGracefulShutdown() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 2)
+        let testMessages = KafkaTestMessages.create(topic: self.uniqueTestTopic, count: 2)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
         let uniqueGroupID = UUID().uuidString
@@ -434,7 +417,7 @@ final class KafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
+                try await KafkaTestMessages.sendAndAcknowledge(
                     producer: producer,
                     events: events,
                     messages: testMessages
@@ -467,7 +450,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testCommittedOffsetsAreCorrect() async throws {
-        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let testMessages = KafkaTestMessages.create(topic: self.uniqueTestTopic, count: 10)
         let firstConsumerOffset = testMessages.count / 2
         let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
@@ -502,7 +485,7 @@ final class KafkaTests: XCTestCase {
 
             // Producer Task
             group.addTask {
-                try await Self.sendAndAcknowledgeMessages(
+                try await KafkaTestMessages.sendAndAcknowledge(
                     producer: producer,
                     events: acks,
                     messages: testMessages
@@ -596,68 +579,6 @@ final class KafkaTests: XCTestCase {
             try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup2.triggerGracefulShutdown()
-        }
-    }
-
-    // MARK: - Helpers
-
-    private static func createTestMessages(
-        topic: String,
-        headers: [KafkaHeader] = [],
-        count: UInt
-    ) -> [KafkaProducerMessage<String, String>] {
-        return Array(0..<count).map {
-            KafkaProducerMessage(
-                topic: topic,
-                headers: headers,
-                key: "key",
-                value: "Hello, World! \($0) - \(Date().description)"
-            )
-        }
-    }
-
-    private static func sendAndAcknowledgeMessages(
-        producer: KafkaProducer,
-        events: KafkaProducerEvents,
-        messages: [KafkaProducerMessage<String, String>]
-    ) async throws {
-        var messageIDs = Set<KafkaProducerMessageID>()
-
-        for message in messages {
-            messageIDs.insert(try producer.send(message))
-        }
-
-        var receivedDeliveryReports = Set<KafkaDeliveryReport>()
-
-        for await event in events {
-            switch event {
-            case .deliveryReports(let deliveryReports):
-                for deliveryReport in deliveryReports {
-                    receivedDeliveryReports.insert(deliveryReport)
-                }
-            default:
-                break // Ignore any other events
-            }
-
-            if receivedDeliveryReports.count >= messages.count {
-                break
-            }
-        }
-
-        XCTAssertEqual(Set(receivedDeliveryReports.map(\.id)), messageIDs)
-
-        let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
-            guard case .acknowledged(let receivedMessage) = $0.status else {
-                return nil
-            }
-            return receivedMessage
-        }
-
-        XCTAssertEqual(messages.count, acknowledgedMessages.count)
-        for message in messages {
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
         }
     }
 }

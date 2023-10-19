@@ -223,7 +223,7 @@ public struct KafkaConsumerConfiguration {
 // MARK: - KafkaConsumerConfiguration + Dictionary
 
 extension KafkaConsumerConfiguration {
-    internal var dictionary: [String: String] {
+    @_spi(Internal) public var dictionary: [String: String] {
         var resultDict: [String: String] = [:]
 
         switch self.consumptionStrategy._internal {

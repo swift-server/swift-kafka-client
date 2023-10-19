@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 @testable import Kafka
+import KafkaTestUtils
 import Logging
 import NIOCore
 import ServiceLifecycle
