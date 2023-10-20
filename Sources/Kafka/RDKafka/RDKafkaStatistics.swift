@@ -12,12 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// This file was generated from JSON Schema using quicktype, do not modify it directly.
-// To parse the JSON, add this file to your project and do:
-//
-//   let statistics = try? newJSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
-
-// MARK: - Statistics
+// MARK: - RDKafkaStatistics
 
 struct RDKafkaStatistics: Hashable, Codable {
     let queuedOperation: Int?

@@ -208,7 +208,7 @@ public struct KafkaConsumerConfiguration {
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
     /// Options for librdkafka metrics updates
-    public var metrics: KafkaConfiguration.Metrics = .init()
+    public var metrics: KafkaConfiguration.ConsumerMetrics = .init()
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
