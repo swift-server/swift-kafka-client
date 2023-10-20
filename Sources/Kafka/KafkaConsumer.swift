@@ -182,13 +182,6 @@ public final class KafkaConsumer: Sendable, Service {
 
         // Forward main queue events to the consumer queue.
         try client.pollSetConsumer()
-
-        switch configuration.consumptionStrategy._internal {
-        case .partition(topic: let topic, partition: let partition, offset: let offset):
-            try self.assign(topic: topic, partition: partition, offset: offset)
-        case .group(groupID: _, topics: let topics):
-            try self.subscribe(topics: topics)
-        }
     }
 
     /// Initialize a new ``KafkaConsumer``.
@@ -338,6 +331,13 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     private func _run() async throws {
+        switch self.configuration.consumptionStrategy._internal {
+        case .partition(topic: let topic, partition: let partition, offset: let offset):
+            try self.assign(topic: topic, partition: partition, offset: offset)
+        case .group(groupID: _, topics: let topics):
+            try self.subscribe(topics: topics)
+        }
+
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
@@ -368,6 +368,8 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Mark all messages up to the passed message in the topic as read.
+    /// Schedules a commit and returns immediately.
+    /// Any errors encountered after scheduling the commit will be discarded.
     ///
     /// This method is only used for manual offset management.
     ///
@@ -376,17 +378,46 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
-    public func commitSync(_ message: KafkaConsumerMessage) async throws {
-        let action = self.stateMachine.withLockedValue { $0.commitSync() }
+    public func scheduleCommit(_ message: KafkaConsumerMessage) throws {
+        let action = self.stateMachine.withLockedValue { $0.commit() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
-        case .commitSync(let client):
+        case .commit(let client):
             guard self.configuration.isAutoCommitEnabled == false else {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
 
-            try await client.commitSync(message)
+            try client.scheduleCommit(message)
+        }
+    }
+
+    @available(*, deprecated, renamed: "commit")
+    public func commitSync(_ message: KafkaConsumerMessage) async throws {
+        try await self.commit(message)
+    }
+
+    /// Mark all messages up to the passed message in the topic as read.
+    /// Awaits until the commit succeeds or an error is encountered.
+    ///
+    /// This method is only used for manual offset management.
+    ///
+    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    ///
+    /// - Parameters:
+    ///     - message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
+    public func commit(_ message: KafkaConsumerMessage) async throws {
+        let action = self.stateMachine.withLockedValue { $0.commit() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
+        case .commit(let client):
+            guard self.configuration.isAutoCommitEnabled == false else {
+                throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
+            }
+
+            try await client.commit(message)
         }
     }
 
@@ -394,7 +425,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
     /// will already shut down when consumption of the ``KafkaConsumerMessages`` has ended.
-    private func triggerGracefulShutdown() {
+    public func triggerGracefulShutdown() {
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
         case .triggerGracefulShutdown(let client):
@@ -605,23 +636,23 @@ extension KafkaConsumer {
             }
         }
 
-        /// Action to be taken when wanting to do a synchronous commit.
-        enum CommitSyncAction {
-            /// Do a synchronous commit.
+        /// Action to be taken when wanting to do a commit.
+        enum CommitAction {
+            /// Do a commit.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case commitSync(
+            case commit(
                 client: RDKafkaClient
             )
             /// Throw an error. The ``KafkaConsumer`` is closed.
             case throwClosedError
         }
 
-        /// Get action to be taken when wanting to do a synchronous commit.
+        /// Get action to be taken when wanting to do a commit.
         /// - Returns: The action to be taken.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        func commitSync() -> CommitSyncAction {
+        func commit() -> CommitAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
@@ -630,7 +661,7 @@ extension KafkaConsumer {
             case .consumptionStopped:
                 fatalError("Cannot commit when consumption has been stopped")
             case .consuming(let client, _):
-                return .commitSync(client: client)
+                return .commit(client: client)
             case .finishing, .finished:
                 return .throwClosedError
             }
