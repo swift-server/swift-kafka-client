@@ -22,14 +22,14 @@ extension KafkaConfiguration {
         internal var enabled: Bool {
             self.updateInterval != nil &&
                 (self.queuedOperation != nil ||
-                self.totalKafkaBrokerRequests != nil ||
-                self.totalKafkaBrokerBytesSent != nil ||
-                self.totalKafkaBrokerResponses != nil ||
-                self.totalKafkaBrokerResponsesSize != nil ||
-                self.totalKafkaBrokerMessagesBytesRecieved != nil ||
-                self.topicsInMetadataCache != nil)
+                    self.totalKafkaBrokerRequests != nil ||
+                    self.totalKafkaBrokerBytesSent != nil ||
+                    self.totalKafkaBrokerResponses != nil ||
+                    self.totalKafkaBrokerResponsesSize != nil ||
+                    self.totalKafkaBrokerMessagesBytesRecieved != nil ||
+                    self.topicsInMetadataCache != nil)
         }
-        
+
         /// Update interval for statistics.
         public var updateInterval: Duration?
 
@@ -71,27 +71,27 @@ extension KafkaConfiguration {
 
             Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesRecieved, to: self.totalKafkaBrokerMessagesRecieved)
             Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesBytesRecieved, to: self.totalKafkaBrokerMessagesBytesRecieved)
-            
+
             Self.record(rdKafkaStatistics.topicsInMetadataCache, to: self.topicsInMetadataCache)
         }
     }
-    
+
     /// Configuration for the producer metrics emitted by `SwiftKafka`.
     public struct ProducerMetrics: Sendable {
         internal var enabled: Bool {
             self.updateInterval != nil &&
                 (self.queuedOperation != nil ||
-                self.queuedProducerMessages != nil ||
-                self.queuedProducerMessagesSize != nil ||
-                self.totalKafkaBrokerRequests != nil ||
-                self.totalKafkaBrokerBytesSent != nil ||
-                self.totalKafkaBrokerResponses != nil ||
-                self.totalKafkaBrokerResponsesSize != nil ||
-                self.totalKafkaBrokerMessagesSent != nil ||
-                self.totalKafkaBrokerMessagesBytesSent != nil ||
-                self.topicsInMetadataCache != nil)
+                    self.queuedProducerMessages != nil ||
+                    self.queuedProducerMessagesSize != nil ||
+                    self.totalKafkaBrokerRequests != nil ||
+                    self.totalKafkaBrokerBytesSent != nil ||
+                    self.totalKafkaBrokerResponses != nil ||
+                    self.totalKafkaBrokerResponsesSize != nil ||
+                    self.totalKafkaBrokerMessagesSent != nil ||
+                    self.totalKafkaBrokerMessagesBytesSent != nil ||
+                    self.topicsInMetadataCache != nil)
         }
-        
+
         /// Update interval for statistics.
         public var updateInterval: Duration?
 
@@ -139,7 +139,7 @@ extension KafkaConfiguration {
 
             Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesSent, to: self.totalKafkaBrokerMessagesSent)
             Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesBytesSent, to: self.totalKafkaBrokerMessagesBytesSent)
-            
+
             Self.record(rdKafkaStatistics.topicsInMetadataCache, to: self.topicsInMetadataCache)
         }
     }

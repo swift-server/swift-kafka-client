@@ -46,7 +46,7 @@ final class KafkaConsumerTests: XCTestCase {
         self.metrics = nil
         MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
-    
+
     func testConsumerLog() async throws {
         let recorder = LogEventRecorder()
         let mockLogger = Logger(label: "kafka.test.consumer.log") {
@@ -123,7 +123,7 @@ final class KafkaConsumerTests: XCTestCase {
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
-        
+
         let value = try metrics.expectGauge("operations").lastValue
         XCTAssertNotNil(value)
     }

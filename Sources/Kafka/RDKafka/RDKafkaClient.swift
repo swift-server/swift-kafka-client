@@ -14,8 +14,8 @@
 
 import Crdkafka
 import Dispatch
-import Logging
 import class Foundation.JSONDecoder
+import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.

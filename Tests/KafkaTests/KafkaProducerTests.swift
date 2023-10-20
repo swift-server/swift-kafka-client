@@ -53,14 +53,14 @@ final class KafkaProducerTests: XCTestCase {
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         self.config.broker.addressFamily = .v4
-        
+
         MetricsSystem.bootstrapInternal(self.metrics)
     }
 
     override func tearDownWithError() throws {
         self.bootstrapBrokerAddress = nil
         self.config = nil
-        
+
         self.metrics = nil
         MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
@@ -367,13 +367,13 @@ final class KafkaProducerTests: XCTestCase {
             group.addTask {
                 try await serviceGroup.run()
             }
-            
+
             try await Task.sleep(for: .seconds(1))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
-        
+
         let value = try metrics.expectGauge("operations").lastValue
         XCTAssertNotNil(value)
     }
