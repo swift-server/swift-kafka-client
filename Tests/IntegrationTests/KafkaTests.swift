@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import struct Foundation.UUID
-import Kafka
+@testable import Kafka
 import KafkaTestUtils
 import NIOCore
 import ServiceLifecycle
