@@ -20,6 +20,7 @@ import NIOCore
 import ServiceLifecycle
 import Logging
 import Benchmark
+import SwiftKafkaBenchmarkUtils
 
 private let numOfMessages: UInt =  .init(getFromEnv("MESSAGES_NUMBER") ?? "500000")!
 

@@ -25,14 +25,24 @@ let package = Package(
         .package(url: "https://github.com/ordo-one/package-benchmark.git", from: "1.11.1"),
     ],
     targets: [
-        .executableTarget(
-            name: "SwiftKafkaBenchmarks",
+        .target(
+            name: "SwiftKafkaBenchmarkUtils",
             dependencies: [
                 .product(name: "Benchmark", package: "package-benchmark"),
                 .product(name: "Kafka", package: "swift-kafka-client"),
                 .product(name: "KafkaTestUtils", package: "swift-kafka-client")
             ],
-            path: "Benchmarks/SwiftKafkaBenchmarks",
+            path: "Benchmarks/SwiftKafkaBenchmarkUtils"
+        ),
+        .executableTarget(
+            name: "SwiftKafkaConsumerBenchmarks",
+            dependencies: [
+                "SwiftKafkaBenchmarkUtils",
+                .product(name: "Benchmark", package: "package-benchmark"),
+                .product(name: "Kafka", package: "swift-kafka-client"),
+                .product(name: "KafkaTestUtils", package: "swift-kafka-client")
+            ],
+            path: "Benchmarks/SwiftKafkaConsumerBenchmarks",
             plugins: [
                 .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
             ]
