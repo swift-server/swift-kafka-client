@@ -166,7 +166,7 @@ final public class RDKafkaClient: Sendable {
         }
 
         if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
+            throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
 

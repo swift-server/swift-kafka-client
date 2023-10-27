@@ -175,7 +175,8 @@ public struct KafkaProducerConfiguration {
 // MARK: - KafkaProducerConfiguration + Dictionary
 
 extension KafkaProducerConfiguration {
-    internal var dictionary: [String: String] {
+    @_spi(Internal)
+    public var dictionary: [String: String] {
         var resultDict: [String: String] = [:]
 
         resultDict["enable.idempotence"] = String(self.isIdempotenceEnabled)

@@ -22,15 +22,20 @@ public struct TestRDKafkaClient {
     let client: Kafka.RDKafkaClient
     
     /// creates librdkafka dictionary config
-    public static func _createDummyConfig(bootstrapAddresses: KafkaConfiguration.BrokerAddress, addressFamily: KafkaConfiguration.IPAddressFamily = .any) -> [String: String] {
-        var config = KafkaConsumerConfiguration(consumptionStrategy: .group(id: "[no id]", topics: []), bootstrapBrokerAddresses: [bootstrapAddresses])
+    public static func _createDummyConfig(bootstrapAddresses: KafkaConfiguration.BrokerAddress, addressFamily: KafkaConfiguration.IPAddressFamily = .any, consumer: Bool = true) -> [String: String] {
+        if consumer {
+            var config = KafkaConsumerConfiguration(consumptionStrategy: .group(id: "[no id]", topics: []), bootstrapBrokerAddresses: [bootstrapAddresses])
+            config.broker.addressFamily = addressFamily
+            return config.dictionary
+        }
+        var config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [bootstrapAddresses])
         config.broker.addressFamily = addressFamily
         return config.dictionary
     }
     
     /// creates RDKafkaClient with dictionary config
-    public static func _makeRDKafkaClient(config: [String: String], logger: Logger? = nil) throws -> TestRDKafkaClient {
-        let rdKafkaClient = try Kafka.RDKafkaClient.makeClient(type: .consumer, configDictionary: config, events: [], logger: logger ?? .kafkaTest)
+    public static func _makeRDKafkaClient(config: [String: String], logger: Logger? = nil, consumer: Bool = true) throws -> TestRDKafkaClient {
+        let rdKafkaClient = try Kafka.RDKafkaClient.makeClient(type: consumer ? .consumer : .producer, configDictionary: config, events: consumer ? [] : [.deliveryReport], logger: logger ?? .kafkaTest)
         return TestRDKafkaClient(client: rdKafkaClient)
     }
     

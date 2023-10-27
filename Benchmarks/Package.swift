@@ -47,5 +47,18 @@ let package = Package(
                 .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
             ]
         ),
+        .executableTarget(
+            name: "SwiftKafkaProducerBenchmarks",
+            dependencies: [
+                "SwiftKafkaBenchmarkUtils",
+                .product(name: "Benchmark", package: "package-benchmark"),
+                .product(name: "Kafka", package: "swift-kafka-client"),
+                .product(name: "KafkaTestUtils", package: "swift-kafka-client")
+            ],
+            path: "Benchmarks/SwiftKafkaProducerBenchmarks",
+            plugins: [
+                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+            ]
+        ),
     ]
 )

@@ -28,6 +28,61 @@ private var uniqueTestTopic: String!
 private var client: TestRDKafkaClient!
 private var testMessages: [KafkaProducerMessage<String, String>]!
 
+private func prepareTopic(withHeaders: Bool = false) async throws {
+    let basicConfig = TestRDKafkaClient._createDummyConfig(bootstrapAddresses: bootstrapBrokerAddress())
+    client = try TestRDKafkaClient._makeRDKafkaClient(config: basicConfig)
+    
+    uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
+    benchLog("Created topic \(uniqueTestTopic!)")
+
+    benchLog("Generating \(numOfMessages) messages")
+    var headers: [KafkaHeader]?
+    if withHeaders {
+        headers = Array(0..<10).map { idx in
+            "\(idx.hashValue)".withUnsafeBytes { value in
+                    .init(key: "\(idx)", value: ByteBuffer(bytes: value))
+            }
+        }
+    }
+    testMessages = KafkaTestMessages.create(topic: uniqueTestTopic, headers: headers ?? [], count: numOfMessages)
+    benchLog("Finish generating \(numOfMessages) messages")
+    
+    var producerConfig: KafkaProducerConfiguration!
+    
+    producerConfig = KafkaProducerConfiguration(bootstrapBrokerAddresses: [bootstrapBrokerAddress()])
+    producerConfig.broker.addressFamily = .v4
+
+    let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: logger)
+    
+    
+    let serviceGroupConfiguration1 = ServiceGroupConfiguration(services: [producer], gracefulShutdownSignals: [.sigterm, .sigint], logger: logger)
+    let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
+    
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        benchLog("Start producing \(numOfMessages) messages")
+        defer {
+            benchLog("Finish producing")
+        }
+        // Run Task
+        group.addTask {
+            try await serviceGroup1.run()
+        }
+        
+        // Producer Task
+        group.addTask {
+            try await KafkaTestMessages.sendAndAcknowledge(
+                producer: producer,
+                events: acks,
+                messages: testMessages
+            )
+        }
+        
+        // Wait for Producer Task to complete
+        try await group.next()
+        await serviceGroup1.triggerGracefulShutdown()
+    }
+}
+
 let benchmarks = {
     Benchmark.defaultConfiguration = .init(
         metrics: [.wallClock, .cpuTotal, .allocatedResidentMemory],
@@ -38,50 +93,7 @@ let benchmarks = {
     )
     
     Benchmark.setup = {
-        let basicConfig = TestRDKafkaClient._createDummyConfig(bootstrapAddresses: bootstrapBrokerAddress())
-        client = try TestRDKafkaClient._makeRDKafkaClient(config: basicConfig)
         
-        uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
-        benchLog("Created topic \(uniqueTestTopic!)")
-
-        benchLog("Generating \(numOfMessages) messages")
-        testMessages = KafkaTestMessages.create(topic: uniqueTestTopic, count: numOfMessages)
-        benchLog("Finish generating \(numOfMessages) messages")
-        
-        var producerConfig: KafkaProducerConfiguration!
-        
-        producerConfig = KafkaProducerConfiguration(bootstrapBrokerAddresses: [bootstrapBrokerAddress()])
-        producerConfig.broker.addressFamily = .v4
-
-        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: logger)
-        
-        
-        let serviceGroupConfiguration1 = ServiceGroupConfiguration(services: [producer], gracefulShutdownSignals: [.sigterm, .sigint], logger: logger)
-        let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
-        
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            benchLog("Start producing \(numOfMessages) messages")
-            defer {
-                benchLog("Finish producing")
-            }
-            // Run Task
-            group.addTask {
-                try await serviceGroup1.run()
-            }
-            
-            // Producer Task
-            group.addTask {
-                try await KafkaTestMessages.sendAndAcknowledge(
-                    producer: producer,
-                    events: acks,
-                    messages: testMessages
-                )
-            }
-            
-            // Wait for Producer Task to complete
-            try await group.next()
-            await serviceGroup1.triggerGracefulShutdown()
-        }
     }
     
     Benchmark.teardown = {
@@ -90,6 +102,8 @@ let benchmarks = {
     }
     
     Benchmark("SwiftKafkaConsumer") { benchmark in
+        try await prepareTopic()
+        
         let uniqueGroupID = UUID().uuidString
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
@@ -158,7 +172,81 @@ let benchmarks = {
         benchmark.stopMeasurement()
     }
     
-    Benchmark("librdkafka")  { benchmark in
+    
+    Benchmark("SwiftKafkaConsumer with headers") { benchmark in
+        try await prepareTopic(withHeaders: true)
+        
+        let uniqueGroupID = UUID().uuidString
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: [uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [bootstrapBrokerAddress()]
+        )
+        consumerConfig.pollInterval = .milliseconds(1)
+        consumerConfig.autoOffsetReset = .beginning
+        consumerConfig.broker.addressFamily = .v4
+        consumerConfig.pollInterval = .milliseconds(1)
+        
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: logger
+        )
+        
+        let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: logger)
+        let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
+        
+        benchmark.startMeasurement()
+        
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            benchLog("Start consuming")
+            defer {
+                benchLog("Finish consuming")
+            }
+            // Run Task
+            group.addTask {
+                try await serviceGroup2.run()
+            }
+            
+            // Second Consumer Task
+            group.addTask {
+                var ctr: UInt64 = 0
+                var tmpCtr: UInt64 = 0
+                let interval: UInt64 = Swift.max(UInt64(numOfMessages / 20), 1)
+                let totalStartDate = Date.timeIntervalSinceReferenceDate
+                var totalBytes: UInt64 = 0
+                
+                for try await record in consumer.messages {
+                    ctr += 1
+                    totalBytes += UInt64(record.value.readableBytes)
+                    
+                    tmpCtr += 1
+                    if tmpCtr >= interval {
+                        benchLog("read \(ctr * 100 / UInt64(numOfMessages))%")
+                        tmpCtr = 0
+                    }
+                    if ctr >= numOfMessages {
+                        break
+                    }
+                }
+                let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
+                let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
+                benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+            }
+            
+            // Wait for second Consumer Task to complete
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup2.triggerGracefulShutdown()
+        }
+        
+        benchmark.stopMeasurement()
+    }
+    
+    Benchmark("librdkafka consumer")  { benchmark in
+        try await prepareTopic()
+
         let uniqueGroupID = UUID().uuidString
         let rdKafkaConsumerConfig: [String: String] = [
             "group.id": uniqueGroupID,

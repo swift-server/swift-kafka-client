@@ -33,6 +33,8 @@ public extension Logger {
 public let logger: Logger = .testLogger
 public let kafkaHost: String = kafkaHostFromEnv()
 public let kafkaPort: Int = kafkaPortFromEnv()
+public let numOfMessages: UInt = .init(getFromEnv("MESSAGES_NUMBER") ?? "500000")!
+
 
 public func benchLog(_ msg: @autoclosure () -> Logger.Message) {
 //    Just in case for debug
