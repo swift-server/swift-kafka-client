@@ -67,4 +67,12 @@ public struct KafkaTestMessages {
             )
         }
     }
+    
+    public static func createHeaders(count: Int = 10) -> [KafkaHeader] {
+        return Array(0..<count).map { idx in
+            "\(idx.hashValue)".withUnsafeBytes { value in
+                .init(key: "\(idx)", value: .init(bytes: value))
+            }
+        }
+    }
 }

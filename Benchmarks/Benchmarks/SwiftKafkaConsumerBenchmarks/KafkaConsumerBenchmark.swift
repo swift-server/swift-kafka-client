@@ -36,15 +36,11 @@ private func prepareTopic(withHeaders: Bool = false) async throws {
     benchLog("Created topic \(uniqueTestTopic!)")
 
     benchLog("Generating \(numOfMessages) messages")
-    var headers: [KafkaHeader]?
-    if withHeaders {
-        headers = Array(0..<10).map { idx in
-            "\(idx.hashValue)".withUnsafeBytes { value in
-                    .init(key: "\(idx)", value: ByteBuffer(bytes: value))
-            }
-        }
-    }
-    testMessages = KafkaTestMessages.create(topic: uniqueTestTopic, headers: headers ?? [], count: numOfMessages)
+    let headers: [KafkaHeader] =
+        withHeaders
+        ? KafkaTestMessages.createHeaders()
+        : []
+    testMessages = KafkaTestMessages.create(topic: uniqueTestTopic, headers: headers, count: numOfMessages)
     benchLog("Finish generating \(numOfMessages) messages")
     
     var producerConfig: KafkaProducerConfiguration!
