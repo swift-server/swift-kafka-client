@@ -302,4 +302,67 @@ let benchmarks = {
             benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
         }
     }
+
+    Benchmark("librdkafka consumer with headers")  { benchmark in
+        try await prepareTopic(withHeaders: true)
+
+        let uniqueGroupID = UUID().uuidString
+        let rdKafkaConsumerConfig: [String: String] = [
+            "group.id": uniqueGroupID,
+            "bootstrap.servers": "\(kafkaHost):\(kafkaPort)",
+            "broker.address.family": "v4",
+            "auto.offset.reset": "beginning"
+        ]
+        
+        let consumer = try TestRDKafkaClient._makeRDKafkaClient(config: rdKafkaConsumerConfig)
+        try await consumer.withKafkaHandlePointer { kafkaHandle in
+            rd_kafka_poll_set_consumer(kafkaHandle)
+            let subscriptionList = rd_kafka_topic_partition_list_new(1)
+            defer {
+                rd_kafka_topic_partition_list_destroy(subscriptionList)
+            }
+            rd_kafka_topic_partition_list_add(
+                subscriptionList,
+                uniqueTestTopic,
+                RD_KAFKA_PARTITION_UA
+            )
+            rd_kafka_subscribe(kafkaHandle, subscriptionList)
+            rd_kafka_poll(kafkaHandle, 0)
+            
+            var ctr: UInt64 = 0
+            var tmpCtr: UInt64 = 0
+            
+            let interval: UInt64 = Swift.max(UInt64(numOfMessages / 20), 1)
+            let totalStartDate = Date.timeIntervalSinceReferenceDate
+            var totalBytes: UInt64 = 0
+            
+            benchmark.startMeasurement()
+            
+            while ctr < numOfMessages {
+                guard let record = rd_kafka_consumer_poll(kafkaHandle, 0) else {
+                    try await Task.sleep(for: .milliseconds(1)) // set as defaulat pollInterval for swift-kafka
+                    continue
+                }
+                defer {
+                    rd_kafka_message_destroy(record)
+                }
+                ctr += 1
+                totalBytes += UInt64(record.pointee.len)
+                
+                tmpCtr += 1
+                if tmpCtr >= interval {
+                    benchLog("read \(ctr * 100 / UInt64(numOfMessages))%")
+                    tmpCtr = 0
+                }
+            }
+            
+            benchmark.stopMeasurement()
+            
+            rd_kafka_consumer_close(kafkaHandle)
+            
+            let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
+            let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
+            benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+        }
+    }
 }
