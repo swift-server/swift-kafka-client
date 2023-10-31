@@ -223,6 +223,8 @@ public struct KafkaConsumerConfiguration {
     
     public var compression: String?
     
+    public var rebalanceStrategy: String?
+    
     public init(
         consumptionStrategy: ConsumptionStrategy,
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
@@ -296,6 +298,10 @@ extension KafkaConsumerConfiguration {
         
         if let compression {
             resultDict["compression.codec"] = compression
+        }
+        
+        if let rebalanceStrategy {
+            resultDict["partition.assignment.strategy"] = rebalanceStrategy
         }
 
         // Merge with SecurityProtocol configuration dictionary
