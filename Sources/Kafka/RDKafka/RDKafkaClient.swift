@@ -525,7 +525,7 @@ final class RDKafkaClient: Sendable {
             // which can occur during rebalancing or when the consumer is shutting down.
             // See "Upgrade considerations" for more details: https://github.com/confluentinc/librdkafka/releases/tag/v1.9.0
             // Since Kafka Consumers are designed for at-least-once processing, failing to commit here is acceptable.
-            if error != RD_KAFKA_RESP_ERR__STATE {
+            if error == RD_KAFKA_RESP_ERR__STATE {
                 return
             }
             throw KafkaError.rdKafkaError(wrapping: error)
