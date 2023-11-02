@@ -720,11 +720,11 @@ final class RDKafkaClient: Sendable {
                 if rd_kafka_error_txn_requires_abort(error) == 1 {
                     do {
                         try await self.abortTransaction(attempts: attempts - idx, timeout: timeout)
-                        throw KafkaError.transactionAborted(reason: "Transaction aborted and can be started from scratch")
                     } catch {
                         throw KafkaError.transactionIncomplete(
                             reason: "Could not complete or abort transaction with error \(error)")
                     }
+                    throw KafkaError.transactionAborted(reason: "Transaction aborted and can be started from scratch")
                 }
                 let isFatal = (rd_kafka_error_is_fatal(error) == 1) // fatal when Producer/Consumer must be restarted
                 throw KafkaError.rdKafkaError(wrapping: rd_kafka_error_code(error), isFatal: isFatal)
@@ -773,11 +773,11 @@ final class RDKafkaClient: Sendable {
             if rd_kafka_error_txn_requires_abort(error) == 1 {
                 do {
                     try await self.abortTransaction(attempts: attempts - idx, timeout: timeout)
-                    throw KafkaError.transactionAborted(reason: "Transaction aborted and can be started from scratch")
                 } catch {
                     throw KafkaError.transactionIncomplete(
                         reason: "Could not complete or abort transaction with error \(error)")
                 }
+                throw KafkaError.transactionAborted(reason: "Transaction aborted and can be started from scratch")
             }
             /* check if error is fatal */
             let isFatal = (rd_kafka_error_is_fatal(error) == 1) // fatal when Producer/Consumer must be restarted
