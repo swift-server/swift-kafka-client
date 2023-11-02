@@ -15,14 +15,6 @@
 import Logging
 import NIOConcurrencyHelpers
 
-extension Logger {
-    static var kafkaTest: Logger {
-        var logger = Logger(label: "kafka.test")
-        logger.logLevel = .info
-        return logger
-    }
-}
-
 // MARK: - Mocks
 
 internal struct LogEvent {

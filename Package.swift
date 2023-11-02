@@ -43,6 +43,10 @@ let package = Package(
             name: "KafkaFoundationCompat",
             targets: ["KafkaFoundationCompat"]
         ),
+        .library(
+            name: "KafkaTestUtils",
+            targets: ["KafkaTestUtils"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.55.0"),
@@ -86,6 +90,12 @@ let package = Package(
             ]
         ),
         .target(
+            name: "KafkaTestUtils",
+            dependencies: [
+                "Kafka"
+            ]
+        ),
+        .target(
             name: "KafkaFoundationCompat",
             dependencies: [
                 "Kafka",
@@ -93,11 +103,11 @@ let package = Package(
         ),
         .testTarget(
             name: "KafkaTests",
-            dependencies: ["Kafka"]
+            dependencies: ["Kafka", "KafkaTestUtils"]
         ),
         .testTarget(
             name: "IntegrationTests",
-            dependencies: ["Kafka"]
+            dependencies: ["Kafka", "KafkaTestUtils"]
         ),
     ]
 )
