@@ -382,11 +382,13 @@ public final class KafkaConsumer: Sendable, Service {
             case .pollForEvents(let client):
                 // Event poll to serve any events queued inside of `librdkafka`.
                 let events = client.eventPoll()
-                switch event {
+                for event in events {
+                    switch event {
                     case .statistics(let statistics):
                         self.configuration.metrics.update(with: statistics)
                     default:
                         break
+                    }
                 }
                 try await Task.sleep(for: self.configuration.pollInterval)
             case .terminatePollLoop:

@@ -229,8 +229,6 @@ public final class KafkaProducer: Service, Sendable {
                         self.configuration.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
                         _ = source?.yield(.deliveryReports(reports))
-                    case .consumerMessages:
-                        fatalError("Unexpected event for producer \(event)")
                     }
                 }
                 try await Task.sleep(for: self.configuration.pollInterval)
