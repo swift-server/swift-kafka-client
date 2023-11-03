@@ -17,40 +17,37 @@ import NIOConcurrencyHelpers
 import NIOCore
 import ServiceLifecycle
 
-// MARK: - KafkaConsumerCloseOnTerminate
+// MARK: - KafkaConsumerEventsDelegate
 
-internal enum ResumeOrigin {
-    case delegate
-    case timer(id: Int)
-}
-
-/// `NIOAsyncSequenceProducerDelegate` that terminates the closes the producer when
-/// `didTerminate()` is invoked.
-internal struct KafkaConsumerCloseOnTerminate: Sendable {
-    let logger: Logger?
-    let isMessageSequence: Bool
+/// `NIOAsyncSequenceProducerDelegate` for ``KafkaConsumerEvents``.
+internal struct KafkaConsumerEventsDelegate: Sendable {
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
-    let produceResumingContinuation: AsyncStream<ResumeOrigin>.Continuation?
-    
-    init(logger: Logger? = nil, isMessageSequence: Bool, stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>, produceResumingContinuation: AsyncStream<ResumeOrigin>.Continuation? = nil) {
-        self.logger = logger
-        self.isMessageSequence = isMessageSequence
-        self.stateMachine = stateMachine
-        self.produceResumingContinuation = produceResumingContinuation
-    }
 }
 
-extension KafkaConsumerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
+extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        logger?.debug("produceMore() called for \(isMessageSequence ? "message" : "event") sequence")
-        produceResumingContinuation?.yield(.delegate)
+        return // no backpressure
     }
 
     func didTerminate() {
-        logger?.debug("didTerminate() called for \(isMessageSequence ? "message" : "event") sequence")
-        let seq = self.stateMachine.withLockedValue { $0.messageSequenceTerminated(isMessageSequence: isMessageSequence) }
-        seq?.finish()
-        produceResumingContinuation?.yield(.delegate) // just in case
+        return  // no backpressure
+    }
+}
+
+// MARK: - KafkaConsumerMessagesDelegate
+
+/// `NIOAsyncSequenceProducerDelegate` for ``KafkaConsumerMessages``.
+internal struct KafkaConsumerMessagesDelegate: Sendable {
+    let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
+}
+
+extension KafkaConsumerMessagesDelegate: NIOAsyncSequenceProducerDelegate {
+    func produceMore() {
+        self.stateMachine.withLockedValue { $0.produceMore() }
+    }
+
+    func didTerminate() {
+        self.stateMachine.withLockedValue { $0.finishMessageConsumption() }
     }
 }
 
@@ -60,7 +57,7 @@ extension KafkaConsumerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     public typealias Element = KafkaConsumerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerCloseOnTerminate>
+    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
     let wrappedSequence: WrappedSequence
 
     /// `AsynceIteratorProtocol` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
@@ -84,13 +81,12 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
 
     public typealias Element = KafkaConsumerMessage
-//    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
     typealias WrappedSequence = NIOThrowingAsyncSequenceProducer<
-        Element,
+        Result<KafkaConsumerMessage, Error>,
         Error,
-        NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
-//        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        KafkaConsumerCloseOnTerminate
+        BackPressureStrategy,
+        KafkaConsumerMessagesDelegate
     >
     let wrappedSequence: WrappedSequence
 
@@ -101,28 +97,34 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
         public mutating func next() async throws -> Element? {
             repeat {
-                guard let element = try await self.wrappedIterator?.next() else {
+                guard let result = try await self.wrappedIterator?.next() else {
                     self.deallocateIterator()
                     return nil
                 }
                 
-                let action = self.stateMachine.withLockedValue { $0.storeOffset() }
-                switch action {
-                case .storeOffset(let client):
-                    do {
-                        try client.storeMessageOffset(element)
-                    } catch {
+                switch result {
+                case .success(let message):
+                    let action = self.stateMachine.withLockedValue { $0.storeOffset() }
+                    switch action {
+                    case .storeOffset(let client):
+                        do {
+                            try client.storeMessageOffset(message)
+                        } catch {
+                            self.deallocateIterator()
+                            throw error
+                        }
+                        if message.eof {
+                            continue
+                        }
+                        return message
+                    case .terminateConsumerSequence:
                         self.deallocateIterator()
-                        throw error
+                        return nil
                     }
-                case .terminateConsumerSequence:
+                case .failure(let error):
                     self.deallocateIterator()
-                    return nil
+                    throw error
                 }
-                if element.eof {
-                    continue
-                }
-                return element
             } while true
         }
 
@@ -144,16 +146,15 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 /// A ``KafkaConsumer `` can be used to consume messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     typealias Producer = NIOThrowingAsyncSequenceProducer<
-        KafkaConsumerMessage,
+        Result<KafkaConsumerMessage, Error>,
         Error,
         NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
-//        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        KafkaConsumerCloseOnTerminate
+        KafkaConsumerMessagesDelegate
     >
     typealias ProducerEvents = NIOAsyncSequenceProducer<
         KafkaConsumerEvent,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
-        KafkaConsumerCloseOnTerminate
+        KafkaConsumerEventsDelegate
     >
 
     /// The configuration object of the consumer client.
@@ -162,16 +163,13 @@ public final class KafkaConsumer: Sendable, Service {
     private let logger: Logger
     /// State of the `KafkaConsumer`.
     private let stateMachine: NIOLockedValueBox<StateMachine>
-    
-    private let resumeProducingStream: AsyncStream<ResumeOrigin>
-    private let resumeProducingContinuation: AsyncStream<ResumeOrigin>.Continuation
 
     /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
 
     // Private initializer, use factory method or convenience init to create KafkaConsumer
     /// Initialize a new ``KafkaConsumer``.
-    /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe(topics:)``
+    /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe()``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     ///
     /// - Parameters:
@@ -192,11 +190,18 @@ public final class KafkaConsumer: Sendable, Service {
         self.logger = logger
         
         
-        (self.resumeProducingStream, self.resumeProducingContinuation) = AsyncStream<ResumeOrigin>.makeStream()
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
-            elementType: KafkaConsumerMessage.self,
-            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(lowWatermark: 512, highWatermark: 1024),
-            delegate: KafkaConsumerCloseOnTerminate(logger: logger, isMessageSequence: true, stateMachine: self.stateMachine, produceResumingContinuation: self.resumeProducingContinuation)
+            elementType: Result<KafkaConsumerMessage, Error>.self,
+            backPressureStrategy: {
+                switch configuration.backPressureStrategy._internal {
+                case .watermark(let lowWatermark, let highWatermark):
+                    return NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(
+                        lowWatermark: lowWatermark,
+                        highWatermark: highWatermark
+                    )
+                }
+            }(),
+            delegate: KafkaConsumerMessagesDelegate(stateMachine: self.stateMachine)
         )
 
         self.messages = KafkaConsumerMessages(
@@ -210,16 +215,6 @@ public final class KafkaConsumer: Sendable, Service {
                 source: sourceAndSequence.source,
                 eventSource: eventSource
             )
-        }
-
-        // Forward main queue events to the consumer queue.
-        try client.pollSetConsumer()
-
-        switch configuration.consumptionStrategy._internal {
-        case .partition(topic: let topic, partition: let partition, offset: let offset):
-            try self.assign(topic: topic, partition: partition, offset: offset)
-        case .group(groupID: _, topics: let topics):
-            try self.subscribe(topics: topics)
         }
     }
 
@@ -236,12 +231,19 @@ public final class KafkaConsumer: Sendable, Service {
         configuration: KafkaConsumerConfiguration,
         logger: Logger
     ) throws {
-        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
+        var subscribedEvents: [RDKafkaEvent] = [.log]
 
-        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch, .error]
         // Only listen to offset commit events when autoCommit is false
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
+        }
+        
+        if configuration.statisticsInterval != .disable {
+            subscribedEvents.append(.statistics)
+        }
+        
+        if configuration.listenForRebalance {
+            subscribedEvents.append(.rebalance)
         }
 
         let client = try RDKafkaClient.makeClient(
@@ -250,6 +252,8 @@ public final class KafkaConsumer: Sendable, Service {
             events: subscribedEvents,
             logger: logger
         )
+
+        let stateMachine = NIOLockedValueBox(StateMachine())
 
         try self.init(
             client: client,
@@ -276,9 +280,7 @@ public final class KafkaConsumer: Sendable, Service {
         configuration: KafkaConsumerConfiguration,
         logger: Logger
     ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
-        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
-
-        var subscribedEvents: [RDKafkaEvent] = [.log, .fetch, .error]
+        var subscribedEvents: [RDKafkaEvent] = [.log]
         // Only listen to offset commit events when autoCommit is false
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
@@ -297,14 +299,19 @@ public final class KafkaConsumer: Sendable, Service {
             logger: logger
         )
 
+        let stateMachine = NIOLockedValueBox(StateMachine())
+        
+        // Note:
+        // It's crucial to initialize the `sourceAndSequence` variable AFTER `client`.
+        // This order is important to prevent the accidental triggering of `KafkaConsumerCloseOnTerminate.didTerminate()`.
+        // If this order is not met and `RDKafkaClient.makeClient()` fails,
+        // it leads to a call to `stateMachine.messageSequenceTerminated()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerEvent.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
-            delegate: KafkaConsumerCloseOnTerminate(isMessageSequence: false, stateMachine: stateMachine)
+            delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
         )
-
-        let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
-
+        
         let consumer = try KafkaConsumer(
             client: client,
             stateMachine: stateMachine,
@@ -312,7 +319,8 @@ public final class KafkaConsumer: Sendable, Service {
             logger: logger,
             eventSource: sourceAndSequence.source
         )
-        
+
+        let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
         return (consumer, eventsSequence)
     }
 
@@ -438,45 +446,39 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     private func _run() async throws {
-        var events = [RDKafkaClient.KafkaEvent]()
-        var maxEvents = 100
-        var pollInterval = self.configuration.pollInterval
-        var producingEpoch = 0
-        var backpressureResumeIterator = self.resumeProducingStream.makeAsyncIterator()
+        switch self.configuration.consumptionStrategy._internal {
+        case .partition(topic: let topic, partition: let partition, offset: let offset):
+            try self.assign(topic: topic, partition: partition, offset: offset)
+        case .group(groupID: _, topics: let topics):
+            try self.subscribe(topics: topics)
+        }
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await self.eventRunLoop()
+            }
+
+            group.addTask {
+                try await self.messageRunLoop()
+            }
+
+            // Throw when one of the two child task throws
+            try await group.next()
+            try await group.next()
+        }
+    }
+
+    /// Run loop polling Kafka for new events.
+    private func eventRunLoop() async throws {
+        var pollInterval = configuration.pollInterval
         while !Task.isCancelled {
-            let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
+            let nextAction = self.stateMachine.withLockedValue { $0.nextEventPollLoopAction() }
             switch nextAction {
-            case .pollForAndYieldMessage(let client, let source, let eventSource):
-                var ignoreStopProducing = false
-                let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
-                let pollTime = ContinuousClock.now
+            case .pollForEvents(let client, let eventSource):
+                // Event poll to serve any events queued inside of `librdkafka`.
+                let events = client.eventPoll()
                 for event in events {
                     switch event {
-                    case .consumerMessages(let result):
-                        switch result {
-                        case .success(let message):
-                            // We do not support back pressure, we can ignore the yield result
-                            let result = source.yield(message)
-                            switch result {
-                            case .stopProducing:
-                                if ignoreStopProducing {
-                                    break
-                                }
-                                let resumeOrigin = await waitForBackpressue(epoch: producingEpoch, backpressureResumeIterator: &backpressureResumeIterator, allowedTimeToWait: (.now - pollTime) + (self.configuration.maximumPollInterval - .milliseconds(100)))
-                                if case .timer = resumeOrigin {
-                                    ignoreStopProducing = true // we have to do next poll
-                                }
-                                producingEpoch += 1
-                            case .produceMore:
-                                break
-                            case .dropped:
-                                break // ignore, sequence terminated
-                            }
-                        case .failure(let error):
-                            source.finish()
-                            eventSource?.finish()
-                            throw error
-                        }
                     case .statistics(let statistics):
                         _ = eventSource?.yield(.statistics(statistics))
                     case .rebalance(let rebalance):
@@ -486,98 +488,98 @@ public final class KafkaConsumer: Sendable, Service {
                         break // Ignore
                     }
                 }
-                logger.debug("Processed \(events.count) shouldSleep: \(shouldSleep), pollInterval: \(pollInterval), maxEvents: \(maxEvents), ignoreStopProducing: \(ignoreStopProducing)")
-                if shouldSleep {
-                    maxEvents = min(100, maxEvents * 2)
+                if events.isEmpty {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
                     try await Task.sleep(for: pollInterval)
                 } else {
-                    maxEvents = min(100, maxEvents * 2)
                     pollInterval = max(pollInterval / 3, .microseconds(1))
                     await Task.yield()
                 }
-            case .pollWithoutYield(let client):
-                // Ignore poll result.
-                // We are just polling to serve any remaining events queued inside of `librdkafka`.
-                // All remaining queued consumer messages will get dropped and not be committed (marked as read).
-                //let events =
-                let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
-                for event in events {
-                    switch event {
-                    case .rebalance(let type):
-                        switch type {
-                        case .assign(let proto, let list),
-                             .revoke(let proto, let list),
-                             .error(let proto, let list, _):
-                            if proto == .cooperative {
-                                try self.incrementalUnassign(list)
-                            } else {
-                                try self.assign(nil)
-                            }
-                        }
-                    default:
-                        continue
-                    }
-                }
-//                logger.info("Processed without yield \(events.count) shouldSleep: \(true), pollInterval: \(pollInterval)")
-                
-                if shouldSleep {
-                    pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
-                    try await Task.sleep(for: pollInterval)
-                } else {
-                    pollInterval = max(pollInterval / 2, .milliseconds(1))
-                    await Task.yield()
-                }
-//                try await Task.sleep(for: self.configuration.pollInterval)
             case .terminatePollLoop:
                 return
             }
         }
     }
-    
-    private func waitForBackpressue(epoch currentEpoch: Int, backpressureResumeIterator: inout AsyncStream<ResumeOrigin>.AsyncIterator, allowedTimeToWait: Duration) async -> ResumeOrigin? {
-        self.logger.debug("Waiting for backpressure ease up for epoch \(currentEpoch)")
-        defer {
-            self.logger.debug("Ease backpressure for \(currentEpoch)")
-        }
-        guard allowedTimeToWait > .zero else {
-            self.logger.debug("No time to wait for backpressure")
-            return nil
-        }
-        let sleepTask = Task {
-            try await Task.sleep(for: self.configuration.maximumPollInterval - .milliseconds(100))
-            while true {
-                let res = self.resumeProducingContinuation.yield(.timer(id: currentEpoch))
-                switch res {
-                case .enqueued, .terminated:
-                    return
-                case .dropped:
-                    try await Task.yield()
-                    continue
+
+    /// Run loop polling Kafka for new consumer messages.
+    private func messageRunLoop() async throws {
+        while !Task.isCancelled {
+            let nextAction = self.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
+            switch nextAction {
+            case .pollForAndYieldMessages(let client, let source):
+                // Poll for new consumer messages.
+                let messageResults = self.batchConsumerPoll(client: client)
+                if messageResults.isEmpty {
+                    self.stateMachine.withLockedValue { $0.waitForNewMessages() }
+                } else {
+                    let yieldResult = source.yield(contentsOf: messageResults)
+                    switch yieldResult {
+                    case .produceMore:
+                        break
+                    case .stopProducing:
+                        self.stateMachine.withLockedValue { $0.stopProducing() }
+                    case .dropped:
+                        return
+                    }
                 }
-            }
-        }
-        defer {
-            sleepTask.cancel()
-        }
-        while true {
-            let resumeOrigin = await backpressureResumeIterator.next()
-            self.logger.debug("Got resume current epoch \(currentEpoch)")
-            switch resumeOrigin {
-            case .none:
-                return nil
-            case .delegate:
-                return .delegate
-            case .timer(let epoch):
-                if epoch != currentEpoch { // timer from previous epoch, wait for next event
-                    continue
+            case .pollForMessagesIfAvailable(let client, let source):
+                let messageResults = self.batchConsumerPoll(client: client)
+                if messageResults.isEmpty {
+                    // Still no new messages, so sleep.
+                    try await Task.sleep(for: self.configuration.pollInterval)
+                } else {
+                    // New messages were produced to the partition that we previously finished reading.
+                    let yieldResult = source.yield(contentsOf: messageResults)
+                    switch yieldResult {
+                    case .produceMore:
+                        break
+                    case .stopProducing:
+                        self.stateMachine.withLockedValue { $0.stopProducing() }
+                    case .dropped:
+                        return
+                    }
                 }
+            case .suspendPollLoop:
+                try await Task.sleep(for: self.configuration.pollInterval)
+            case .terminatePollLoop:
+                return
             }
-            return resumeOrigin
         }
     }
 
+    /// Read `maxMessages` consumer messages from Kafka.
+    ///
+    /// - Parameters:
+    ///     - client: Client used for handling the connection to the Kafka cluster.
+    ///     - maxMessages: Maximum amount of consumer messages to read in this invocation.
+    private func batchConsumerPoll(
+        client: RDKafkaClient,
+        maxMessages: Int = 100
+    ) -> [Result<KafkaConsumerMessage, Error>] {
+        var messageResults = [Result<KafkaConsumerMessage, Error>]()
+        messageResults.reserveCapacity(maxMessages)
+
+        for _ in 0..<maxMessages {
+            var result: Result<KafkaConsumerMessage, Error>?
+            do {
+                if let message = try client.consumerPoll() {
+                    result = .success(message)
+                }
+            } catch {
+                result = .failure(error)
+            }
+
+            if let result {
+                messageResults.append(result)
+            }
+        }
+
+        return messageResults
+    }
+
     /// Mark all messages up to the passed message in the topic as read.
+    /// Schedules a commit and returns immediately.
+    /// Any errors encountered after scheduling the commit will be discarded.
     ///
     /// This method is only used for manual offset management.
     ///
@@ -586,17 +588,46 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
-    public func commitSync(_ message: KafkaConsumerMessage) async throws {
-        let action = self.stateMachine.withLockedValue { $0.commitSync() }
+    public func scheduleCommit(_ message: KafkaConsumerMessage) throws {
+        let action = self.stateMachine.withLockedValue { $0.commit() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
-        case .commitSync(let client):
+        case .commit(let client):
             guard self.configuration.isAutoCommitEnabled == false else {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
 
-            try await client.commitSync(message)
+            try client.scheduleCommit(message)
+        }
+    }
+
+    @available(*, deprecated, renamed: "commit")
+    public func commitSync(_ message: KafkaConsumerMessage) async throws {
+        try await self.commit(message)
+    }
+
+    /// Mark all messages up to the passed message in the topic as read.
+    /// Awaits until the commit succeeds or an error is encountered.
+    ///
+    /// This method is only used for manual offset management.
+    ///
+    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    ///
+    /// - Parameters:
+    ///     - message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
+    public func commit(_ message: KafkaConsumerMessage) async throws {
+        let action = self.stateMachine.withLockedValue { $0.commit() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
+        case .commit(let client):
+            guard self.configuration.isAutoCommitEnabled == false else {
+                throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
+            }
+
+            try await client.commit(message)
         }
     }
 
@@ -604,17 +635,10 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
     /// will already shut down when consumption of the ``KafkaConsumerMessages`` has ended.
-    private func triggerGracefulShutdown() {
+    public func triggerGracefulShutdown() {
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
         case .triggerGracefulShutdown(let client):
-            self._triggerGracefulShutdown(
-                client: client,
-                logger: self.logger
-            )
-        case .triggerGracefulShutdownAndFinishSource(let client, let source, let eventSource):
-            source.finish()
-            eventSource?.finish()
             self._triggerGracefulShutdown(
                 client: client,
                 logger: self.logger
@@ -649,8 +673,24 @@ public final class KafkaConsumer: Sendable, Service {
 extension KafkaConsumer {
     /// State machine representing the state of the ``KafkaConsumer``.
     struct StateMachine: Sendable {
-        /// A logger.
-        let logger: Logger
+        /// State of the event loop fetching new consumer messages.
+        enum MessagePollLoopState {
+            /// The sequence can take more messages.
+            ///
+            /// - Parameter source: The source for yielding new messages.
+            case running(source: Producer.Source)
+            /// Sequence suspended due to back pressure.
+            ///
+            /// - Parameter source: The source for yielding new messages.
+            case suspended(source: Producer.Source)
+            /// We have read to the end of a partition and are now waiting for new messages
+            /// to be produced.
+            ///
+            /// - Parameter source: The source for yielding new messages.
+            case waitingForMessages(source: Producer.Source)
+            /// The sequence has finished, and no more messages will be produced.
+            case finished
+        }
 
         /// The state of the ``StateMachine``.
         enum State: Sendable {
@@ -661,7 +701,7 @@ extension KafkaConsumer {
             /// though ``subscribe()`` / ``assign()`` have not been invoked.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            /// - Parameter source: The source for yielding new messages.
             /// - Parameter eventSource: ``NIOAsyncSequenceProducer/Source`` used for yielding new events.
             case initializing(
                 client: RDKafkaClient,
@@ -671,22 +711,15 @@ extension KafkaConsumer {
             /// The ``KafkaConsumer`` is consuming messages.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter eventSource: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case consuming(
-                client: RDKafkaClient,
-                source: Producer.Source,
-                eventSource: ProducerEvents.Source?
-            )
-            /// Consumer is still running but the messages asynchronous sequence was terminated.
-            /// All incoming messages will be dropped.
-            ///
-            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case consumptionStopped(client: RDKafkaClient)
+            /// - Parameter state: State of the event loop fetching new consumer messages.
+            /// - Parameter eventSource: ``NIOAsyncSequenceProducer/Source`` used for yielding new events.
+            case running(client: RDKafkaClient, messagePollLoopState: MessagePollLoopState, eventSource: ProducerEvents.Source?)
             /// The ``KafkaConsumer/triggerGracefulShutdown()`` has been invoked.
             /// We are now in the process of commiting our last state to the broker.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case finishing(client: RDKafkaClient)
+            /// - Parameter eventSource: ``NIOAsyncSequenceProducer/Source`` used for yielding new events.
+            case finishing(client: RDKafkaClient, eventSource: ProducerEvents.Source?)
             /// The ``KafkaConsumer`` is closed.
             case finished
         }
@@ -712,22 +745,14 @@ extension KafkaConsumer {
         }
 
         /// Action to be taken when wanting to poll for a new message.
-        enum PollLoopAction {
-            /// Poll for a new ``KafkaConsumerMessage``.
-            ///
-            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case pollForAndYieldMessage(
-                client: RDKafkaClient,
-                source: Producer.Source,
-                eventSource: ProducerEvents.Source?
-            )
+        enum EventPollLoopAction {
             /// The ``KafkaConsumer`` stopped consuming messages or
             /// is in the process of shutting down.
             /// Poll to serve any queued events and commit outstanding state to the broker.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case pollWithoutYield(client: RDKafkaClient)
+            /// - Parameter eventSource: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case pollForEvents(client: RDKafkaClient, eventSource: ProducerEvents.Source?)
             /// Terminate the poll loop.
             case terminatePollLoop
         }
@@ -736,24 +761,68 @@ extension KafkaConsumer {
         /// - Returns: The next action to be taken when wanting to poll, or `nil` if there is no action to be taken.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        mutating func nextPollLoopAction() -> PollLoopAction {
+        mutating func nextEventPollLoopAction() -> EventPollLoopAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .consuming(let client, let source, let eventSource):
-                return .pollForAndYieldMessage(client: client, source: source, eventSource: eventSource)
-            case .consumptionStopped(let client):
-                return .pollWithoutYield(client: client)
-            case .finishing(let client):
-                if client.isConsumerClosed {
-                    self.state = .finished
-                    return .terminatePollLoop
-                } else {
-                    return .pollWithoutYield(client: client)
-                }
+            case .running(let client, _, let eventSource):
+                return .pollForEvents(client: client, eventSource: eventSource)
+            case .finishing(let client, let eventSource):
+                return .pollForEvents(client: client, eventSource: eventSource)
             case .finished:
+                return .terminatePollLoop
+            }
+        }
+
+        /// Action to be taken when wanting to poll for a new message.
+        enum ConsumerPollLoopAction {
+            /// Poll for a new ``KafkaConsumerMessage``.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case pollForAndYieldMessages(
+                client: RDKafkaClient,
+                source: Producer.Source
+            )
+            /// Poll for a new ``KafkaConsumerMessage`` or sleep for ``KafkaConsumerConfiguration/pollInterval``
+            /// if there are no new messages to read from the partition.
+            ///
+            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
+            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            case pollForMessagesIfAvailable(
+                client: RDKafkaClient,
+                source: Producer.Source
+            )
+            /// Sleep for ``KafkaConsumerConfiguration/pollInterval``.
+            case suspendPollLoop
+            /// Terminate the poll loop.
+            case terminatePollLoop
+        }
+
+        /// Returns the next action to be taken when wanting to poll.
+        /// - Returns: The next action to be taken when wanting to poll, or `nil` if there is no action to be taken.
+        ///
+        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        mutating func nextConsumerPollLoopAction() -> ConsumerPollLoopAction {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .initializing:
+                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .running(let client, let consumerState, _):
+                switch consumerState {
+                case .running(let source):
+                    return .pollForAndYieldMessages(client: client, source: source)
+                case .suspended(source: _):
+                    return .suspendPollLoop
+                case .waitingForMessages(let source):
+                    return .pollForMessagesIfAvailable(client: client, source: source)
+                case .finished:
+                    return .terminatePollLoop
+                }
+            case .finishing, .finished:
                 return .terminatePollLoop
             }
         }
@@ -773,48 +842,13 @@ extension KafkaConsumer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing(let client, let source, let eventSource):
-                self.state = .consuming(
-                    client: client,
-                    source: source,
-                    eventSource: eventSource
-                )
+                self.state = .running(client: client, messagePollLoopState: .running(source: source), eventSource: eventSource)
                 return .setUpConnection(client: client)
-            case .consuming, .consumptionStopped, .finishing, .finished:
-                fatalError("\(#function) should only be invoked upon initialization of KafkaConsumer")
-            }
-        }
-
-        /// The messages asynchronous sequence was terminated.
-        /// All incoming messages will be dropped.
-        mutating func messageSequenceTerminated(isMessageSequence: Bool) -> ProducerEvents.Source? {
-            switch self.state {
-            case .uninitialized:
-                fatalError("\(#function) invoked while still in state \(self.state)")
-            case .initializing:
-                fatalError("Call to \(#function) before setUpConnection() was invoked")
-            case .consumptionStopped:
-                if isMessageSequence {
-                    fatalError("messageSequenceTerminated() must not be invoked more than once")
-                }
-            case .consuming(let client, let source, let eventSource):
-                // only move to stopping if messages sequence was finished
-                if isMessageSequence {
-                    self.state = .consumptionStopped(client: client)
-                    // If message sequence is being terminated, it means class deinit is called
-                    // see `messages` field, it is last change to call finish for `eventSource`
-                    // but we cannot do it under lock => return to make it outside
-                    return eventSource
-                }
-                else {
-                    // Messages are still consuming, only event source was finished
-                    // Ok, probably, noone wants to listen to events,
-                    // though it might be very bad for rebalancing
-                    self.state = .consuming(client: client, source: source, eventSource: nil)
-                }
+            case .running:
+                fatalError("\(#function) should not be invoked more than once")
             case .finishing, .finished:
-                break
+                fatalError("\(#function) should only be invoked when KafkaConsumer is running")
             }
-            return nil
         }
 
         /// Action to take when wanting to store a message offset (to be auto-committed by `librdkafka`).
@@ -822,6 +856,8 @@ extension KafkaConsumer {
             /// Store the message offset with the given `client`.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case storeOffset(client: RDKafkaClient)
+            /// The consumer is in the process of `.finishing` or even `.finished`.
+            /// Stop yielding new elements and terminate the asynchronous sequence.
             case terminateConsumerSequence
         }
 
@@ -831,42 +867,36 @@ extension KafkaConsumer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
-            case .consumptionStopped:
-                fatalError("Cannot store offset when consumption has been stopped")
-            case .consuming(let client, _, _):
+                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .running(let client, _, _):
                 return .storeOffset(client: client)
             case .finishing, .finished:
                 return .terminateConsumerSequence
             }
         }
 
-        /// Action to be taken when wanting to do a synchronous commit.
-        enum CommitSyncAction {
-            /// Do a synchronous commit.
+        /// Action to be taken when wanting to do a commit.
+        enum CommitAction {
+            /// Do a commit.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case commitSync(
-                client: RDKafkaClient
-            )
+            case commit(client: RDKafkaClient)
             /// Throw an error. The ``KafkaConsumer`` is closed.
             case throwClosedError
         }
 
-        /// Get action to be taken when wanting to do a synchronous commit.
+        /// Get action to be taken when wanting to do a commit.
         /// - Returns: The action to be taken.
         ///
         /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        func commitSync() -> CommitSyncAction {
+        func commit() -> CommitAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
-            case .consumptionStopped:
-                fatalError("Cannot commit when consumption has been stopped")
-            case .consuming(let client, _, _):
-                return .commitSync(client: client)
+                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .running(let client, _, _):
+                return .commit(client: client)
             case .finishing, .finished:
                 return .throwClosedError
             }
@@ -877,18 +907,7 @@ extension KafkaConsumer {
             /// Shut down the ``KafkaConsumer``.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case triggerGracefulShutdown(
-                client: RDKafkaClient
-            )
-            /// Shut down the ``KafkaConsumer`` and finish the given `source` object.
-            ///
-            /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case triggerGracefulShutdownAndFinishSource(
-                client: RDKafkaClient,
-                source: Producer.Source,
-                eventSource: ProducerEvents.Source?
-            )
+            case triggerGracefulShutdown(client: RDKafkaClient)
         }
 
         /// Get action to be taken when wanting to do close the consumer.
@@ -900,16 +919,9 @@ extension KafkaConsumer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                fatalError("subscribe() / assign() should have been invoked before \(#function)")
-            case .consuming(let client, let source, let eventSource):
-                self.state = .finishing(client: client)
-                return .triggerGracefulShutdownAndFinishSource(
-                    client: client,
-                    source: source,
-                    eventSource: eventSource
-                )
-            case .consumptionStopped(let client):
-                self.state = .finishing(client: client)
+                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .running(let client, _, let eventSource):
+                self.state = .finishing(client: client, eventSource: eventSource)
                 return .triggerGracefulShutdown(client: client)
             case .finishing, .finished:
                 return nil
@@ -929,35 +941,110 @@ extension KafkaConsumer {
 
         
         func seekOrRebalance() -> RebalanceAction {
+            switch state {
+            case .uninitialized:
+                fatalError("\(#function) should not be invoked in state \(self.state)")
+            case .initializing:
+                fatalError("\(#function) should not be invoked in state \(self.state)")
+            case .running(let client, _, _):
+                return .allowed(client: client)
+            case .finishing(let client, _):
+                return .allowed(client: client)
+            case .finished:
+                return .denied(error: "Consumer finished")
+            }
+        }
+        // MARK: - Consumer Messages Poll Loop Actions
+
+        /// The partition that was previously finished reading has got new messages produced to it.
+        mutating func newMessagesProduced() {
+            guard case .running(let client, let consumerState, let eventSource) = self.state else {
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            }
+
+            switch consumerState {
+            case .running, .suspended, .finished:
+                fatalError("\(#function) should not be invoked in state \(self.state)")
+            case .waitingForMessages(let source):
+                self.state = .running(client: client, messagePollLoopState: .running(source: source), eventSource: eventSource)
+            }
+        }
+
+        /// The consumer has read to the end of a partition and shall now go into a sleep loop until new messages are produced.
+        mutating func waitForNewMessages() {
+            guard case .running(let client, let consumerState, let eventSource) = self.state else {
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            }
+
+            switch consumerState {
+            case .running(let source):
+                self.state = .running(client: client, messagePollLoopState: .waitingForMessages(source: source), eventSource: eventSource)
+            case .suspended, .waitingForMessages, .finished:
+                fatalError("\(#function) should not be invoked in state \(self.state)")
+            }
+        }
+
+        /// ``KafkaConsumerMessages``'s back pressure mechanism asked us to produce more messages.
+        mutating func produceMore() {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                fatalError("Subscribe to consumer group / assign to topic partition pair before committing offsets")
-            case .consumptionStopped(let client),
-                 .consuming(let client, _, _),
-                 .finishing(let client):
-                return .allowed(client: client)
-            case .finished:
-                return .denied(error: "Cannot perform reblance actions, consumer stopped")
+                break // This case can be triggered by the KafkaConsumerMessagesDeletgate
+            case .running(let client, let consumerState, let eventSource):
+                switch consumerState {
+                case .running, .waitingForMessages, .finished:
+                    break
+                case .suspended(let source):
+                    self.state = .running(client: client, messagePollLoopState: .running(source: source), eventSource: eventSource)
+                }
+            case .finishing, .finished:
+                break
             }
         }
 
+        /// ``KafkaConsumerMessages``'s back pressure mechanism asked us to temporarily stop producing messages.
+        mutating func stopProducing() {
+            guard case .running(let client, let consumerState, let eventSource) = self.state else {
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            }
 
+            switch consumerState {
+            case .suspended, .finished:
+                break
+            case .running(let source):
+                self.state = .running(client: client, messagePollLoopState: .suspended(source: source), eventSource: eventSource)
+            case .waitingForMessages(let source):
+                self.state = .running(client: client, messagePollLoopState: .suspended(source: source), eventSource: eventSource)
+            }
+        }
+
+        /// The ``KafkaConsumerMessages`` asynchronous sequence was terminated.
+        mutating func finishMessageConsumption() {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .initializing:
+                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .running(let client, _, let eventSource):
+                self.state = .running(client: client, messagePollLoopState: .finished, eventSource: eventSource)
+            case .finishing, .finished:
+                break
+            }
+        }
+        
         func client() throws -> RDKafkaClient {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing(let client, _, _):
                 return client
-            case .consuming(let client, _, _):
+            case .running(let client, _, _):
                 return client
-            case .consumptionStopped(let client):
-                return client
-            case .finishing(let client):
+            case .finishing(let client, _):
                 return client
             case .finished:
-                throw KafkaError.client(reason: "Client is stopped")
+                throw KafkaError.client(reason: "Consumer is finished")
             }
         }
     }

@@ -204,23 +204,8 @@ configuration.securityProtocol = .plaintext
 #### TLS
 
 ```swift
-let leafCert = KafkaConfiguration.TLSConfiguration.LeafAndIntermediates.pem("YOUR_LEAF_CERTIFICATE")
-let rootCert = KafkaConfiguration.TLSConfiguration.Root.pem("YOUR_ROOT_CERTIFICATE")
-
-let privateKey = KafkaConfiguration.TLSConfiguration.PrivateKey(
-    location: .file(location: "KEY_FILE"),
-    password: ""
-)
-
-let tlsConfig = KafkaConfiguration.TLSConfiguration.keyPair(
-    privateKey: privateKey,
-    publicKeyCertificate: leafCert,
-    caCertificate: rootCert,
-    crlLocation: nil
-)
-
 var configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
-configuration.securityProtocol = .tls(configuration: tlsConfig)
+configuration.securityProtocol = .tls()
 ```
 
 #### SASL
@@ -239,21 +224,6 @@ config.securityProtocol = .saslPlaintext(
 #### SASL + TLS
 
 ```swift
-let leafCert = KafkaConfiguration.TLSConfiguration.LeafAndIntermediates.pem("YOUR_LEAF_CERTIFICATE")
-let rootCert = KafkaConfiguration.TLSConfiguration.Root.pem("YOUR_ROOT_CERTIFICATE")
-
-let privateKey = KafkaConfiguration.TLSConfiguration.PrivateKey(
-    location: .file(location: "KEY_FILE"),
-    password: ""
-)
-
-let tlsConfig = KafkaConfiguration.TLSConfiguration.keyPair(
-    privateKey: privateKey,
-    publicKeyCertificate: leafCert,
-    caCertificate: rootCert,
-    crlLocation: nil
-)
-
 let saslMechanism = KafkaConfiguration.SASLMechanism.scramSHA256(
     username: "USERNAME",
     password: "PASSWORD"
@@ -261,8 +231,7 @@ let saslMechanism = KafkaConfiguration.SASLMechanism.scramSHA256(
 
 var config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
 config.securityProtocol = .saslTLS(
-    saslMechanism: saslMechanism,
-    tlsConfiguaration: tlsConfig
+    saslMechanism: saslMechanism
 )
 ```
 

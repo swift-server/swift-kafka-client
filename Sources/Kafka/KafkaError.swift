@@ -17,7 +17,9 @@ import Crdkafka
 /// An error that can occur on `Kafka` operations
 ///
 /// - Note: `Hashable` conformance only considers the ``KafkaError/code``.
-public struct KafkaError: Error, CustomStringConvertible {
+public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
+    // Note: @unchecked because we use a backing class for storage (copy-on-write).
+
     private var backing: Backing
 
     /// Represents the kind of error that was encountered.

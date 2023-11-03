@@ -50,22 +50,7 @@ final class RDKafkaClient: Sendable {
     ) {
         self.kafkaHandle = kafkaHandle
         self.logger = logger
-
-        if type == .consumer {
-            if let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle) {
-                // (Important)
-                // Polling the queue counts as a consumer poll, and will reset the timer for `max.poll.interval.ms`.
-                self.queue = consumerQueue
-            } else {
-                fatalError("""
-                Internal error: failed to get consumer queue. \
-                A group.id should be set even when the client is not part of a consumer group. \
-                See https://github.com/edenhill/librdkafka/issues/3261 for more information.
-                """)
-            }
-        } else {
-            self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
-        }
+        self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
 
         rd_kafka_set_log_queue(self.kafkaHandle, self.queue)
     }
@@ -131,51 +116,192 @@ final class RDKafkaClient: Sendable {
             "Partition ID outside of valid range \(0...Int32.max)"
         )
 
-        let responseCode = try message.value.withUnsafeBytes { valueBuffer in
-            try topicHandles.withTopicHandlePointer(topic: message.topic, topicConfiguration: topicConfiguration) { topicHandle in
-                if let key = message.key {
-                    // Key available, we can use scoped accessor to safely access its rawBufferPointer.
-                    // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
-                    // Returns 0 on success, error code otherwise.
-                    return key.withUnsafeBytes { keyBuffer in
-                        return rd_kafka_produce(
-                            topicHandle,
-                            Int32(message.partition.rawValue),
-                            RD_KAFKA_MSG_F_COPY,
-                            UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                            valueBuffer.count,
-                            keyBuffer.baseAddress,
-                            keyBuffer.count,
-                            UnsafeMutableRawPointer(bitPattern: newMessageID)
-                        )
-                    }
-                } else {
-                    // No key set.
-                    // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
-                    // Returns 0 on success, error code otherwise.
-                    return rd_kafka_produce(
+        // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
+        // Returns 0 on success, error code otherwise.
+        let error = try topicHandles.withTopicHandlePointer(
+            topic: message.topic,
+            topicConfiguration: topicConfiguration
+        ) { topicHandle in
+            return try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
+                if message.headers.isEmpty {
+                    // No message headers set, normal produce method can be used.
+                    rd_kafka_produce(
                         topicHandle,
                         Int32(message.partition.rawValue),
                         RD_KAFKA_MSG_F_COPY,
                         UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
                         valueBuffer.count,
-                        nil,
-                        0,
+                        keyBuffer?.baseAddress,
+                        keyBuffer?.count ?? 0,
                         UnsafeMutableRawPointer(bitPattern: newMessageID)
                     )
+                    return rd_kafka_last_error()
+                } else {
+                    let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
+                        // Setting message headers only works with `rd_kafka_produceva` (variadic arguments).
+                        try self._produceVariadic(
+                            topicHandle: topicHandle,
+                            partition: Int32(message.partition.rawValue),
+                            messageFlags: RD_KAFKA_MSG_F_COPY,
+                            key: keyBuffer,
+                            value: valueBuffer,
+                            opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
+                            cHeaders: cHeaders
+                        )
+                    }
+                    return rd_kafka_error_code(errorPointer)
                 }
             }
         }
 
-        guard responseCode == 0 else {
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
+        }
+    }
+
+    /// Wrapper for `rd_kafka_produceva`.
+    /// (Message production with variadic options, required for sending message headers).
+    ///
+    /// This function should only be called from within a scoped pointer accessor
+    /// to ensure the referenced memory is valid for the function's lifetime.
+    ///
+    /// - Returns: `nil` on success. An opaque pointer `*rd_kafka_resp_err_t` on error.
+    private func _produceVariadic(
+        topicHandle: OpaquePointer,
+        partition: Int32,
+        messageFlags: Int32,
+        key: UnsafeRawBufferPointer?,
+        value: UnsafeRawBufferPointer,
+        opaque: UnsafeMutableRawPointer?,
+        cHeaders: [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]
+    ) throws -> OpaquePointer? {
+        let sizeWithoutHeaders = (key != nil) ? 6 : 5
+        let size = sizeWithoutHeaders + cHeaders.count
+        var arguments = Array(repeating: rd_kafka_vu_t(), count: size)
+        var index = 0
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_RKT
+        arguments[index].u.rkt = topicHandle
+        index += 1
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_PARTITION
+        arguments[index].u.i32 = partition
+        index += 1
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_MSGFLAGS
+        arguments[index].u.i = messageFlags
+        index += 1
+
+        if let key {
+            arguments[index].vtype = RD_KAFKA_VTYPE_KEY
+            arguments[index].u.mem.ptr = UnsafeMutableRawPointer(mutating: key.baseAddress)
+            arguments[index].u.mem.size = key.count
+            index += 1
+        }
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_VALUE
+        arguments[index].u.mem.ptr = UnsafeMutableRawPointer(mutating: value.baseAddress)
+        arguments[index].u.mem.size = value.count
+        index += 1
+
+        arguments[index].vtype = RD_KAFKA_VTYPE_OPAQUE
+        arguments[index].u.ptr = opaque
+        index += 1
+
+        for cHeader in cHeaders {
+            arguments[index].vtype = RD_KAFKA_VTYPE_HEADER
+
+            arguments[index].u.header.name = cHeader.key
+            arguments[index].u.header.val = cHeader.value?.baseAddress
+            arguments[index].u.header.size = cHeader.value?.count ?? 0
+
+            index += 1
+        }
+
+        assert(arguments.count == size)
+
+        return rd_kafka_produceva(
+            self.kafkaHandle,
+            arguments,
+            arguments.count
+        )
+    }
+
+    /// Scoped accessor that enables safe access to a ``KafkaProducerMessage``'s key and value raw buffers.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the pointer.
+    @discardableResult
+    private static func withMessageKeyAndValueBuffer<T, Key, Value>(
+        for message: KafkaProducerMessage<Key, Value>,
+        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T // (keyBuffer, valueBuffer)
+    ) rethrows -> T {
+        return try message.value.withUnsafeBytes { valueBuffer in
+            if let key = message.key {
+                return try key.withUnsafeBytes { keyBuffer in
+                    return try body(keyBuffer, valueBuffer)
+                }
+            } else {
+                return try body(nil, valueBuffer)
+            }
+        }
+    }
+
+    /// Scoped accessor that enables safe access the underlying memory of an array of ``KafkaHeader``s.
+    /// - Warning: Do not escape the pointer from the closure for later use.
+    /// - Parameter body: The closure will use the pointer.
+    @discardableResult
+    private static func withKafkaCHeaders<T>(
+        for headers: [KafkaHeader],
+        _ body: ([(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]) throws -> T
+    ) rethrows -> T {
+        var headersMemory: [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)] = []
+        var headers: [KafkaHeader] = headers.reversed()
+        return try self._withKafkaCHeadersRecursive(kafkaHeaders: &headers, cHeaders: &headersMemory, body)
+    }
+
+    /// Recursive helper function that enables safe access the underlying memory of an array of ``KafkaHeader``s.
+    /// Reads through all `kafkaHeaders` and stores their corresponding pointers in `cHeaders`.
+    private static func _withKafkaCHeadersRecursive<T>(
+        kafkaHeaders: inout [KafkaHeader],
+        cHeaders: inout [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)],
+        _ body: ([(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]) throws -> T
+    ) rethrows -> T {
+        guard let kafkaHeader = kafkaHeaders.popLast() else {
+            // Base case: we have read all kafkaHeaders and now invoke the accessor closure
+            // that can safely access the pointers in cHeaders
+            return try body(cHeaders)
+        }
+
+        // Access underlying memory of key and value with scoped accessor and to a
+        // recursive call to _withKafkaCHeadersRecursive in the scoped accessor.
+        // This allows us to build a chain of scoped accessors so that the body closure
+        // can ultimately access all kafkaHeader underlying key/value bytes safely.
+        return try kafkaHeader.key.withCString { keyCString in
+            if let headerValue = kafkaHeader.value {
+                return try headerValue.withUnsafeReadableBytes { valueBuffer in
+                    let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, valueBuffer)
+                    cHeaders.append(cHeader)
+                    return try self._withKafkaCHeadersRecursive(
+                        kafkaHeaders: &kafkaHeaders,
+                        cHeaders: &cHeaders,
+                        body
+                    )
+                }
+            } else {
+                let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, nil)
+                cHeaders.append(cHeader)
+                return try self._withKafkaCHeadersRecursive(
+                    kafkaHeaders: &kafkaHeaders,
+                    cHeaders: &cHeaders,
+                    body
+                )
+            }
         }
     }
 
     /// Swift wrapper for events from `librdkafka`'s event queue.
     enum KafkaEvent {
         case deliveryReport(results: [KafkaDeliveryReport])
-        case consumerMessages(result: Result<KafkaConsumerMessage, Error>)
         case statistics(KafkaStatistics)
         case rebalance(RebalanceAction)
     }
@@ -183,21 +309,9 @@ final class RDKafkaClient: Sendable {
     /// Poll the event `rd_kafka_queue_t` for new events.
     ///
     /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
-    func eventPoll(events: inout [KafkaEvent], maxEvents: inout Int) -> Bool /* -> [KafkaEvent] */{
-//        var events = [KafkaEvent]()
-        events.removeAll(keepingCapacity: true)
+    func eventPoll(maxEvents: Int = 100) -> [KafkaEvent] {
+        var events = [KafkaEvent]()
         events.reserveCapacity(maxEvents)
-        
-        var shouldSleep = true
-        
-        defer {
-//            if events.count >= maxEvents {
-//                maxEvents *= 2
-//            } else if events.count < maxEvents / 2 {
-//                maxEvents /= 2
-//            }
-//            maxEvents = Swift.max(maxEvents, 1)
-        }
 
         for _ in 0..<maxEvents {
             let event = rd_kafka_queue_poll(self.queue, 0)
@@ -212,57 +326,45 @@ final class RDKafkaClient: Sendable {
             case .deliveryReport:
                 let forwardEvent = self.handleDeliveryReportEvent(event)
                 events.append(forwardEvent)
-                shouldSleep = false
-            case .fetch:
-//                logger.debug("Received event \(eventType)")
-                if let forwardEvent = self.handleFetchEvent(event) {
-                    events.append(forwardEvent)
-                    shouldSleep = false
-                }
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
-//                logger.debug("Received event \(eventType)")
                 self.handleOffsetCommitEvent(event)
-                shouldSleep = false
             case .statistics:
                 events.append(self.handleStatistics(event))
             case .rebalance:
                 self.logger.info("rebalance received (RDClient)")
                 events.append(self.handleRebalance(event))
-                shouldSleep = false
-            case .error:
-                #if true
-                let err = rd_kafka_event_error(event)
-                if err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
-                    let topicPartition = rd_kafka_event_topic_partition(event)
-                    if let topicPartition {
-                        events.append(
-                            .consumerMessages(
-                                result: .success(
-                                    .init(topicPartitionPointer: topicPartition)
-                                )
-                            )
-                        )
-                    }
-//                    if let forwardEvent = self.handleFetchEvent(event) {
-//                        events.append(forwardEvent)
+//            case .error:
+//                #if true
+//                let err = rd_kafka_event_error(event)
+//                if err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
+//                    let topicPartition = rd_kafka_event_topic_partition(event)
+//                    if let topicPartition {
+//                        events.append(
+//                            .consumerMessages(
+//                                result: .success(
+//                                    .init(topicPartitionPointer: topicPartition)
+//                                )
+//                            )
+//                        )
 //                    }
-//                    events.append(.consumerMessages(result: .failure(KafkaError.partitionEOF())))
-                }
-                #endif
-                break
+////                    if let forwardEvent = self.handleFetchEvent(event) {
+////                        events.append(forwardEvent)
+////                    }
+////                    events.append(.consumerMessages(result: .failure(KafkaError.partitionEOF())))
+//                }
+//                #endif
+//                break
             case .none:
                 // Finished reading events, return early
-                return shouldSleep
+                return events
             default:
                 break // Ignored Event
             }
         }
-        
 
-
-        return shouldSleep
+        return events
     }
 
     /// Handle event of type `RDKafkaEvent.deliveryReport`.
@@ -283,26 +385,6 @@ final class RDKafkaClient: Sendable {
 
         // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
         return .deliveryReport(results: deliveryReportResults)
-    }
-
-    /// Handle event of type `RDKafkaEvent.fetch`.
-    ///
-    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    /// - Returns: `KafkaEvent` to be returned as part of ``KafkaClient.eventPoll()`.
-    private func handleFetchEvent(_ event: OpaquePointer?) -> KafkaEvent? {
-        do {
-            // RD_KAFKA_EVENT_FETCH only returns a single message:
-            // https://docs.confluent.io/platform/current/clients/librdkafka/html/rdkafka_8h.html#a3a855eb7bdf17f5797d4911362a5fc7c
-            if let messagePointer = rd_kafka_event_message_next(event) {
-                let message = try KafkaConsumerMessage(messagePointer: messagePointer)
-                return .consumerMessages(result: .success(message))
-            } else {
-                return nil
-            }
-        } catch {
-            return .consumerMessages(result: .failure(error))
-        }
-        // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
     }
 
     private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent {
@@ -400,18 +482,30 @@ final class RDKafkaClient: Sendable {
         actualCallback(.success(()))
     }
 
-    /// Redirect the main ``RDKafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
-    /// queue (``RDKafkaClient/consumerPoll``).
+    /// Request a new message from the Kafka cluster.
     ///
-    /// Events that would be triggered by ``RDKafkaClient/poll(timeout:)``
-    /// are now triggered by ``RDKafkaClient/consumerPoll``.
+    /// - Important: This method should only be invoked from ``KafkaConsumer``.
     ///
-    /// - Warning: It is not allowed to call ``RDKafkaClient/poll(timeout:)`` after ``RDKafkaClient/pollSetConsumer``.
-    func pollSetConsumer() throws {
-        let result = rd_kafka_poll_set_consumer(self.kafkaHandle)
-        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: result)
+    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
+    func consumerPoll() throws -> KafkaConsumerMessage? {
+        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, 0) else {
+            // No error, there might be no more messages
+            return nil
         }
+
+        defer {
+            // Destroy message otherwise poll() will block forever
+            rd_kafka_message_destroy(messagePointer)
+        }
+
+        // Reached the end of the topic+partition queue on the broker
+        if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
+            return try KafkaConsumerMessage(messagePointer: messagePointer)
+        }
+
+        let message = try KafkaConsumerMessage(messagePointer: messagePointer)
+        return message
     }
     /// Atomic  incremental assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
@@ -541,80 +635,93 @@ final class RDKafkaClient: Sendable {
         }
 
         if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            // Ignore RD_KAFKA_RESP_ERR__STATE error.
+            // RD_KAFKA_RESP_ERR__STATE indicates an attempt to commit to an unassigned partition,
+            // which can occur during rebalancing or when the consumer is shutting down.
+            // See "Upgrade considerations" for more details: https://github.com/confluentinc/librdkafka/releases/tag/v1.9.0
+            // Since Kafka Consumers are designed for at-least-once processing, failing to commit here is acceptable.
+            if error == RD_KAFKA_RESP_ERR__STATE {
+                return
+            }
             throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
 
-//    /// Non-blocking **awaitable** commit of a the `message`'s offset to Kafka.
-//    ///
-//    /// - Parameter message: Last received message that shall be marked as read.
-//    func commitSync(_ message: KafkaConsumerMessage) async throws {
-//        // Declare captured closure outside of withCheckedContinuation.
-//        // We do that because do an unretained pass of the captured closure to
-//        // librdkafka which means we have to keep a reference to the closure
-//        // ourselves to make sure it does not get deallocated before
-//        // commitSync returns.
-//        var capturedClosure: CapturedCommitCallback!
-//        try await withCheckedThrowingContinuation { continuation in
-//            capturedClosure = CapturedCommitCallback { result in
-//                continuation.resume(with: result)
-//            }
-//
-//            // The offset committed is always the offset of the next requested message.
-//            // Thus, we increase the offset of the current message by one before committing it.
-//            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-//            let changesList = RDKafkaTopicPartitionList()
-//            changesList.setOffset(
-//                topic: message.topic,
-//                partition: message.partition,
-//                offset: .init(rawValue: message.offset.rawValue + 1)
-//            )
-//
-//            // Unretained pass because the reference that librdkafka holds to capturedClosure
-//            // should not be counted in ARC as this can lead to memory leaks.
-//            let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
-//
-//            changesList.withListPointer { listPointer in
-//                rd_kafka_commit_queue(
-//                    self.kafkaHandle,
-//                    listPointer,
-//                    self.queue,
-//                    nil,
-//                    opaquePointer
-//                )
-//            }
-//        }
-//    }
-//    
-//    
-    /// TODO: remove and cherry pick sheduleCommit method
-    func commitSync(_ message: KafkaConsumerMessage) throws {
-         // The offset committed is always the offset of the next requested message.
-         // Thus, we increase the offset of the current message by one before committing it.
-         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-         let changesList = RDKafkaTopicPartitionList()
-         changesList.setOffset(
-             topic: message.topic,
-             partition: message.partition,
-             offset: message.offset
-         )
+    /// Non-blocking "fire-and-forget" commit of a `message`'s offset to Kafka.
+    /// Schedules a commit and returns immediately.
+    /// Any errors encountered after scheduling the commit will be discarded.
+    ///
+    /// - Parameter message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if scheduling the commit failed.
+    func scheduleCommit(_ message: KafkaConsumerMessage) throws {
+        // The offset committed is always the offset of the next requested message.
+        // Thus, we increase the offset of the current message by one before committing it.
+        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+        let changesList = RDKafkaTopicPartitionList()
+        changesList.setOffset(
+            topic: message.topic,
+            partition: message.partition,
+            offset: .init(rawValue: message.offset.rawValue + 1)
+        )
 
-         let error = changesList.withListPointer { listPointer in
-             return rd_kafka_commit(
-                 self.kafkaHandle,
-                 listPointer,
-                 1 // async = true
-             )
-         }
+        let error = changesList.withListPointer { listPointer in
+            return rd_kafka_commit(
+                self.kafkaHandle,
+                listPointer,
+                1 // async = true
+            )
+        }
 
-         if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-             throw KafkaError.rdKafkaError(wrapping: error)
-         }
-     }
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
+    }
+
+    /// Non-blocking **awaitable** commit of a `message`'s offset to Kafka.
+    ///
+    /// - Parameter message: Last received message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if the commit failed.
+    func commit(_ message: KafkaConsumerMessage) async throws {
+        // Declare captured closure outside of withCheckedContinuation.
+        // We do that because do an unretained pass of the captured closure to
+        // librdkafka which means we have to keep a reference to the closure
+        // ourselves to make sure it does not get deallocated before
+        // commit returns.
+        var capturedClosure: CapturedCommitCallback!
+        try await withCheckedThrowingContinuation { continuation in
+            capturedClosure = CapturedCommitCallback { result in
+                continuation.resume(with: result)
+            }
+
+            // The offset committed is always the offset of the next requested message.
+            // Thus, we increase the offset of the current message by one before committing it.
+            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+            let changesList = RDKafkaTopicPartitionList()
+            changesList.setOffset(
+                topic: message.topic,
+                partition: message.partition,
+                offset: .init(rawValue: message.offset.rawValue + 1)
+            )
+
+            // Unretained pass because the reference that librdkafka holds to capturedClosure
+            // should not be counted in ARC as this can lead to memory leaks.
+            let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
+
+            changesList.withListPointer { listPointer in
+                rd_kafka_commit_queue(
+                    self.kafkaHandle,
+                    listPointer,
+                    self.queue,
+                    nil,
+                    opaquePointer
+                )
+            }
+        }
+    }
 
     /// Flush any outstanding produce requests.
     ///
-    /// Parameters:
+    /// - Parameters:
     ///     - timeoutMilliseconds: Maximum time to wait for outstanding messages to be flushed.
     func flush(timeoutMilliseconds: Int32) async throws {
         // rd_kafka_flush is blocking and there is no convenient way to make it non-blocking.
@@ -825,7 +932,7 @@ final class RDKafkaClient: Sendable {
             var str = String()
             for idx in 0..<Int(partitions.pointee.cnt) {
                 let elem = partitions.pointee.elems[idx]
-                str += "topic: \(elem.topic), offset: \(elem.offset), partition: \(elem.partition), \(elem.metadata)"
+                str += "topic: \(String(describing: elem.topic)), offset: \(elem.offset), partition: \(elem.partition), \(String(describing: elem.metadata))"
             }
         }
     }
