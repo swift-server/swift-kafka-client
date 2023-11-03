@@ -61,12 +61,22 @@ final class RDKafkaClient: Sendable {
         rd_kafka_destroy(kafkaHandle)
     }
 
+    typealias RebalanceCallback = (KafkaEvent) -> ()
+    final class RebalanceCallbackStorage {
+        let rebalanceCallback: RebalanceCallback
+        
+        init(rebalanceCallback: @escaping RebalanceCallback) {
+            self.rebalanceCallback = rebalanceCallback
+        }
+    }
+    
     /// Factory method creating a new instance of a ``RDKafkaClient``.
     static func makeClient(
         type: ClientType,
         configDictionary: [String: String],
         events: [RDKafkaEvent],
-        logger: Logger
+        logger: Logger,
+        rebalanceCallBackStorage: RebalanceCallbackStorage? = nil
     ) throws -> RDKafkaClient {
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
         // Manually override some of the configuration options
@@ -76,6 +86,33 @@ final class RDKafkaClient: Sendable {
         if type == .consumer {
             try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
             try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.partition.eof", value: "true")
+            if let rebalanceCallBackStorage {
+                let rebalanceCb = Unmanaged.passUnretained(rebalanceCallBackStorage)
+                rd_kafka_conf_set_opaque(rdConfig, rebalanceCb.toOpaque())
+                rd_kafka_conf_set_rebalance_cb(rdConfig) { handle, code, partitions, rebalanceOpaqueCb in
+                    let protoStringDef = String(cString: rd_kafka_rebalance_protocol(handle))
+                    let rebalanceProtocol = KafkaRebalanceProtocol.convert(from: protoStringDef)
+                    guard let partitions else {
+                        fatalError("No partitions in callback")
+                    }
+                    let list = KafkaTopicList(from: .init(from: partitions))
+                    var event: KafkaEvent
+                    switch code {
+                    case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+                        event = .rebalance(.assign(rebalanceProtocol, list))
+                    case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+                        event =  .rebalance(.revoke(rebalanceProtocol, list))
+                    default:
+                        event = .rebalance(.error(rebalanceProtocol, list, KafkaError.rdKafkaError(wrapping: code)))
+                    }
+                    if let rebalanceOpaqueCb {
+                        let rebalanceCb = Unmanaged<RebalanceCallbackStorage>.fromOpaque(rebalanceOpaqueCb).takeUnretainedValue()
+                        rebalanceCb.rebalanceCallback(event)
+                    } else {
+                        fatalError("Cannot find rebalance cb")
+                    }
+                }
+            }
         }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 

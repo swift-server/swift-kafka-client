@@ -163,6 +163,8 @@ public final class KafkaConsumer: Sendable, Service {
     private let logger: Logger
     /// State of the `KafkaConsumer`.
     private let stateMachine: NIOLockedValueBox<StateMachine>
+    
+    private let rebalanceCbStorage: RDKafkaClient.RebalanceCallbackStorage?
 
     /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
@@ -183,11 +185,13 @@ public final class KafkaConsumer: Sendable, Service {
         stateMachine: NIOLockedValueBox<StateMachine>,
         configuration: KafkaConsumerConfiguration,
         logger: Logger,
-        eventSource: ProducerEvents.Source? = nil
+        eventSource: ProducerEvents.Source? = nil,
+        rebalanceCbStorage: RDKafkaClient.RebalanceCallbackStorage? = nil
     ) throws {
         self.configuration = configuration
         self.stateMachine = stateMachine
         self.logger = logger
+        self.rebalanceCbStorage = rebalanceCbStorage // save to avoid destruction
         
         
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
@@ -241,10 +245,6 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.statisticsInterval != .disable {
             subscribedEvents.append(.statistics)
         }
-        
-        if configuration.listenForRebalance {
-            subscribedEvents.append(.rebalance)
-        }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
@@ -288,15 +288,30 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.statisticsInterval != .disable {
             subscribedEvents.append(.statistics)
         }
-        if configuration.listenForRebalance {
-            subscribedEvents.append(.rebalance)
+//        if configuration.listenForRebalance {
+//            subscribedEvents.append(.rebalance)
+//        }
+        
+        final class EventsInFutureWrapper {
+            var events: KafkaConsumer.ProducerEvents.Source? = nil
+        }
+        
+        let wrapper = EventsInFutureWrapper()
+        
+        // as kafka_consumer_poll is used, we MUST define rebalance cb instead of listening to events
+        let rebalanceCallBackStorage = RDKafkaClient.RebalanceCallbackStorage { rebalanceEvent in
+            guard let events = wrapper.events else {
+                fatalError("Events source is not provided")
+            }
+            _ = events.yield(.init(rebalanceEvent))
         }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: configuration.dictionary,
             events: subscribedEvents,
-            logger: logger
+            logger: logger,
+            rebalanceCallBackStorage: rebalanceCallBackStorage
         )
 
         let stateMachine = NIOLockedValueBox(StateMachine())
@@ -311,13 +326,15 @@ public final class KafkaConsumer: Sendable, Service {
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
         )
+        wrapper.events = sourceAndSequence.source
         
         let consumer = try KafkaConsumer(
             client: client,
             stateMachine: stateMachine,
             configuration: configuration,
             logger: logger,
-            eventSource: sourceAndSequence.source
+            eventSource: sourceAndSequence.source,
+            rebalanceCbStorage: rebalanceCallBackStorage
         )
 
         let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
