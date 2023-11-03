@@ -23,6 +23,37 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
+    /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
+    public struct BackPressureStrategy: Sendable, Hashable {
+        enum _BackPressureStrategy: Sendable, Hashable {
+            case watermark(low: Int, high: Int)
+        }
+
+        let _internal: _BackPressureStrategy
+
+        private init(backPressureStrategy: _BackPressureStrategy) {
+            self._internal = backPressureStrategy
+        }
+
+        /// A back pressure strategy based on high and low watermarks.
+        ///
+        /// The consumer maintains a buffer size between a low watermark and a high watermark
+        /// to control the flow of incoming messages.
+        ///
+        /// - Parameter low: The lower threshold for the buffer size (low watermark).
+        /// - Parameter high: The upper threshold for the buffer size (high watermark).
+        public static func watermark(low: Int, high: Int) -> BackPressureStrategy {
+            return .init(backPressureStrategy: .watermark(low: low, high: high))
+        }
+    }
+
+    /// The backpressure strategy to be used for message consumption.
+    /// See ``KafkaConsumerConfiguration/BackPressureStrategy-swift.struct`` for more information.
+    public var backPressureStrategy: BackPressureStrategy = .watermark(
+        low: 10,
+        high: 50
+    )
+
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {
@@ -63,7 +94,7 @@ public struct KafkaConsumerConfiguration {
     }
 
     /// The strategy used for consuming messages.
-    /// See ``KafkaConfiguration/ConsumptionStrategy`` for more information.
+    /// See ``KafkaConsumerConfiguration/ConsumptionStrategy-swift.struct-swift.struct`` for more information.
     public var consumptionStrategy: ConsumptionStrategy
 
     // MARK: - Consumer-specific Config Properties

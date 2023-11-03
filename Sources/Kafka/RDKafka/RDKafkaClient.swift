@@ -45,22 +45,7 @@ final class RDKafkaClient: Sendable {
     ) {
         self.kafkaHandle = kafkaHandle
         self.logger = logger
-
-        if type == .consumer {
-            if let consumerQueue = rd_kafka_queue_get_consumer(self.kafkaHandle) {
-                // (Important)
-                // Polling the queue counts as a consumer poll, and will reset the timer for `max.poll.interval.ms`.
-                self.queue = consumerQueue
-            } else {
-                fatalError("""
-                Internal error: failed to get consumer queue. \
-                A group.id should be set even when the client is not part of a consumer group. \
-                See https://github.com/edenhill/librdkafka/issues/3261 for more information.
-                """)
-            }
-        } else {
-            self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
-        }
+        self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
 
         rd_kafka_set_log_queue(self.kafkaHandle, self.queue)
     }
@@ -311,7 +296,6 @@ final class RDKafkaClient: Sendable {
     /// Swift wrapper for events from `librdkafka`'s event queue.
     enum KafkaEvent {
         case deliveryReport(results: [KafkaDeliveryReport])
-        case consumerMessages(result: Result<KafkaConsumerMessage, Error>)
         case statistics(RDKafkaStatistics)
     }
 
@@ -335,10 +319,6 @@ final class RDKafkaClient: Sendable {
             case .deliveryReport:
                 let forwardEvent = self.handleDeliveryReportEvent(event)
                 events.append(forwardEvent)
-            case .fetch:
-                if let forwardEvent = self.handleFetchEvent(event) {
-                    events.append(forwardEvent)
-                }
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
@@ -376,26 +356,6 @@ final class RDKafkaClient: Sendable {
 
         // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
         return .deliveryReport(results: deliveryReportResults)
-    }
-
-    /// Handle event of type `RDKafkaEvent.fetch`.
-    ///
-    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    /// - Returns: `KafkaEvent` to be returned as part of ``KafkaClient.eventPoll()`.
-    private func handleFetchEvent(_ event: OpaquePointer?) -> KafkaEvent? {
-        do {
-            // RD_KAFKA_EVENT_FETCH only returns a single message:
-            // https://docs.confluent.io/platform/current/clients/librdkafka/html/rdkafka_8h.html#a3a855eb7bdf17f5797d4911362a5fc7c
-            if let messagePointer = rd_kafka_event_message_next(event) {
-                let message = try KafkaConsumerMessage(messagePointer: messagePointer)
-                return .consumerMessages(result: .success(message))
-            } else {
-                return nil
-            }
-        } catch {
-            return .consumerMessages(result: .failure(error))
-        }
-        // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
     }
 
     /// Handle event of type `RDKafkaEvent.statistics`.
@@ -473,18 +433,30 @@ final class RDKafkaClient: Sendable {
         actualCallback(.success(()))
     }
 
-    /// Redirect the main ``RDKafkaClient/poll(timeout:)`` queue to the `KafkaConsumer`'s
-    /// queue (``RDKafkaClient/consumerPoll``).
+    /// Request a new message from the Kafka cluster.
     ///
-    /// Events that would be triggered by ``RDKafkaClient/poll(timeout:)``
-    /// are now triggered by ``RDKafkaClient/consumerPoll``.
+    /// - Important: This method should only be invoked from ``KafkaConsumer``.
     ///
-    /// - Warning: It is not allowed to call ``RDKafkaClient/poll(timeout:)`` after ``RDKafkaClient/pollSetConsumer``.
-    func pollSetConsumer() throws {
-        let result = rd_kafka_poll_set_consumer(self.kafkaHandle)
-        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: result)
+    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
+    func consumerPoll() throws -> KafkaConsumerMessage? {
+        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, 0) else {
+            // No error, there might be no more messages
+            return nil
         }
+
+        defer {
+            // Destroy message otherwise poll() will block forever
+            rd_kafka_message_destroy(messagePointer)
+        }
+
+        // Reached the end of the topic+partition queue on the broker
+        if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
+            return nil
+        }
+
+        let message = try KafkaConsumerMessage(messagePointer: messagePointer)
+        return message
     }
 
     /// Subscribe to topic set using balanced consumer groups.
@@ -547,7 +519,7 @@ final class RDKafkaClient: Sendable {
             // which can occur during rebalancing or when the consumer is shutting down.
             // See "Upgrade considerations" for more details: https://github.com/confluentinc/librdkafka/releases/tag/v1.9.0
             // Since Kafka Consumers are designed for at-least-once processing, failing to commit here is acceptable.
-            if error != RD_KAFKA_RESP_ERR__STATE {
+            if error == RD_KAFKA_RESP_ERR__STATE {
                 return
             }
             throw KafkaError.rdKafkaError(wrapping: error)
