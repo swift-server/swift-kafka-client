@@ -288,22 +288,32 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.statisticsInterval != .disable {
             subscribedEvents.append(.statistics)
         }
+//        NOTE: since now consumer is being polled with rd_kafka_consumer_poll,
+//        we have to listen for rebalance through callback, otherwise consumer may fail
 //        if configuration.listenForRebalance {
 //            subscribedEvents.append(.rebalance)
 //        }
         
-        final class EventsInFutureWrapper {
+        // we assign events once, so it is always thread safe -> @unchecked Sendable
+        // but before start of consumer
+        final class EventsInFutureWrapper: @unchecked Sendable {
             var events: KafkaConsumer.ProducerEvents.Source? = nil
         }
         
         let wrapper = EventsInFutureWrapper()
         
         // as kafka_consumer_poll is used, we MUST define rebalance cb instead of listening to events
-        let rebalanceCallBackStorage = RDKafkaClient.RebalanceCallbackStorage { rebalanceEvent in
-            guard let events = wrapper.events else {
-                fatalError("Events source is not provided")
+        let rebalanceCallBackStorage: RDKafkaClient.RebalanceCallbackStorage?
+        if configuration.listenForRebalance {
+            rebalanceCallBackStorage = RDKafkaClient.RebalanceCallbackStorage { rebalanceEvent in
+                guard let events = wrapper.events else {
+                    // events always provided before streaming from kafka
+                    fatalError("Events source is not provided")
+                }
+                _ = events.yield(.init(rebalanceEvent))
             }
-            _ = events.yield(.init(rebalanceEvent))
+        } else {
+            rebalanceCallBackStorage = nil
         }
 
         let client = try RDKafkaClient.makeClient(
@@ -488,12 +498,14 @@ public final class KafkaConsumer: Sendable, Service {
     /// Run loop polling Kafka for new events.
     private func eventRunLoop() async throws {
         var pollInterval = configuration.pollInterval
+        var events = [RDKafkaClient.KafkaEvent]()
+        events.reserveCapacity(100)
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextEventPollLoopAction() }
             switch nextAction {
             case .pollForEvents(let client, let eventSource):
                 // Event poll to serve any events queued inside of `librdkafka`.
-                let events = client.eventPoll()
+                let shouldSleep = client.eventPoll(events: &events)
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
@@ -505,7 +517,7 @@ public final class KafkaConsumer: Sendable, Service {
                         break // Ignore
                     }
                 }
-                if events.isEmpty {
+                if shouldSleep {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
                     try await Task.sleep(for: pollInterval)
                 } else {
@@ -520,12 +532,17 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Run loop polling Kafka for new consumer messages.
     private func messageRunLoop() async throws {
+        let maxAllowedMessages: Int
+        switch configuration.backPressureStrategy._internal {
+        case .watermark(let lowWatermark, let highWatermark):
+            maxAllowedMessages = max(highWatermark - lowWatermark, 1)
+        }
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
             switch nextAction {
             case .pollForAndYieldMessages(let client, let source):
                 // Poll for new consumer messages.
-                let messageResults = self.batchConsumerPoll(client: client)
+                let messageResults = self.batchConsumerPoll(client: client, maxMessages: maxAllowedMessages)
                 if messageResults.isEmpty {
                     self.stateMachine.withLockedValue { $0.waitForNewMessages() }
                 } else {
@@ -540,7 +557,7 @@ public final class KafkaConsumer: Sendable, Service {
                     }
                 }
             case .pollForMessagesIfAvailable(let client, let source):
-                let messageResults = self.batchConsumerPoll(client: client)
+                let messageResults = self.batchConsumerPoll(client: client, maxMessages: maxAllowedMessages)
                 if messageResults.isEmpty {
                     // Still no new messages, so sleep.
                     try await Task.sleep(for: self.configuration.pollInterval)

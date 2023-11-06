@@ -246,14 +246,15 @@ public final class KafkaProducer: Service, Sendable {
 
     private func _run() async throws {
         var pollInterval = self.configuration.pollInterval
+        var events = [RDKafkaClient.KafkaEvent]()
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollWithoutYield(let client):
                 // Drop any incoming events
-                _ = client.eventPoll()
+                _ = client.eventPoll(events: &events)
             case .pollAndYield(let client, let source):
-                let events = client.eventPoll()
+                let shouldSleep = client.eventPoll(events: &events)
                 for event in events {
                     switch event {
                     case .deliveryReport(let reports):
@@ -266,7 +267,7 @@ public final class KafkaProducer: Service, Sendable {
                         fatalError("Cannot cast \(event) to KafkaProducerEvent")
                     }
                 }
-                if events.isEmpty {
+                if shouldSleep {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
                     try await Task.sleep(for: pollInterval)
                 } else {

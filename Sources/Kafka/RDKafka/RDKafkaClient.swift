@@ -61,8 +61,8 @@ final class RDKafkaClient: Sendable {
         rd_kafka_destroy(kafkaHandle)
     }
 
-    typealias RebalanceCallback = (KafkaEvent) -> ()
-    final class RebalanceCallbackStorage {
+    typealias RebalanceCallback = @Sendable (KafkaEvent) -> ()
+    final class RebalanceCallbackStorage: Sendable {
         let rebalanceCallback: RebalanceCallback
         
         init(rebalanceCallback: @escaping RebalanceCallback) {
@@ -346,9 +346,12 @@ final class RDKafkaClient: Sendable {
     /// Poll the event `rd_kafka_queue_t` for new events.
     ///
     /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
-    func eventPoll(maxEvents: Int = 100) -> [KafkaEvent] {
-        var events = [KafkaEvent]()
+    func eventPoll(events: inout [KafkaEvent], maxEvents: Int = 100) -> Bool /* should sleep */ {
+//        var events = [KafkaEvent]()
+        events.removeAll(keepingCapacity: true)
         events.reserveCapacity(maxEvents)
+        
+        var shouldSleep = true
 
         for _ in 0..<maxEvents {
             let event = rd_kafka_queue_poll(self.queue, 0)
@@ -363,10 +366,12 @@ final class RDKafkaClient: Sendable {
             case .deliveryReport:
                 let forwardEvent = self.handleDeliveryReportEvent(event)
                 events.append(forwardEvent)
+                shouldSleep = false
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
                 self.handleOffsetCommitEvent(event)
+                shouldSleep = false
             case .statistics:
                 events.append(self.handleStatistics(event))
             case .rebalance:
@@ -395,13 +400,13 @@ final class RDKafkaClient: Sendable {
 //                break
             case .none:
                 // Finished reading events, return early
-                return events
+                return shouldSleep
             default:
                 break // Ignored Event
             }
         }
 
-        return events
+        return shouldSleep
     }
 
     /// Handle event of type `RDKafkaEvent.deliveryReport`.
