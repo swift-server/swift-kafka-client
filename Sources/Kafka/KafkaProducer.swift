@@ -116,10 +116,16 @@ public final class KafkaProducer: Service, Sendable {
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
+        var subscribedEvents: [RDKafkaEvent] = [.log] // No .deliveryReport here!
+
+        if configuration.metrics.enabled {
+            subscribedEvents.append(.statistics)
+        }
+
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: configuration.dictionary,
-            events: [.log], // No .deliveryReport here!
+            events: subscribedEvents,
             logger: logger
         )
 
@@ -156,10 +162,16 @@ public final class KafkaProducer: Service, Sendable {
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
+        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
+        // Listen to statistics events when statistics enabled
+        if configuration.metrics.enabled {
+            subscribedEvents.append(.statistics)
+        }
+
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: configuration.dictionary,
-            events: [.log, .deliveryReport],
+            events: subscribedEvents,
             logger: logger
         )
 
@@ -212,9 +224,12 @@ public final class KafkaProducer: Service, Sendable {
             case .pollAndYield(let client, let source):
                 let events = client.eventPoll()
                 for event in events {
-                    let producerEvent = KafkaProducerEvent(event)
-                    // Ignore YieldResult as we don't support back pressure in KafkaProducer
-                    _ = source?.yield(producerEvent)
+                    switch event {
+                    case .statistics(let statistics):
+                        self.configuration.metrics.update(with: statistics)
+                    case .deliveryReport(let reports):
+                        _ = source?.yield(.deliveryReports(reports))
+                    }
                 }
                 try await Task.sleep(for: self.configuration.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):

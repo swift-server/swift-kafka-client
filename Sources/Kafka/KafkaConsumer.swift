@@ -146,6 +146,7 @@ public final class KafkaConsumer: Sendable, Service {
         NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
         KafkaConsumerMessagesDelegate
     >
+
     /// The configuration object of the consumer client.
     private let configuration: KafkaConsumerConfiguration
     /// A logger.
@@ -222,6 +223,9 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
+        if configuration.metrics.enabled {
+            subscribedEvents.append(.statistics)
+        }
 
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
@@ -261,6 +265,9 @@ public final class KafkaConsumer: Sendable, Service {
         // Only listen to offset commit events when autoCommit is false
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
+        }
+        if configuration.metrics.enabled {
+            subscribedEvents.append(.statistics)
         }
 
         let client = try RDKafkaClient.makeClient(
@@ -374,7 +381,15 @@ public final class KafkaConsumer: Sendable, Service {
             switch nextAction {
             case .pollForEvents(let client):
                 // Event poll to serve any events queued inside of `librdkafka`.
-                _ = client.eventPoll()
+                let events = client.eventPoll()
+                for event in events {
+                    switch event {
+                    case .statistics(let statistics):
+                        self.configuration.metrics.update(with: statistics)
+                    default:
+                        break
+                    }
+                }
                 try await Task.sleep(for: self.configuration.pollInterval)
             case .terminatePollLoop:
                 return

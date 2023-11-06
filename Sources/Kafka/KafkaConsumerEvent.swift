@@ -19,6 +19,8 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
 
     internal init(_ event: RDKafkaClient.KafkaEvent) {
         switch event {
+        case .statistics:
+            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         case .deliveryReport:
             fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         }

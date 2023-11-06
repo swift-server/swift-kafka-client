@@ -23,6 +23,8 @@ public enum KafkaProducerEvent: Sendable, Hashable {
         switch event {
         case .deliveryReport(results: let results):
             self = .deliveryReports(results)
+        case .statistics:
+            fatalError("Cannot cast \(event) to KafkaProducerEvent")
         }
     }
 }

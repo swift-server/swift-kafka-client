@@ -12,8 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+@testable import CoreMetrics // for MetricsSystem.bootstrapInternal
 @testable import Kafka
 import Logging
+import Metrics
+import MetricsTestKit
 import NIOCore
 import ServiceLifecycle
 import XCTest
@@ -38,6 +41,7 @@ final class KafkaProducerTests: XCTestCase {
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
     var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
     var config: KafkaProducerConfiguration!
+    var metrics: TestMetrics! = TestMetrics()
 
     override func setUpWithError() throws {
         self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
@@ -49,11 +53,16 @@ final class KafkaProducerTests: XCTestCase {
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         self.config.broker.addressFamily = .v4
+
+        MetricsSystem.bootstrapInternal(self.metrics)
     }
 
     override func tearDownWithError() throws {
         self.bootstrapBrokerAddress = nil
         self.config = nil
+
+        self.metrics = nil
+        MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
 
     func testSend() async throws {
@@ -339,5 +348,33 @@ final class KafkaProducerTests: XCTestCase {
         events = nil
 
         XCTAssertNil(producerCopy)
+    }
+
+    func testProducerStatistics() async throws {
+        self.config.metrics.updateInterval = .milliseconds(100)
+        self.config.metrics.queuedOperation = .init(label: "operations")
+
+        let producer = try KafkaProducer(
+            configuration: self.config,
+            logger: .kafkaTest
+        )
+
+        let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .seconds(1))
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+
+        let value = try metrics.expectGauge("operations").lastValue
+        XCTAssertNotNil(value)
     }
 }
