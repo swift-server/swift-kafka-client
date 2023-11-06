@@ -310,6 +310,9 @@ public final class KafkaConsumer: Sendable, Service {
                     // events always provided before streaming from kafka
                     fatalError("Events source is not provided")
                 }
+                // FIXME: in fact, it is better to put to messages sequence
+                // but so far there is no particular design for rebalance
+                // so, let's put it to events as previously
                 _ = events.yield(.init(rebalanceEvent))
             }
         } else {
