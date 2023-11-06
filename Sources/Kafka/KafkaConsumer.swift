@@ -807,7 +807,12 @@ extension KafkaConsumer {
             case .running(let client, _, let eventSource):
                 return .pollForEvents(client: client, eventSource: eventSource)
             case .finishing(let client, let eventSource):
-                return .pollForEvents(client: client, eventSource: eventSource)
+                if client.isConsumerClosed {
+                    self.state = .finished
+                    return .terminatePollLoop
+                } else {
+                    return .pollForEvents(client: client, eventSource: eventSource)
+                }
             case .finished:
                 return .terminatePollLoop
             }
