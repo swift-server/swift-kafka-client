@@ -122,7 +122,7 @@ public final class KafkaProducer: Service, Sendable {
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
         configuration: KafkaProducerSharedProperties,
         topicConfiguration: KafkaTopicConfiguration
-    ) throws {
+    ) {
         self.stateMachine = stateMachine
         self.configuration = configuration
         self.topicConfiguration = topicConfiguration
@@ -164,7 +164,7 @@ public final class KafkaProducer: Service, Sendable {
             )
         }
 
-        try self.init(
+        self.init(
             stateMachine: stateMachine,
             configuration: configuration,
             topicConfiguration: configuration.topicConfiguration
@@ -198,42 +198,34 @@ public final class KafkaProducer: Service, Sendable {
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
+        let client = try RDKafkaClient.makeClient(
+            type: .producer,
+            configDictionary: configuration.dictionary,
+            events: [.log, .deliveryReport],
+            logger: logger
+        )
+
+        let producer = KafkaProducer(
+            stateMachine: stateMachine,
+            configuration: configuration,
+            topicConfiguration: configuration.topicConfiguration
+        )
+
+        // Note:
+        // It's crucial to initialize the `sourceAndSequence` variable AFTER `client`.
+        // This order is important to prevent the accidental triggering of `KafkaProducerCloseOnTerminate.didTerminate()`.
+        // If this order is not met and `RDKafkaClient.makeClient()` fails,
+        // it leads to a call to `stateMachine.stopConsuming()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaProducerEvent.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
-        let source = sourceAndSequence.source
-        
-        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
-        // Listen to statistics events when statistics enabled
-        if configuration.statisticsInterval != .disable {
-            subscribedEvents.append(.statistics)
-        }
-
-        var client: RDKafkaClient!
-        var producer: KafkaProducer!
-        do {
-            client = try RDKafkaClient.makeClient(
-                type: .producer,
-                configDictionary: configuration.dictionary,
-                events: subscribedEvents,
-                logger: logger
-            )
-            
-            producer = try KafkaProducer(
-                stateMachine: stateMachine,
-                configuration: configuration,
-                topicConfiguration: configuration.topicConfiguration
-            )
-        } catch {
-            fatalError("Catch error \(error)")
-        }
 
         stateMachine.withLockedValue {
             $0.initialize(
                 client: client,
-                source: source
+                source: sourceAndSequence.source
             )
         }
 
@@ -253,18 +245,16 @@ public final class KafkaProducer: Service, Sendable {
     }
 
     private func _run() async throws {
-        var events = [RDKafkaClient.KafkaEvent]()
-        var maxEvents = 100
         var pollInterval = self.configuration.pollInterval
+        var events = [RDKafkaClient.KafkaEvent]()
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollWithoutYield(let client):
                 // Drop any incoming events
-//                let _ = client.eventPoll()
-                _ = client.eventPoll(events: &events, maxEvents: &maxEvents)
+                _ = client.eventPoll(events: &events)
             case .pollAndYield(let client, let source):
-                let shouldSleep = client.eventPoll(events: &events, maxEvents: &maxEvents)
+                let shouldSleep = client.eventPoll(events: &events)
                 for event in events {
                     switch event {
                     case .deliveryReport(let reports):
@@ -302,7 +292,7 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// This method flushes any buffered messages and waits until a callback is received for all of them.
     /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
-    private func triggerGracefulShutdown() {
+    public func triggerGracefulShutdown() {
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
@@ -376,7 +366,7 @@ extension KafkaProducer {
             /// All incoming events will be dropped.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case consumptionStopped(client: RDKafkaClient)
+            case eventConsumptionFinished(client: RDKafkaClient)
             /// ``KafkaProducer/triggerGracefulShutdown()`` was invoked so we are flushing
             /// any messages that wait to be sent and serve any remaining queued callbacks.
             ///
@@ -441,7 +431,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
                 return .pollAndYield(client: client, source: source)
-            case .consumptionStopped(let client):
+            case .eventConsumptionFinished(let client):
                 return .pollWithoutYield(client: client)
             case .finishing(let client, let source):
                 return .flushFinishSourceAndTerminatePollLoop(client: client, source: source)
@@ -482,7 +472,7 @@ extension KafkaProducer {
                     newMessageID: newMessageID,
                     topicHandles: topicHandles
                 )
-            case .consumptionStopped:
+            case .eventConsumptionFinished:
                 throw KafkaError.connectionClosed(reason: "Sequence consuming events was abruptly terminated, producer closed")
             case .finishing:
                 throw KafkaError.connectionClosed(reason: "Producer in the process of finishing")
@@ -505,10 +495,10 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .consumptionStopped:
+            case .eventConsumptionFinished:
                 fatalError("messageSequenceTerminated() must not be invoked more than once")
             case .started(let client, _, let source, _):
-                self.state = .consumptionStopped(client: client)
+                self.state = .eventConsumptionFinished(client: client)
                 return .finishSource(source: source)
             case .finishing(let client, let source):
                 // Setting source to nil to prevent incoming events from buffering in `source`
@@ -529,7 +519,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
                 self.state = .finishing(client: client, source: source)
-            case .consumptionStopped(let client):
+            case .eventConsumptionFinished(let client):
                 self.state = .finishing(client: client, source: nil)
             case .finishing, .finished:
                 break
@@ -542,7 +532,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, _, _):
                 return client
-            case .consumptionStopped(let client):
+            case .eventConsumptionFinished(let client):
                 return client
             case .finishing(let client, _):
                 return client

@@ -50,11 +50,8 @@ final class KafkaConsumerTests: XCTestCase {
 
         let consumer = try KafkaConsumer(configuration: config, logger: mockLogger)
 
-        let serviceGroup = ServiceGroup(
-            services: [consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task

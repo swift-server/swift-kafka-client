@@ -69,7 +69,7 @@ public enum KafkaConfiguration {
             }
 
             /// Disable the intervalled refresh (not recommended).
-            public static let disable: RefreshInterval = .init(rawValue: -1)
+            public static let disabled: RefreshInterval = .init(rawValue: -1)
         }
 
         /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions or partition leader changes.
@@ -165,7 +165,7 @@ public enum KafkaConfiguration {
             }
 
             /// Disable disconnecting from the broker on a number of send failures.
-            public static let disable: MaximumFailures = .init(rawValue: 0)
+            public static let disabled: MaximumFailures = .init(rawValue: 0)
         }
 
         /// Disconnect from the broker when this number of send failures (e.g., timed-out requests) is reached.
@@ -224,7 +224,7 @@ public enum KafkaConfiguration {
             }
 
             /// Disable the backoff and reconnect immediately.
-            public static let disable: Backoff = .init(rawValue: 0)
+            public static let disabled: Backoff = .init(rawValue: 0)
         }
 
         /// The initial time to wait before reconnecting to a broker after the connection has been closed.

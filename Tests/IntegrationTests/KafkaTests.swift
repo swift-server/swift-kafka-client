@@ -106,11 +106,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup = ServiceGroup(
-            services: [producer, consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -130,10 +127,7 @@ final class KafkaTests: XCTestCase {
             // Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer.messages {
                     consumedMessages.append(message)
 
                     if consumedMessages.count >= testMessages.count {
@@ -187,11 +181,8 @@ final class KafkaTests: XCTestCase {
         let continuation = cont
 
 
-        let serviceGroup = ServiceGroup(
-            services: [producer, /*consumer, */cons],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -240,10 +231,11 @@ final class KafkaTests: XCTestCase {
 //            }
 //
             group.addTask {
-                logger2.info("Task for cons started")
-                var aa = 0
-                for try await messageResult in cons.messages {
-                    if aa >= testMessages.count {
+                var consumedMessages = [KafkaConsumerMessage]()
+                for try await message in consumer.messages {
+                    consumedMessages.append(message)
+
+                    if consumedMessages.count >= testMessages.count {
                         break
                     }
                     continuation?.yield(messageResult)
@@ -274,7 +266,7 @@ final class KafkaTests: XCTestCase {
     }
     #endif
 
-    func testProduceAndConsumeWithCommitSync() async throws {
+    func testProduceAndConsumeWithScheduleCommit() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
@@ -291,14 +283,135 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup = ServiceGroup(
-            services: [producer, consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Consumer Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+
+            // Consumer Task
+            group.addTask {
+                var consumedMessages = [KafkaConsumerMessage]()
+                for try await message in consumer.messages {
+                    consumedMessages.append(message)
+                    try consumer.scheduleCommit(message)
+
+                    if consumedMessages.count >= testMessages.count {
+                        break
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+            }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    func testProduceAndConsumeWithCommit() async throws {
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.isAutoCommitEnabled = false
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.broker.addressFamily = .v4
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Consumer Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+
+            // Consumer Task
+            group.addTask {
+                var consumedMessages = [KafkaConsumerMessage]()
+                for try await message in consumer.messages {
+                    consumedMessages.append(message)
+                    try await consumer.commit(message)
+
+                    if consumedMessages.count >= testMessages.count {
+                        break
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+            }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    func testProduceAndConsumeWithMessageHeaders() async throws {
+        let testMessages = Self.createTestMessages(
+            topic: self.uniqueTestTopic,
+            headers: [
+                KafkaHeader(key: "some.header", value: ByteBuffer(string: "some-header-value")),
+                KafkaHeader(key: "some.null.header", value: nil),
+            ],
+            count: 10
+        )
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.isAutoCommitEnabled = false
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.broker.addressFamily = .v4
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
             group.addTask {
                 try await serviceGroup.run()
             }
@@ -320,7 +433,7 @@ final class KafkaTests: XCTestCase {
                         continue
                     }
                     consumedMessages.append(message)
-                    try await consumer.commitSync(message)
+                    try await consumer.commit(message)
 
                     if consumedMessages.count >= testMessages.count {
                         break
@@ -328,6 +441,10 @@ final class KafkaTests: XCTestCase {
                 }
 
                 XCTAssertEqual(testMessages.count, consumedMessages.count)
+
+                for (index, consumedMessage) in consumedMessages.enumerated() {
+                    XCTAssertEqual(testMessages[index].headers, consumedMessage.headers)
+                }
             }
 
             // Wait for Producer Task and Consumer Task to complete
@@ -335,6 +452,69 @@ final class KafkaTests: XCTestCase {
             try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    func testNoNewConsumerMessagesAfterGracefulShutdown() async throws {
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 2)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        let uniqueGroupID = UUID().uuidString
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: [self.uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning // Read topic from beginning
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer, consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+
+            // Wait for Producer Task to complete
+            try await group.next()
+
+            // Verify that we receive the first message
+            var consumerIterator = consumer.messages.makeAsyncIterator()
+
+            let consumedMessage = try await consumerIterator.next()
+            XCTAssertEqual(testMessages.first!.topic, consumedMessage!.topic)
+            XCTAssertEqual(ByteBuffer(string: testMessages.first!.key!), consumedMessage!.key)
+            XCTAssertEqual(ByteBuffer(string: testMessages.first!.value), consumedMessage!.value)
+
+            // Trigger a graceful shutdown
+            await serviceGroup.triggerGracefulShutdown()
+
+            // Wait to ensure the KafkaConsumer's shutdown handler has
+            // been invoked.
+            try await Task.sleep(for: .seconds(2))
+
+            // We should not be able to read any new messages after the KafkaConsumer's
+            // shutdown handler was invoked
+            let stoppedConsumingMessage = try await consumerIterator.next()
+            XCTAssertNil(stoppedConsumingMessage)
         }
     }
 
@@ -363,11 +543,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup1 = ServiceGroup(
-            services: [producer, consumer1],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration1 = ServiceGroupConfiguration(services: [producer, consumer1], logger: .kafkaTest)
+        let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -387,10 +564,7 @@ final class KafkaTests: XCTestCase {
             // First Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer1.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer1.messages {
                     consumedMessages.append(message)
 
                     // Only read first half of messages
@@ -440,11 +614,8 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroup2 = ServiceGroup(
-            services: [consumer2],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer2], logger: .kafkaTest)
+        let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -455,10 +626,7 @@ final class KafkaTests: XCTestCase {
             // Second Consumer Task
             group.addTask {
                 var consumedMessages = [KafkaConsumerMessage]()
-                for try await messageResult in consumer2.messages {
-                    guard case let message = messageResult else {
-                        continue
-                    }
+                for try await message in consumer2.messages {
                     consumedMessages.append(message)
 
                     // Read second half of messages
@@ -485,11 +653,16 @@ final class KafkaTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static func createTestMessages(topic: String, count: UInt) -> [KafkaProducerMessage<String, String>] {
+    private static func createTestMessages(
+        topic: String,
+        headers: [KafkaHeader] = [],
+        count: UInt
+    ) -> [KafkaProducerMessage<String, String>] {
         return Array(0..<count).map {
             KafkaProducerMessage(
                 topic: topic,
-                key: "key \($0)",
+                headers: headers,
+                key: "key",
                 value: "Hello, World! \($0) - \(Date().description)"
             )
         }

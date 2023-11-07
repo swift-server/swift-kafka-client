@@ -113,8 +113,6 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
             self = .rebalance(action)
         case .deliveryReport:
             fatalError("Cannot cast \(event) to KafkaConsumerEvent")
-        case .consumerMessages:
-            fatalError("Consumer messages should be handled in the KafkaConsumerMessages asynchronous sequence")
         }
     }
 }

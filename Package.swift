@@ -46,7 +46,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.55.0"),
-        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.0.0-alpha.1"),
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.0.0-beta.1"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
         // The zstd Swift package produces warnings that we cannot resolve:
         // https://github.com/facebook/zstd/issues/3328

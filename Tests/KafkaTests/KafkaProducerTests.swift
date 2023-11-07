@@ -59,11 +59,8 @@ final class KafkaProducerTests: XCTestCase {
     func testSend() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -117,11 +114,8 @@ final class KafkaProducerTests: XCTestCase {
     func testSendEmptyMessage() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -173,11 +167,8 @@ final class KafkaProducerTests: XCTestCase {
     func testSendTwoTopics() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -251,11 +242,8 @@ final class KafkaProducerTests: XCTestCase {
 
         let producer = try KafkaProducer(configuration: config, logger: mockLogger)
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -286,11 +274,8 @@ final class KafkaProducerTests: XCTestCase {
     func testSendFailsAfterTerminatingAcknowledgementSequence() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -338,11 +323,8 @@ final class KafkaProducerTests: XCTestCase {
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Initialize serviceGroup here so it gets dereferenced when this closure is complete
-            let serviceGroup = ServiceGroup(
-                services: [producer!],
-                configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-                logger: .kafkaTest
-            )
+            let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer!], logger: .kafkaTest)
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
             // Run Task
             group.addTask {
