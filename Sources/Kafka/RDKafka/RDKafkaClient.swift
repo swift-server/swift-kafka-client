@@ -893,6 +893,10 @@ final class RDKafkaClient: Sendable {
             }
             defer { rd_kafka_error_destroy(error) }
 
+            if rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE { // No active transaction
+                return
+            }
+
             /* check if transaction abort is retriable */
             if rd_kafka_error_is_retriable(error) == 1 {
                 continue
