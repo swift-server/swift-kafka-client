@@ -297,7 +297,7 @@ public final class KafkaConsumer: Sendable, Service {
         // we assign events once, so it is always thread safe -> @unchecked Sendable
         // but before start of consumer
         final class EventsInFutureWrapper: @unchecked Sendable {
-            var events: KafkaConsumer.ProducerEvents.Source? = nil
+            weak var consumer: KafkaConsumer? = nil
         }
         
         let wrapper = EventsInFutureWrapper()
@@ -306,14 +306,16 @@ public final class KafkaConsumer: Sendable, Service {
         let rebalanceCallBackStorage: RDKafkaClient.RebalanceCallbackStorage?
         if configuration.listenForRebalance {
             rebalanceCallBackStorage = RDKafkaClient.RebalanceCallbackStorage { rebalanceEvent in
-                guard let events = wrapper.events else {
-                    // events always provided before streaming from kafka
-                    fatalError("Events source is not provided")
+                let action = wrapper.consumer?.stateMachine.withLockedValue { $0.nextEventPollLoopAction() }
+                switch action {
+                case .pollForEvents(_, let eventSource):
+                    // FIXME: in fact, it is better to put to messages sequence
+                    // but so far there is no particular design for rebalance
+                    // so, let's put it to events as previously
+                    _ = eventSource?.yield(.init(rebalanceEvent))
+                default:
+                    return
                 }
-                // FIXME: in fact, it is better to put to messages sequence
-                // but so far there is no particular design for rebalance
-                // so, let's put it to events as previously
-                _ = events.yield(.init(rebalanceEvent))
             }
         } else {
             rebalanceCallBackStorage = nil
@@ -339,7 +341,6 @@ public final class KafkaConsumer: Sendable, Service {
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
         )
-        wrapper.events = sourceAndSequence.source
         
         let consumer = try KafkaConsumer(
             client: client,
@@ -349,6 +350,7 @@ public final class KafkaConsumer: Sendable, Service {
             eventSource: sourceAndSequence.source,
             rebalanceCbStorage: rebalanceCallBackStorage
         )
+        wrapper.consumer = consumer
 
         let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
         return (consumer, eventsSequence)
