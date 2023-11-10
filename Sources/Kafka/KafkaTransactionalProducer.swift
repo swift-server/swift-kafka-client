@@ -101,4 +101,12 @@ public final class KafkaTransactionalProducer: Service, Sendable {
     public func run() async throws {
         try await self.producer.run()
     }
+
+    /// Method to shutdown the ``KafkaTransactionalProducer``.
+    ///
+    /// This method flushes any buffered messages and waits until a callback is received for all of them.
+    /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
+    public func triggerGracefulShutdown() {
+        self.producer.triggerGracefulShutdown()
+    }
 }

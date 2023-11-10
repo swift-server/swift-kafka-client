@@ -10,6 +10,19 @@ internal func performBlockingCall<T>(queue: DispatchQueue, body: @escaping () ->
     }
 }
 
+// performs blocking calls outside of cooperative thread pool
+internal func performBlockingCall<T>(queue: DispatchQueue, body: @escaping () throws -> T) async throws -> T {
+    try await withCheckedThrowingContinuation { continuation in
+        queue.async {
+            do {
+                continuation.resume(returning: try body())
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+}
+
 // TODO: remove
 /* typealias Producer = NIOAsyncSequenceProducer<
 KafkaProducerEvent,

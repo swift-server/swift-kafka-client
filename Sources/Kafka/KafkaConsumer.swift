@@ -388,13 +388,13 @@ public final class KafkaConsumer: Sendable, Service {
         topic: String,
         partition: KafkaPartition,
         offset: KafkaOffset
-    ) throws {
+    ) async throws {
         let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
         switch action {
         case .setUpConnection(let client):
             let assignment = RDKafkaTopicPartitionList()
             assignment.setOffset(topic: topic, partition: partition, offset: offset)
-            try client.assign(topicPartitionList: assignment)
+            try await client.assign(topicPartitionList: assignment)
         }
     }
     
@@ -415,31 +415,31 @@ public final class KafkaConsumer: Sendable, Service {
     }
         
     
-    public func assign(_ list: KafkaTopicList?) throws {
+    public func assign(_ list: KafkaTopicList?) async throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
         switch action {
         case .allowed(let client):
-            try client.assign(topicPartitionList: list?.list)
+            try await client.assign(topicPartitionList: list?.list)
         case .denied(let err):
             throw KafkaError.client(reason: err)
         }
     }
     
-    public func incrementalAssign(_ list: KafkaTopicList) throws {
+    public func incrementalAssign(_ list: KafkaTopicList) async throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
         switch action {
         case .allowed(let client):
-            try client.incrementalAssign(topicPartitionList: list.list)
+            try await client.incrementalAssign(topicPartitionList: list.list)
         case .denied(let err):
             throw KafkaError.client(reason: err)
         }
     }
     
-    public func incrementalUnassign(_ list: KafkaTopicList) throws {
+    public func incrementalUnassign(_ list: KafkaTopicList) async throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
         switch action {
         case .allowed(let client):
-            try client.incrementalUnassign(topicPartitionList: list.list)
+            try await client.incrementalUnassign(topicPartitionList: list.list)
         case .denied(let err):
             throw KafkaError.client(reason: err)
         }
@@ -451,16 +451,6 @@ public final class KafkaConsumer: Sendable, Service {
         switch action {
         case .allowed(let client):
             try await client.seek(topicPartitionList: list.list, timeout: timeout)
-        case .denied(let err):
-            throw KafkaError.client(reason: err)
-        }
-    }
-
-    public func seek(_ list: KafkaTopicList) throws {
-        let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
-        switch action {
-        case .allowed(let client):
-            try client.seek(topicPartitionList: list.list)
         case .denied(let err):
             throw KafkaError.client(reason: err)
         }
@@ -480,7 +470,7 @@ public final class KafkaConsumer: Sendable, Service {
     private func _run() async throws {
         switch self.configuration.consumptionStrategy._internal {
         case .partition(topic: let topic, partition: let partition, offset: let offset):
-            try self.assign(topic: topic, partition: partition, offset: offset)
+            try await self.assign(topic: topic, partition: partition, offset: offset)
         case .group(groupID: _, topics: let topics):
             try self.subscribe(topics: topics)
         }

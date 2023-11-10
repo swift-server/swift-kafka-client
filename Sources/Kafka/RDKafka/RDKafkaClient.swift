@@ -551,8 +551,10 @@ final class RDKafkaClient: Sendable {
     }
     /// Atomic  incremental assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
-    func incrementalAssign(topicPartitionList: RDKafkaTopicPartitionList) throws {
-        let error = topicPartitionList.withListPointer { rd_kafka_incremental_assign(self.kafkaHandle, $0) }
+    func incrementalAssign(topicPartitionList: RDKafkaTopicPartitionList) async throws {
+        let error = await performBlockingCall(queue: self.gcdQueue) {
+            topicPartitionList.withListPointer { rd_kafka_incremental_assign(self.kafkaHandle, $0) }
+        }
 
         defer { rd_kafka_error_destroy(error) }
         let code = rd_kafka_error_code(error)
@@ -563,8 +565,10 @@ final class RDKafkaClient: Sendable {
     
     /// Atomic incremental unassignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
-    func incrementalUnassign(topicPartitionList: RDKafkaTopicPartitionList) throws {
-        let error = topicPartitionList.withListPointer { rd_kafka_incremental_unassign(self.kafkaHandle, $0) }
+    func incrementalUnassign(topicPartitionList: RDKafkaTopicPartitionList) async throws {
+        let error = await performBlockingCall(queue: self.gcdQueue) {
+            topicPartitionList.withListPointer { rd_kafka_incremental_unassign(self.kafkaHandle, $0) }
+        }
 
         defer { rd_kafka_error_destroy(error) }
         let code = rd_kafka_error_code(error)
@@ -576,27 +580,15 @@ final class RDKafkaClient: Sendable {
     /// Seek for partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func seek(topicPartitionList: RDKafkaTopicPartitionList, timeout: Duration) async throws {
+        assert(timeout >= .zero, "Timeout must be positive")
+
         let doSeek = {
-            topicPartitionList.withListPointer { rd_kafka_seek_partitions(self.kafkaHandle, $0, Int32(timeout.inMilliseconds)) }
+            topicPartitionList.withListPointer { rd_kafka_seek_partitions(self.kafkaHandle, $0, Int32(max(timeout, .zero).inMilliseconds)) }
         }
         let error =
             timeout == .zero
             ? doSeek() // async when timeout is zero
             : await performBlockingCall(queue: gcdQueue, body: doSeek)
-        
-        defer { rd_kafka_error_destroy(error) }
-        let code = rd_kafka_error_code(error)
-        if code != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: code)
-        }
-    }
-
-    /// Seek for partitions to consume.
-    /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
-    func seek(topicPartitionList: RDKafkaTopicPartitionList) throws {
-        let error = topicPartitionList.withListPointer {
-            rd_kafka_seek_partitions(self.kafkaHandle, $0, 0)
-        }
         
         defer { rd_kafka_error_destroy(error) }
         let code = rd_kafka_error_code(error)
@@ -626,19 +618,15 @@ final class RDKafkaClient: Sendable {
 
     /// Atomic assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
-    func assign(topicPartitionList: RDKafkaTopicPartitionList?) throws {
-        if let topicPartitionList {
-            try topicPartitionList.withListPointer { pointer in
-                try doOrThrow {
+    func assign(topicPartitionList: RDKafkaTopicPartitionList?) async throws {
+        let result = await performBlockingCall(queue: self.gcdQueue) {
+            if let topicPartitionList {
+                return topicPartitionList.withListPointer { pointer in
                     rd_kafka_assign(self.kafkaHandle, pointer)
                 }
-//                try doOrThrow {
-//                    rd_kafka_offsets_store(self.kafkaHandle, pointer)
-//                }
             }
-            return
+            return rd_kafka_assign(self.kafkaHandle, nil)
         }
-        let result = rd_kafka_assign(self.kafkaHandle, nil)
         if result != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: result)
         }
