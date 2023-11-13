@@ -12,8 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Kafka
 import Benchmark
+import Kafka
 
 let benchmarks = {
     Benchmark.defaultConfiguration = .init(
@@ -23,12 +23,8 @@ let benchmarks = {
         maxDuration: .seconds(5),
         maxIterations: 100
     )
-    
-    Benchmark.setup = {
-        
-    }
-    
-    Benchmark.teardown = {
 
-    }
+    Benchmark.setup = {}
+
+    Benchmark.teardown = {}
 }

@@ -33,7 +33,7 @@ let package = Package(
             ],
             path: "Benchmarks/SwiftKafkaConsumerBenchmarks",
             plugins: [
-                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+                .plugin(name: "BenchmarkPlugin", package: "package-benchmark"),
             ]
         ),
         .executableTarget(
@@ -44,7 +44,7 @@ let package = Package(
             ],
             path: "Benchmarks/SwiftKafkaProducerBenchmarks",
             plugins: [
-                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+                .plugin(name: "BenchmarkPlugin", package: "package-benchmark"),
             ]
         ),
     ]
