@@ -164,8 +164,6 @@ public final class KafkaConsumer: Sendable, Service {
     /// State of the `KafkaConsumer`.
     private let stateMachine: NIOLockedValueBox<StateMachine>
     
-    private let rebalanceCbStorage: RDKafkaClient.RebalanceCallbackStorage?
-
     /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
 
@@ -185,13 +183,11 @@ public final class KafkaConsumer: Sendable, Service {
         stateMachine: NIOLockedValueBox<StateMachine>,
         configuration: KafkaConsumerConfiguration,
         logger: Logger,
-        eventSource: ProducerEvents.Source? = nil,
-        rebalanceCbStorage: RDKafkaClient.RebalanceCallbackStorage? = nil
+        eventSource: ProducerEvents.Source? = nil
     ) throws {
         self.configuration = configuration
         self.stateMachine = stateMachine
         self.logger = logger
-        self.rebalanceCbStorage = rebalanceCbStorage // save to avoid destruction
         
         
         let sourceAndSequence = NIOThrowingAsyncSequenceProducer.makeSequence(
@@ -347,8 +343,7 @@ public final class KafkaConsumer: Sendable, Service {
             stateMachine: stateMachine,
             configuration: configuration,
             logger: logger,
-            eventSource: sourceAndSequence.source,
-            rebalanceCbStorage: rebalanceCallBackStorage
+            eventSource: sourceAndSequence.source
         )
         wrapper.consumer = consumer
 

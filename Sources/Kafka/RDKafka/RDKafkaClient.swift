@@ -35,6 +35,8 @@ final class RDKafkaClient: Sendable {
 
     /// `librdkafka`'s `rd_kafka_queue_t` that events are received on.
     private let queue: OpaquePointer
+    
+    private let rebalanceCallBackStorage: RebalanceCallbackStorage?
 
     /// Queue for blocking calls outside of cooperative thread pool
     private var gcdQueue: DispatchQueue {
@@ -46,11 +48,13 @@ final class RDKafkaClient: Sendable {
     private init(
         type: ClientType,
         kafkaHandle: OpaquePointer,
-        logger: Logger
+        logger: Logger,
+        rebalanceCallBackStorage: RebalanceCallbackStorage? = nil
     ) {
         self.kafkaHandle = kafkaHandle
         self.logger = logger
         self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
+        self.rebalanceCallBackStorage = rebalanceCallBackStorage
 
         rd_kafka_set_log_queue(self.kafkaHandle, self.queue)
     }
@@ -133,7 +137,7 @@ final class RDKafkaClient: Sendable {
             throw KafkaError.client(reason: errorString)
         }
 
-        return RDKafkaClient(type: type, kafkaHandle: handle, logger: logger)
+        return RDKafkaClient(type: type, kafkaHandle: handle, logger: logger, rebalanceCallBackStorage: rebalanceCallBackStorage)
     }
 
     /// Produce a message to the Kafka cluster.
