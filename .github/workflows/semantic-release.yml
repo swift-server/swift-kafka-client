@@ -19,7 +19,7 @@ jobs:
           branches:
             - main
             - name: 'next'
-              prerelease: 'ordoalpha'
+              prerelease: true
           preset: 'conventionalcommits'
           tagFormat: '\${version}'
           plugins:

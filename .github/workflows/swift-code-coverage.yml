@@ -1,0 +1,46 @@
+name: Swift code coverage
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  test-code-coverage:
+    runs-on: [ubuntu-22.04]
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Ubuntu deps
+      if: ${{ runner.os == 'Linux' }}
+      run: |
+        sudo apt-get install -y libjemalloc-dev llvm-15
+
+    - name: Start consul
+      uses: ./.github/actions/consul-start
+
+    - name: Run tests
+      continue-on-error: true
+      run: |
+        [ -d Tests ] && swift test --parallel --enable-code-coverage
+
+    - name: Export code coverage
+      run: |
+         xctest_binary=".build/debug/${{ github.event.repository.name }}PackageTests.xctest"
+         if [ ! -f ${xctest_binary} ]; then
+             xctest_binary=$(find .build/debug/ -type f -name "*.xctest" | tail -1)
+             echo "Will llvm-cov '${xctest_binary}'"
+         fi
+
+         if [ -f ${xctest_binary} ]; then
+             llvm-cov-15 export -format="lcov" ${xctest_binary} -instr-profile .build/debug/codecov/default.profdata > info.lcov
+         fi
+
+    - name: Upload codecov
+      uses: codecov/codecov-action@v2
+      with: 
+        token: ${{ secrets.CODECOV_REPO_TOKEN }} 
+        files: info.lcov
+        fail_ci_if_error: true
