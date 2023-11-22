@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -332,6 +333,31 @@ public final class KafkaProducer: Service, Sendable {
         return true
     }
 
+    public func partitionForKey(_ key: some KafkaContiguousBytes, in topic: String, partitionCount: Int) -> KafkaPartition? {
+        self.stateMachine.withLockedValue { (stateMachine) -> KafkaPartition? in
+            guard let topicHandles = stateMachine.topicHandles else {
+                return nil
+            }
+
+            let partition: Int32? = try? topicHandles.withTopicHandlePointer(topic: topic, topicConfiguration: topicConfiguration) { topicHandle in
+                key.withUnsafeBytes { buffer in
+                    switch topicConfiguration.partitioner {
+                    case .random: nil
+                    case .consistent: rd_kafka_msg_partitioner_consistent_random(topicHandle, buffer.baseAddress, buffer.count, Int32(partitionCount), nil, nil)
+                    case .consistentRandom: buffer.count == 0 ? nil : rd_kafka_msg_partitioner_consistent_random(topicHandle, buffer.baseAddress, buffer.count, Int32(partitionCount), nil, nil)
+                    case .murmur2: rd_kafka_msg_partitioner_murmur2(topicHandle, buffer.baseAddress, buffer.count, Int32(partitionCount), nil, nil)
+                    case .murmur2Random: buffer.count == 0 ? nil : rd_kafka_msg_partitioner_murmur2_random(topicHandle, buffer.baseAddress, buffer.count, Int32(partitionCount), nil, nil)
+                    case .fnv1a: rd_kafka_msg_partitioner_fnv1a(topicHandle, buffer.baseAddress, buffer.count, Int32(partitionCount), nil, nil)
+                    case .fnv1aRandom: buffer.count == 0 ? nil : rd_kafka_msg_partitioner_fnv1a_random(topicHandle, buffer.baseAddress, buffer.count, Int32(partitionCount), nil, nil)
+                    default: nil
+                    }
+                }
+            }
+
+            return partition.map { KafkaPartition(rawValue: Int($0)) }
+        }
+    }
+
     func client() throws -> RDKafkaClient {
         try self.stateMachine.withLockedValue { try $0.client() }
     }
@@ -539,6 +565,13 @@ extension KafkaProducer {
             case .finished:
                 throw KafkaError.connectionClosed(reason: "Client stopped")
             }
+        }
+
+        var topicHandles: RDKafkaTopicHandles? {
+            if case .started(_, _, _, let topicHandles) = self.state {
+                return topicHandles
+            }
+            return nil
         }
     }
 }

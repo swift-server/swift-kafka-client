@@ -109,4 +109,8 @@ public final class KafkaTransactionalProducer: Service, Sendable {
     public func triggerGracefulShutdown() {
         self.producer.triggerGracefulShutdown()
     }
+
+    public func partitionForKey(_ key: some KafkaContiguousBytes, in topic: String, partitionCount: Int) -> KafkaPartition? {
+        self.producer.partitionForKey(key, in: topic, partitionCount: partitionCount)
+    }
 }
