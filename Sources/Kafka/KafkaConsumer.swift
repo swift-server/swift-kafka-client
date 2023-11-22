@@ -189,6 +189,7 @@ public final class KafkaConsumer: Sendable, Service {
                     )
                 }
             }(),
+            finishOnDeinit: true,
             delegate: KafkaConsumerMessagesDelegate(stateMachine: self.stateMachine)
         )
 
@@ -294,6 +295,7 @@ public final class KafkaConsumer: Sendable, Service {
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerEvent.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            finishOnDeinit: true,
             delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
         )
 
