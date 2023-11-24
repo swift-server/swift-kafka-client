@@ -13,3 +13,5 @@
 //===----------------------------------------------------------------------===//
 
 #include "CNIOBoringSSL_ssl.h"
+
+#define RAND_priv_bytes(buf, num) RAND_bytes((buf), (num))
