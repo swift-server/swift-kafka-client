@@ -189,6 +189,7 @@ public final class KafkaProducer: Service, Sendable {
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaProducerEvent.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            finishOnDeinit: true,
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
 
