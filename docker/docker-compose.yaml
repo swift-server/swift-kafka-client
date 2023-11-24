@@ -34,8 +34,8 @@ services:
     depends_on: [runtime-setup]
     volumes:
       - ~/.ssh:/root/.ssh
-      - ..:/code:z
-    working_dir: /code
+      - ..:/swift-kafka-client:z
+    working_dir: /swift-kafka-client
 
   soundness:
     <<: *common
@@ -54,8 +54,26 @@ services:
     command: >
       /bin/bash -xcl "
         swift build --build-tests $${SANITIZER_ARG-} && \
-        swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-} $${STRICT_CONCURRENCY_ARG-}
+        swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-} $${STRICT_CONCURRENCY_ARG-} && \
+        cd Benchmarks && swift package --disable-sandbox benchmark baseline check --check-absolute-path Thresholds/$${SWIFT_VERSION-}/
       "
+
+  benchmark:
+    <<: *common
+    depends_on: [kafka, runtime-setup]
+    environment:
+      KAFKA_HOST: kafka
+    command: >
+      /bin/bash -xcl "
+        cd Benchmarks && swift package --disable-sandbox benchmark
+      "
+
+  update-benchmark-baseline:
+    <<: *common
+    depends_on: [kafka, runtime-setup]
+    environment:
+      KAFKA_HOST: kafka
+    command: /bin/bash -xcl "cd Benchmarks && swift package --disable-sandbox --scratch-path .build/$${SWIFT_VERSION-}/ --allow-writing-to-package-directory benchmark --format metricP90AbsoluteThresholds --path Thresholds/$${SWIFT_VERSION-}/"
 
   # util
 

@@ -15,6 +15,8 @@ ENV LANGUAGE en_US.UTF-8
 # Dependencies
 RUN apt-get update
 RUN apt-get install libsasl2-dev -y
+RUN apt-get install libjemalloc-dev -y
+
 
 # tools
 RUN mkdir -p $HOME/.tools
