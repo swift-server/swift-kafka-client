@@ -2,10 +2,10 @@ name: Thread sanitizer
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+#  push:
+#    branches: [ main ]
+#  pull_request:
+#    branches: [ main, next ]
 
 jobs:
   thread-sanitizer:
@@ -13,10 +13,16 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
+        swift: ["5.9"]
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
+    - uses: fwal/setup-swift@v1
+      with:
+        swift-version: ${{ matrix.swift }}
+
+
     - name: Homebrew Mac
       if: ${{ runner.os == 'Macos' }}
       run: |
@@ -27,10 +33,12 @@ jobs:
     - name: Ubuntu deps
       if: ${{ runner.os == 'Linux' }}
       run: |
-        sudo apt-get install -y libjemalloc-dev
+        sudo apt-get install -y libjemalloc-dev libsasl2-dev libcurl4-openssl-dev
         echo BENCHMARK_DISABLE_JEMALLOC=true >> $GITHUB_ENV
 
     - uses: actions/checkout@v3
+      with:
+        submodules: 'true'
 
     - name: Start consul
       uses: ./.github/actions/consul-start

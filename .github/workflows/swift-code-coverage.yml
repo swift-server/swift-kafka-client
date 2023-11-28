@@ -12,11 +12,13 @@ jobs:
     timeout-minutes: 60
     steps:
     - uses: actions/checkout@v3
+      with:
+        submodules: 'true'
 
     - name: Ubuntu deps
       if: ${{ runner.os == 'Linux' }}
       run: |
-        sudo apt-get install -y libjemalloc-dev llvm-15
+        sudo apt-get install -y libjemalloc-dev libsasl2-dev libcurl4-openssl-dev llvm-15
 
     - name: Start consul
       uses: ./.github/actions/consul-start

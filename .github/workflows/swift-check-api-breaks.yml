@@ -15,18 +15,13 @@ jobs:
     - uses: actions/checkout@v3
       with:
         fetch-depth: 0
+        submodules: 'true'
+
     - name: Ubuntu deps
       if: ${{ runner.os == 'Linux' }}
       run: |
-        sudo apt-get install -y libjemalloc-dev
-    - name: Extract default SPM library target
-      id: spm_target
-      run: |
-        SPM_DEFAULT_TARGET=$(swift package dump-package | jq -r '.products | .[] | select(.type | has("library")) | .name' | head -1)
-        echo "spmlibrarytarget=${SPM_DEFAULT_TARGET}" >> $GITHUB_ENV
+        sudo apt-get install -y libjemalloc-dev libsasl2-dev libcurl4-openssl-dev
     - name: Build
-      if: ${{ env.spmlibrarytarget }}
       run: swift build
     - name: Analyze API breakage
-      if: ${{ env.spmlibrarytarget }}
-      run: swift package diagnose-api-breaking-changes origin/main --targets ${{ env.spmlibrarytarget }}
+      run: swift package diagnose-api-breaking-changes origin/next

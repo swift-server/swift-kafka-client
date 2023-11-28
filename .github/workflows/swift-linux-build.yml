@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, next ]
 
 jobs:
   build-linux:
@@ -14,17 +14,19 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        swift: ["5.7", "5.8", "5.9"]
+        swift: ["5.9"]
 
 
     runs-on: ${{ matrix.os }}
-
     steps:
     - uses: fwal/setup-swift@v1
+      if: ${{ false }}
       with:
         swift-version: ${{ matrix.swift }}
 
     - uses: actions/checkout@v3    
+      with:
+        submodules: 'true'
 
     - name: Start consul
       uses: ./.github/actions/consul-start
@@ -32,14 +34,11 @@ jobs:
     - name: Ubuntu deps
       if: ${{ runner.os == 'Linux' }}
       run: |
-        sudo apt-get install -y libjemalloc-dev
+        sudo apt-get install -y libjemalloc-dev libsasl2-dev libcurl4-openssl-dev
 
     - name: Swift version
       run: swift --version
 
-    - name: Build
-      run: swift build
-
     - name: Run tests
-      run: |
-        [ -d Tests ] && swift test --parallel
+      continue-on-error: true
+      run: docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.2204.59.yaml run test

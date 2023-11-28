@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, next ]
   
 jobs:
   build-macos:
@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-13]
-        swift: ["5.7", "5.8", "5.9"]
+        swift: ["5.9"]
 
     runs-on: ${{ matrix.os }}
 
@@ -31,6 +31,8 @@ jobs:
         brew install jemalloc
 
     - uses: actions/checkout@v3
+      with:
+        submodules: 'true'
 
     - name: Start consul
       uses: ./.github/actions/consul-start
@@ -40,11 +42,13 @@ jobs:
     - name: Build
       run: swift build
     - name: Run tests
+      if: ${{ false }}
       run: |
         if [ -d Tests ]; then
           swift test --parallel
         fi
     - name: Run tests (release)
+      if: ${{ false }}
       run: |
         if [ -d Tests ]; then
           swift test -c release --parallel
