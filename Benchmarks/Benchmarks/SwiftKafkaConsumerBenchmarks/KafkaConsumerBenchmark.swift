@@ -63,8 +63,8 @@ let benchmarks = {
             logger: .perfLogger
         )
 
-        let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
-        let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             benchLog("Start consuming")
@@ -73,7 +73,7 @@ let benchmarks = {
             }
             // Run Task
             group.addTask {
-                try await serviceGroup2.run()
+                try await serviceGroup.run()
             }
 
             // Second Consumer Task
@@ -108,10 +108,10 @@ let benchmarks = {
             // Wait for second Consumer Task to complete
             try await group.next()
             // Shutdown the serviceGroup
-            await serviceGroup2.triggerGracefulShutdown()
+            await serviceGroup.triggerGracefulShutdown()
         }
     }
-
+/*
     Benchmark("SwiftKafkaConsumer - with offset commit (messages: \(messageCount))") { benchmark in
         let uniqueGroupID = UUID().uuidString
         var consumerConfig = KafkaConsumerConfiguration(
@@ -325,4 +325,5 @@ let benchmarks = {
         let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
         benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
     }
+ */
 }
