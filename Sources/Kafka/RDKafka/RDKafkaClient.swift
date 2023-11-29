@@ -526,41 +526,51 @@ final class RDKafkaClient: Sendable {
         }
     }
 
-    /// Non-blocking "fire-and-forget" commit of a `message`'s offset to Kafka.
+    /// Non-blocking "fire-and-forget" commit of a `topic`, `partition`, and `offset` to Kafka.
     /// Schedules a commit and returns immediately.
     /// Any errors encountered after scheduling the commit will be discarded.
     ///
-    /// - Parameter message: Last received message that shall be marked as read.
+    /// - Parameter topic: Topic to commit to
+    /// - Parameter partition: Partition to commit to
+    /// - Parameter offset: Offset to commit
     /// - Throws: A ``KafkaError`` if scheduling the commit failed.
-    func scheduleCommit(_ message: KafkaConsumerMessage) throws {
-        // The offset committed is always the offset of the next requested message.
-        // Thus, we increase the offset of the current message by one before committing it.
-        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        let changesList = RDKafkaTopicPartitionList()
-        changesList.setOffset(
-            topic: message.topic,
-            partition: message.partition,
-            offset: Int64(message.offset.rawValue + 1)
-        )
-
-        let error = changesList.withListPointer { listPointer in
-            return rd_kafka_commit(
-                self.kafkaHandle,
-                listPointer,
-                1 // async = true
+    func scheduleCommit(
+        topic: String,
+        partition: KafkaPartition,
+        offset: KafkaOffset) throws {
+            // The offset committed is always the offset of the next requested message.
+            // Thus, we increase the offset of the current message by one before committing it.
+            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+            let changesList = RDKafkaTopicPartitionList()
+            changesList.setOffset(
+                topic: topic,
+                partition: partition,
+                offset: Int64(offset.rawValue + 1)
             )
-        }
 
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
-        }
+            let error = changesList.withListPointer { listPointer in
+                return rd_kafka_commit(
+                    self.kafkaHandle,
+                    listPointer,
+                    1 // async = true
+                )
+            }
+
+            if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: error)
+            }
     }
 
     /// Non-blocking **awaitable** commit of a `message`'s offset to Kafka.
     ///
-    /// - Parameter message: Last received message that shall be marked as read.
+    /// - Parameter topic: Topic to commit to
+    /// - Parameter partition: Partition to commit to
+    /// - Parameter offset: Offset to commit
     /// - Throws: A ``KafkaError`` if the commit failed.
-    func commit(_ message: KafkaConsumerMessage) async throws {
+    func commit(
+        topic: String,
+        partition: KafkaPartition,
+        offset: KafkaOffset) async throws {
         // Declare captured closure outside of withCheckedContinuation.
         // We do that because do an unretained pass of the captured closure to
         // librdkafka which means we have to keep a reference to the closure
@@ -577,9 +587,9 @@ final class RDKafkaClient: Sendable {
             // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
             let changesList = RDKafkaTopicPartitionList()
             changesList.setOffset(
-                topic: message.topic,
-                partition: message.partition,
-                offset: Int64(message.offset.rawValue + 1)
+                topic: topic,
+                partition: partition,
+                offset: Int64(offset.rawValue + 1)
             )
 
             // Unretained pass because the reference that librdkafka holds to capturedClosure
@@ -597,7 +607,7 @@ final class RDKafkaClient: Sendable {
             }
         }
     }
-
+    
     /// Flush any outstanding produce requests.
     ///
     /// - Parameters:
