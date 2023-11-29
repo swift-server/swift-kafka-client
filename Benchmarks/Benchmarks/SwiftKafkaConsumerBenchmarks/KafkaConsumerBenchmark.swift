@@ -56,7 +56,7 @@ let benchmarks = {
         consumerConfig.autoOffsetReset = .beginning
         consumerConfig.broker.addressFamily = .v4
         // We must specify it at least 10 otherwise CI will timeout
-        consumerConfig.pollInterval = .milliseconds(10)
+        consumerConfig.pollInterval = .milliseconds(1)
 
         let consumer = try KafkaConsumer(
             configuration: consumerConfig,
@@ -125,7 +125,7 @@ let benchmarks = {
         consumerConfig.broker.addressFamily = .v4
         consumerConfig.isAutoCommitEnabled = false
         // We must specify it at least 10 otherwise CI will timeout
-        consumerConfig.pollInterval = .milliseconds(10)
+        consumerConfig.pollInterval = .milliseconds(1)
 
         let consumer = try KafkaConsumer(
             configuration: consumerConfig,
