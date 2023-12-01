@@ -29,7 +29,7 @@ let benchmarks = {
         metrics: [.wallClock, .cpuTotal, .allocatedResidentMemory, .contextSwitches, .throughput] + .arc,
         warmupIterations: 0,
         scalingFactor: .one,
-        maxDuration: .seconds(1),
+        maxDuration: .seconds(5),
         maxIterations: 100
     )
 
