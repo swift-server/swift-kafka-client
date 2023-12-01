@@ -155,7 +155,7 @@ let benchmarks = {
 
                 try await benchmark.withMeasurement {
                     for try await record in consumer.messages {
-                        try await consumer.commit(record)
+                        try consumer.scheduleCommit(record)
 
                         ctr += 1
                         totalBytes += UInt64(record.value.readableBytes)
