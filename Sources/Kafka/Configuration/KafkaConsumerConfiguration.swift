@@ -24,6 +24,8 @@ public struct KafkaConsumerConfiguration {
     public var pollInterval: Duration = .milliseconds(100)
     
     public var listenForRebalance: Bool = false
+    
+    public var enablePartitionEof: Bool = false
 
     /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
     public struct BackPressureStrategy: Sendable, Hashable {

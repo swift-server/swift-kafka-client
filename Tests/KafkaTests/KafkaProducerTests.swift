@@ -111,68 +111,6 @@ final class KafkaProducerTests: XCTestCase {
         }
     }
 
-    func testPartitionForKey() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
-
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
-
-        let numberOfPartitions = 6
-        let expectedTopic = "test-topic-with-\(numberOfPartitions)-partitions"
-        let key = "key"
-
-        let expectedPartition = producer.partitionForKey(key, in: expectedTopic, partitionCount: numberOfPartitions)
-        XCTAssertNotNil(expectedPartition)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
-            group.addTask {
-                try await serviceGroup.run()
-            }
-
-            let message = KafkaProducerMessage(
-                topic: expectedTopic,
-                key: key,
-                value: "Hello, World!"
-            )
-
-            let messageID = try producer.send(message)
-
-            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
-
-            for await event in events {
-                switch event {
-                case .deliveryReports(let deliveryReports):
-                    for deliveryReport in deliveryReports {
-                        receivedDeliveryReports.insert(deliveryReport)
-                    }
-                default:
-                    break // Ignore any other events
-                }
-
-                if receivedDeliveryReports.count >= 1 {
-                    break
-                }
-            }
-
-            let receivedDeliveryReport = receivedDeliveryReports.first!
-            XCTAssertEqual(messageID, receivedDeliveryReport.id)
-
-            guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
-                XCTFail()
-                return
-            }
-
-            XCTAssertEqual(expectedTopic, receivedMessage.topic)
-            XCTAssertEqual(expectedPartition, receivedMessage.partition)
-            XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
-            XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
-
-            // Shutdown the serviceGroup
-            await serviceGroup.triggerGracefulShutdown()
-        }
-    }
-
     func testSendEmptyMessage() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
 

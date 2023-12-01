@@ -51,21 +51,8 @@ final class KafkaTests: XCTestCase {
         self.producerConfig = KafkaProducerConfiguration(bootstrapBrokerAddresses: [self.bootstrapBrokerAddress])
         self.producerConfig.broker.addressFamily = .v4
 
-        var basicConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: "no-group", topics: []),
-            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-        )
-        basicConfig.broker.addressFamily = .v4
-
-        // TODO: ok to block here? How to make setup async?
-        let client = try RDKafkaClient.makeClient(
-            type: .consumer,
-            configDictionary: basicConfig.dictionary,
-            events: [],
-            logger: .kafkaTest
-        )
-        self.uniqueTestTopic = try client._createUniqueTopic(timeout: 10 * 1000)
-        self.uniqueTestTopic2 = try client._createUniqueTopic(timeout: 10 * 1000)
+        self.uniqueTestTopic = try createUniqueTopic(partitions: 1)
+        self.uniqueTestTopic2 = try createUniqueTopic(partitions: 1)
     }
 
     override func tearDownWithError() throws {
@@ -82,8 +69,12 @@ final class KafkaTests: XCTestCase {
             events: [],
             logger: .kafkaTest
         )
-        try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
-        try client._deleteTopic(self.uniqueTestTopic2, timeout: 10 * 1000)
+        if let uniqueTestTopic {
+            try client._deleteTopic(uniqueTestTopic, timeout: 10 * 1000)
+        }
+        if let uniqueTestTopic2 {
+            try client._deleteTopic(uniqueTestTopic2, timeout: 10 * 1000)
+        }
 
         self.bootstrapBrokerAddress = nil
         self.producerConfig = nil
@@ -651,8 +642,159 @@ final class KafkaTests: XCTestCase {
         }
     }
 
+    func testPartitionForKey() async throws {
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        let numberOfPartitions = 6
+        let expectedTopic = try createUniqueTopic(partitions: Int32(numberOfPartitions))
+        let key = "key"
+
+        let expectedPartition = producer.partitionForKey(key, in: expectedTopic, partitionCount: numberOfPartitions)
+        XCTAssertNotNil(expectedPartition)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            let message = KafkaProducerMessage(
+                topic: expectedTopic,
+                key: key,
+                value: "Hello, World!"
+            )
+
+            let messageID = try producer.send(message)
+
+            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
+
+            for await event in events {
+                switch event {
+                case .deliveryReports(let deliveryReports):
+                    for deliveryReport in deliveryReports {
+                        receivedDeliveryReports.insert(deliveryReport)
+                    }
+                default:
+                    break // Ignore any other events
+                }
+
+                if receivedDeliveryReports.count >= 1 {
+                    break
+                }
+            }
+
+            let receivedDeliveryReport = receivedDeliveryReports.first!
+            XCTAssertEqual(messageID, receivedDeliveryReport.id)
+
+            guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
+                XCTFail()
+                return
+            }
+
+            XCTAssertEqual(expectedTopic, receivedMessage.topic)
+            XCTAssertEqual(expectedPartition, receivedMessage.partition)
+            XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
+            XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+    
+    func testPartitionEof() async throws {
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+            
+            try await group.next()
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+        
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: "test",
+                topics: [self.uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning // Read topic from beginning
+        consumerConfig.broker.addressFamily = .v4
+        consumerConfig.enablePartitionEof = true
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+        
+        let consumerServiceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let consumerServiceGroup = ServiceGroup(configuration: consumerServiceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await consumerServiceGroup.run()
+            }
+            
+            group.addTask {
+                let logger = Logger.kafkaTest
+                var messages = [KafkaConsumerMessage]()
+                for try await record in consumer.messages {
+                    guard !record.eof else {
+                        break
+                    }
+                    messages.append(record)
+                }
+                XCTAssertEqual(messages.count, testMessages.count)
+            }
+            
+            try await group.next()
+            
+            await consumerServiceGroup.triggerGracefulShutdown()
+        }
+    }
+
     // MARK: - Helpers
 
+    func createUniqueTopic(partitions: Int32 = -1 /* default num for cluster */) throws -> String {
+        // TODO: ok to block here? How to make setup async?
+
+        var basicConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "no-group", topics: []),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        basicConfig.broker.addressFamily = .v4
+
+        let client = try RDKafkaClient.makeClient(
+            type: .consumer,
+            configDictionary: basicConfig.dictionary,
+            events: [],
+            logger: .kafkaTest
+        )
+        return try client._createUniqueTopic(partitions: partitions, timeout: 10 * 1000)
+    }
+    
     private static func createTestMessages(
         topic: String,
         headers: [KafkaHeader] = [],

@@ -79,6 +79,7 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
+    let enablePartitionEof: Bool
 
     public typealias Element = KafkaConsumerMessage
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
@@ -94,6 +95,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public struct AsyncIterator: AsyncIteratorProtocol {
         let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
         var wrappedIterator: WrappedSequence.AsyncIterator?
+        let enablePartitionEof: Bool
 
         public mutating func next() async throws -> Element? {
             repeat {
@@ -113,7 +115,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                             self.deallocateIterator()
                             throw error
                         }
-                        if message.eof {
+                        if !enablePartitionEof && message.eof {
                             continue
                         }
                         return message
@@ -136,7 +138,8 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public func makeAsyncIterator() -> AsyncIterator {
         return AsyncIterator(
             stateMachine: self.stateMachine,
-            wrappedIterator: self.wrappedSequence.makeAsyncIterator()
+            wrappedIterator: self.wrappedSequence.makeAsyncIterator(),
+            enablePartitionEof: enablePartitionEof
         )
     }
 }
@@ -206,6 +209,7 @@ public final class KafkaConsumer: Sendable, Service {
 
         self.messages = KafkaConsumerMessages(
             stateMachine: self.stateMachine,
+            enablePartitionEof: configuration.enablePartitionEof,
             wrappedSequence: sourceAndSequence.sequence
         )
 

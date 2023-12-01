@@ -17,6 +17,14 @@ import NIOCore
 
 /// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage {
+    /// Internal enum for EOF, required to allow empty message
+    internal enum MessageContent: Hashable, Sendable {
+        case buffer(ByteBuffer)
+        case eof
+    }
+    
+    internal var _value: MessageContent
+    
     /// The topic that the message was received from.
     public var topic: String
     /// The partition that the message was received from.
@@ -26,13 +34,25 @@ public struct KafkaConsumerMessage {
     /// The key of the message.
     public var key: ByteBuffer?
     /// The body of the message.
-    public var value: ByteBuffer
+    public var value: ByteBuffer {
+        switch _value {
+        case .buffer(let byteBuffer):
+            return byteBuffer
+        case .eof:
+            return ByteBuffer()
+        }
+    }
     /// The offset of the message in its partition.
     public var offset: KafkaOffset
-    
-    
-    var eof: Bool {
-        self.value.readableBytesView.isEmpty
+
+    /// If ``true``, means it is not a message but partition EOF event
+    public var eof: Bool {
+        switch _value {
+        case .buffer:
+            return false
+        case .eof:
+            return true
+        }
     }
 
     /// Initialize ``KafkaConsumerMessage`` as EOF from `rd_kafka_topic_partition_t` pointer.
@@ -91,9 +111,9 @@ public struct KafkaConsumerMessage {
                 self.key = nil
             }
             
-            self.value = ByteBuffer(bytes: valueBufferPointer)
+            self._value = .buffer(ByteBuffer(bytes: valueBufferPointer))
         } else {
-            self.value = .init()
+            self._value = .eof
             self.key = .init()
             self.headers = .init()
         }
