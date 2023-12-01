@@ -43,75 +43,75 @@ let benchmarks = {
         }
         uniqueTestTopic = nil
     }
-    /*
-     Benchmark("SwiftKafkaConsumer - basic consumer (messages: \(messageCount))") { benchmark in
-         let uniqueGroupID = UUID().uuidString
-         var consumerConfig = KafkaConsumerConfiguration(
-             consumptionStrategy: .group(
-                 id: uniqueGroupID,
-                 topics: [uniqueTestTopic]
-             ),
-             bootstrapBrokerAddresses: [brokerAddress]
-         )
-         consumerConfig.autoOffsetReset = .beginning
-         consumerConfig.broker.addressFamily = .v4
-         // We must specify it at least 10 otherwise CI will timeout
-         consumerConfig.pollInterval = .milliseconds(1)
 
-         let consumer = try KafkaConsumer(
-             configuration: consumerConfig,
-             logger: .perfLogger
-         )
+    Benchmark("SwiftKafkaConsumer - basic consumer (messages: \(messageCount))") { benchmark in
+        let uniqueGroupID = UUID().uuidString
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: [uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [brokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning
+        consumerConfig.broker.addressFamily = .v4
+        // We must specify it at least 10 otherwise CI will timeout
+        consumerConfig.pollInterval = .milliseconds(1)
 
-         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
-         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .perfLogger
+        )
 
-         try await withThrowingTaskGroup(of: Void.self) { group in
-             benchLog("Start consuming")
-             defer {
-                 benchLog("Finish consuming")
-             }
-             // Run Task
-             group.addTask {
-                 try await serviceGroup.run()
-             }
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-             // Second Consumer Task
-             group.addTask {
-                 var ctr: UInt64 = 0
-                 var tmpCtr: UInt64 = 0
-                 let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
-                 let totalStartDate = Date.timeIntervalSinceReferenceDate
-                 var totalBytes: UInt64 = 0
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            benchLog("Start consuming")
+            defer {
+                benchLog("Finish consuming")
+            }
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
 
-                 try await benchmark.withMeasurement {
-                     for try await record in consumer.messages {
-                         ctr += 1
-                         totalBytes += UInt64(record.value.readableBytes)
+            // Second Consumer Task
+            group.addTask {
+                var ctr: UInt64 = 0
+                var tmpCtr: UInt64 = 0
+                let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
+                let totalStartDate = Date.timeIntervalSinceReferenceDate
+                var totalBytes: UInt64 = 0
 
-                         tmpCtr += 1
-                         if tmpCtr >= interval {
-                             benchLog("read \(ctr * 100 / UInt64(messageCount))%")
-                             tmpCtr = 0
-                         }
-                         if ctr >= messageCount {
-                             break
-                         }
-                     }
-                 }
+                try await benchmark.withMeasurement {
+                    for try await record in consumer.messages {
+                        ctr += 1
+                        totalBytes += UInt64(record.value.readableBytes)
 
-                 let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
-                 let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-                 benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
-             }
+                        tmpCtr += 1
+                        if tmpCtr >= interval {
+                            benchLog("read \(ctr * 100 / UInt64(messageCount))%")
+                            tmpCtr = 0
+                        }
+                        if ctr >= messageCount {
+                            break
+                        }
+                    }
+                }
 
-             // Wait for second Consumer Task to complete
-             try await group.next()
-             // Shutdown the serviceGroup
-             await serviceGroup.triggerGracefulShutdown()
-         }
-     }
-     */
+                let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
+                let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
+                benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+            }
+
+            // Wait for second Consumer Task to complete
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
     Benchmark("SwiftKafkaConsumer - with offset commit (messages: \(messageCount))") { benchmark in
         let uniqueGroupID = UUID().uuidString
         var consumerConfig = KafkaConsumerConfiguration(
@@ -183,148 +183,146 @@ let benchmarks = {
         }
     }
 
-    /*
-        Benchmark("librdkafka - basic consumer (messages: \(messageCount))") { benchmark in
-            let uniqueGroupID = UUID().uuidString
-            let rdKafkaConsumerConfig: [String: String] = [
-                "group.id": uniqueGroupID,
-                "bootstrap.servers": "\(brokerAddress.host):\(brokerAddress.port)",
-                "broker.address.family": "v4",
-                "auto.offset.reset": "beginning",
-            ]
+    Benchmark("librdkafka - basic consumer (messages: \(messageCount))") { benchmark in
+        let uniqueGroupID = UUID().uuidString
+        let rdKafkaConsumerConfig: [String: String] = [
+            "group.id": uniqueGroupID,
+            "bootstrap.servers": "\(brokerAddress.host):\(brokerAddress.port)",
+            "broker.address.family": "v4",
+            "auto.offset.reset": "beginning",
+        ]
 
-            let configPointer: OpaquePointer = rd_kafka_conf_new()
-            for (key, value) in rdKafkaConsumerConfig {
-                precondition(rd_kafka_conf_set(configPointer, key, value, nil, 0) == RD_KAFKA_CONF_OK)
-            }
-
-            let kafkaHandle = rd_kafka_new(RD_KAFKA_CONSUMER, configPointer, nil, 0)
-            guard let kafkaHandle else {
-                preconditionFailure("Kafka handle was not created")
-            }
-            defer {
-                rd_kafka_destroy(kafkaHandle)
-            }
-
-            rd_kafka_poll_set_consumer(kafkaHandle)
-            let subscriptionList = rd_kafka_topic_partition_list_new(1)
-            defer {
-                rd_kafka_topic_partition_list_destroy(subscriptionList)
-            }
-            rd_kafka_topic_partition_list_add(
-                subscriptionList,
-                uniqueTestTopic,
-                RD_KAFKA_PARTITION_UA
-            )
-            rd_kafka_subscribe(kafkaHandle, subscriptionList)
-            rd_kafka_poll(kafkaHandle, 0)
-
-            var ctr: UInt64 = 0
-            var tmpCtr: UInt64 = 0
-
-            let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
-            let totalStartDate = Date.timeIntervalSinceReferenceDate
-            var totalBytes: UInt64 = 0
-
-            benchmark.withMeasurement {
-                while ctr < messageCount {
-                    guard let record = rd_kafka_consumer_poll(kafkaHandle, 10) else {
-                        continue
-                    }
-                    defer {
-                        rd_kafka_message_destroy(record)
-                    }
-                    ctr += 1
-                    totalBytes += UInt64(record.pointee.len)
-
-                    tmpCtr += 1
-                    if tmpCtr >= interval {
-                        benchLog("read \(ctr * 100 / UInt64(messageCount))%")
-                        tmpCtr = 0
-                    }
-                }
-            }
-
-            rd_kafka_consumer_close(kafkaHandle)
-
-            let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
-            let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-            benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+        let configPointer: OpaquePointer = rd_kafka_conf_new()
+        for (key, value) in rdKafkaConsumerConfig {
+            precondition(rd_kafka_conf_set(configPointer, key, value, nil, 0) == RD_KAFKA_CONF_OK)
         }
 
-        Benchmark("librdkafka - with offset commit (messages: \(messageCount))") { benchmark in
-            let uniqueGroupID = UUID().uuidString
-            let rdKafkaConsumerConfig: [String: String] = [
-                "group.id": uniqueGroupID,
-                "bootstrap.servers": "\(brokerAddress.host):\(brokerAddress.port)",
-                "broker.address.family": "v4",
-                "auto.offset.reset": "beginning",
-                "enable.auto.commit": "false",
-            ]
+        let kafkaHandle = rd_kafka_new(RD_KAFKA_CONSUMER, configPointer, nil, 0)
+        guard let kafkaHandle else {
+            preconditionFailure("Kafka handle was not created")
+        }
+        defer {
+            rd_kafka_destroy(kafkaHandle)
+        }
 
-            let configPointer: OpaquePointer = rd_kafka_conf_new()
-            for (key, value) in rdKafkaConsumerConfig {
-                precondition(rd_kafka_conf_set(configPointer, key, value, nil, 0) == RD_KAFKA_CONF_OK)
-            }
+        rd_kafka_poll_set_consumer(kafkaHandle)
+        let subscriptionList = rd_kafka_topic_partition_list_new(1)
+        defer {
+            rd_kafka_topic_partition_list_destroy(subscriptionList)
+        }
+        rd_kafka_topic_partition_list_add(
+            subscriptionList,
+            uniqueTestTopic,
+            RD_KAFKA_PARTITION_UA
+        )
+        rd_kafka_subscribe(kafkaHandle, subscriptionList)
+        rd_kafka_poll(kafkaHandle, 0)
 
-            let kafkaHandle = rd_kafka_new(RD_KAFKA_CONSUMER, configPointer, nil, 0)
-            guard let kafkaHandle else {
-                preconditionFailure("Kafka handle was not created")
-            }
-            defer {
-                rd_kafka_destroy(kafkaHandle)
-            }
+        var ctr: UInt64 = 0
+        var tmpCtr: UInt64 = 0
 
-            rd_kafka_poll_set_consumer(kafkaHandle)
-            let subscriptionList = rd_kafka_topic_partition_list_new(1)
-            defer {
-                rd_kafka_topic_partition_list_destroy(subscriptionList)
-            }
-            rd_kafka_topic_partition_list_add(
-                subscriptionList,
-                uniqueTestTopic,
-                RD_KAFKA_PARTITION_UA
-            )
-            rd_kafka_subscribe(kafkaHandle, subscriptionList)
-            rd_kafka_poll(kafkaHandle, 0)
+        let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
+        let totalStartDate = Date.timeIntervalSinceReferenceDate
+        var totalBytes: UInt64 = 0
 
-            var ctr: UInt64 = 0
-            var tmpCtr: UInt64 = 0
+        benchmark.withMeasurement {
+            while ctr < messageCount {
+                guard let record = rd_kafka_consumer_poll(kafkaHandle, 10) else {
+                    continue
+                }
+                defer {
+                    rd_kafka_message_destroy(record)
+                }
+                ctr += 1
+                totalBytes += UInt64(record.pointee.len)
 
-            let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
-            let totalStartDate = Date.timeIntervalSinceReferenceDate
-            var totalBytes: UInt64 = 0
-
-            benchmark.withMeasurement {
-                while ctr < messageCount {
-                    guard let record = rd_kafka_consumer_poll(kafkaHandle, 10) else {
-                        continue
-                    }
-                    defer {
-                        rd_kafka_message_destroy(record)
-                    }
-                    guard record.pointee.err != RD_KAFKA_RESP_ERR__PARTITION_EOF else {
-                        continue
-                    }
-                    let result = rd_kafka_commit_message(kafkaHandle, record, 0)
-                    precondition(result == RD_KAFKA_RESP_ERR_NO_ERROR)
-
-                    ctr += 1
-                    totalBytes += UInt64(record.pointee.len)
-
-                    tmpCtr += 1
-                    if tmpCtr >= interval {
-                        benchLog("read \(ctr * 100 / UInt64(messageCount))%")
-                        tmpCtr = 0
-                    }
+                tmpCtr += 1
+                if tmpCtr >= interval {
+                    benchLog("read \(ctr * 100 / UInt64(messageCount))%")
+                    tmpCtr = 0
                 }
             }
-
-            rd_kafka_consumer_close(kafkaHandle)
-
-            let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
-            let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-            benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
         }
-     */
+
+        rd_kafka_consumer_close(kafkaHandle)
+
+        let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
+        let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
+        benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+    }
+
+    Benchmark("librdkafka - with offset commit (messages: \(messageCount))") { benchmark in
+        let uniqueGroupID = UUID().uuidString
+        let rdKafkaConsumerConfig: [String: String] = [
+            "group.id": uniqueGroupID,
+            "bootstrap.servers": "\(brokerAddress.host):\(brokerAddress.port)",
+            "broker.address.family": "v4",
+            "auto.offset.reset": "beginning",
+            "enable.auto.commit": "false",
+        ]
+
+        let configPointer: OpaquePointer = rd_kafka_conf_new()
+        for (key, value) in rdKafkaConsumerConfig {
+            precondition(rd_kafka_conf_set(configPointer, key, value, nil, 0) == RD_KAFKA_CONF_OK)
+        }
+
+        let kafkaHandle = rd_kafka_new(RD_KAFKA_CONSUMER, configPointer, nil, 0)
+        guard let kafkaHandle else {
+            preconditionFailure("Kafka handle was not created")
+        }
+        defer {
+            rd_kafka_destroy(kafkaHandle)
+        }
+
+        rd_kafka_poll_set_consumer(kafkaHandle)
+        let subscriptionList = rd_kafka_topic_partition_list_new(1)
+        defer {
+            rd_kafka_topic_partition_list_destroy(subscriptionList)
+        }
+        rd_kafka_topic_partition_list_add(
+            subscriptionList,
+            uniqueTestTopic,
+            RD_KAFKA_PARTITION_UA
+        )
+        rd_kafka_subscribe(kafkaHandle, subscriptionList)
+        rd_kafka_poll(kafkaHandle, 0)
+
+        var ctr: UInt64 = 0
+        var tmpCtr: UInt64 = 0
+
+        let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
+        let totalStartDate = Date.timeIntervalSinceReferenceDate
+        var totalBytes: UInt64 = 0
+
+        benchmark.withMeasurement {
+            while ctr < messageCount {
+                guard let record = rd_kafka_consumer_poll(kafkaHandle, 10) else {
+                    continue
+                }
+                defer {
+                    rd_kafka_message_destroy(record)
+                }
+                guard record.pointee.err != RD_KAFKA_RESP_ERR__PARTITION_EOF else {
+                    continue
+                }
+                let result = rd_kafka_commit_message(kafkaHandle, record, 0)
+                precondition(result == RD_KAFKA_RESP_ERR_NO_ERROR)
+
+                ctr += 1
+                totalBytes += UInt64(record.pointee.len)
+
+                tmpCtr += 1
+                if tmpCtr >= interval {
+                    benchLog("read \(ctr * 100 / UInt64(messageCount))%")
+                    tmpCtr = 0
+                }
+            }
+        }
+
+        rd_kafka_consumer_close(kafkaHandle)
+
+        let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
+        let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
+        benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+    }
 }
