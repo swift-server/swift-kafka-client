@@ -43,75 +43,75 @@ let benchmarks = {
         }
         uniqueTestTopic = nil
     }
+    /*
+     Benchmark("SwiftKafkaConsumer - basic consumer (messages: \(messageCount))") { benchmark in
+         let uniqueGroupID = UUID().uuidString
+         var consumerConfig = KafkaConsumerConfiguration(
+             consumptionStrategy: .group(
+                 id: uniqueGroupID,
+                 topics: [uniqueTestTopic]
+             ),
+             bootstrapBrokerAddresses: [brokerAddress]
+         )
+         consumerConfig.autoOffsetReset = .beginning
+         consumerConfig.broker.addressFamily = .v4
+         // We must specify it at least 10 otherwise CI will timeout
+         consumerConfig.pollInterval = .milliseconds(1)
 
-    Benchmark("SwiftKafkaConsumer - basic consumer (messages: \(messageCount))") { benchmark in
-        let uniqueGroupID = UUID().uuidString
-        var consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(
-                id: uniqueGroupID,
-                topics: [uniqueTestTopic]
-            ),
-            bootstrapBrokerAddresses: [brokerAddress]
-        )
-        consumerConfig.autoOffsetReset = .beginning
-        consumerConfig.broker.addressFamily = .v4
-        // We must specify it at least 10 otherwise CI will timeout
-        consumerConfig.pollInterval = .milliseconds(1)
+         let consumer = try KafkaConsumer(
+             configuration: consumerConfig,
+             logger: .perfLogger
+         )
 
-        let consumer = try KafkaConsumer(
-            configuration: consumerConfig,
-            logger: .perfLogger
-        )
+         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
+         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
-        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+         try await withThrowingTaskGroup(of: Void.self) { group in
+             benchLog("Start consuming")
+             defer {
+                 benchLog("Finish consuming")
+             }
+             // Run Task
+             group.addTask {
+                 try await serviceGroup.run()
+             }
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            benchLog("Start consuming")
-            defer {
-                benchLog("Finish consuming")
-            }
-            // Run Task
-            group.addTask {
-                try await serviceGroup.run()
-            }
+             // Second Consumer Task
+             group.addTask {
+                 var ctr: UInt64 = 0
+                 var tmpCtr: UInt64 = 0
+                 let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
+                 let totalStartDate = Date.timeIntervalSinceReferenceDate
+                 var totalBytes: UInt64 = 0
 
-            // Second Consumer Task
-            group.addTask {
-                var ctr: UInt64 = 0
-                var tmpCtr: UInt64 = 0
-                let interval: UInt64 = Swift.max(UInt64(messageCount / 20), 1)
-                let totalStartDate = Date.timeIntervalSinceReferenceDate
-                var totalBytes: UInt64 = 0
+                 try await benchmark.withMeasurement {
+                     for try await record in consumer.messages {
+                         ctr += 1
+                         totalBytes += UInt64(record.value.readableBytes)
 
-                try await benchmark.withMeasurement {
-                    for try await record in consumer.messages {
-                        ctr += 1
-                        totalBytes += UInt64(record.value.readableBytes)
+                         tmpCtr += 1
+                         if tmpCtr >= interval {
+                             benchLog("read \(ctr * 100 / UInt64(messageCount))%")
+                             tmpCtr = 0
+                         }
+                         if ctr >= messageCount {
+                             break
+                         }
+                     }
+                 }
 
-                        tmpCtr += 1
-                        if tmpCtr >= interval {
-                            benchLog("read \(ctr * 100 / UInt64(messageCount))%")
-                            tmpCtr = 0
-                        }
-                        if ctr >= messageCount {
-                            break
-                        }
-                    }
-                }
+                 let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
+                 let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
+                 benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+             }
 
-                let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
-                let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-                benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
-            }
-
-            // Wait for second Consumer Task to complete
-            try await group.next()
-            // Shutdown the serviceGroup
-            await serviceGroup.triggerGracefulShutdown()
-        }
-    }
-
+             // Wait for second Consumer Task to complete
+             try await group.next()
+             // Shutdown the serviceGroup
+             await serviceGroup.triggerGracefulShutdown()
+         }
+     }
+     */
     Benchmark("SwiftKafkaConsumer - with offset commit (messages: \(messageCount))") { benchmark in
         let uniqueGroupID = UUID().uuidString
         var consumerConfig = KafkaConsumerConfiguration(
