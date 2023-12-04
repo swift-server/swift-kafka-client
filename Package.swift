@@ -72,7 +72,6 @@ let package = Package(
                 .define("_GNU_SOURCE", to: "1"),  // Fix build error for Swift 5.9 onwards
             ],
             linkerSettings: [
-                .linkedLibrary("curl"),
                 .linkedLibrary("sasl2"),
                 .linkedLibrary("z"),  // zlib
             ]

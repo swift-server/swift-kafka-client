@@ -309,7 +309,7 @@ extension KafkaConfiguration {
             }
         }
 
-        public struct OAuthBearerMethod: Sendable, Hashable {
+        struct OAuthBearerMethod: Sendable, Hashable {
             internal enum _OAuthBearerMethod: Sendable, Hashable {
                 case `default`(
                     configuration: String?
@@ -337,7 +337,7 @@ extension KafkaConfiguration {
             ///     For example: `principalClaimName=azp principal=admin scopeClaimName=roles scope=role1,role2 lifeSeconds=600`.
             ///     In addition, SASL extensions can be communicated to the broker via `extension_NAME=value`.
             ///     For example: `principal=admin extension_traceId=123`
-            public static func `default`(configuration: String? = nil) -> OAuthBearerMethod {
+            static func `default`(configuration: String? = nil) -> OAuthBearerMethod {
                 OAuthBearerMethod(_internal: .default(configuration: configuration))
             }
 
@@ -359,7 +359,7 @@ extension KafkaConfiguration {
             ///     - scope: The client uses this to specify the scope of the access request to the broker.
             ///     - extensions: Allow additional information to be provided to the broker.
             ///     Comma-separated list of key=value pairs. E.g., "supportFeatureX=true,organizationId=sales-emea".
-            public static func oidc(
+            static func oidc(
                 configuration: String? = nil,
                 clientID: String,
                 clientSecret: String,
@@ -419,7 +419,8 @@ extension KafkaConfiguration {
         }
 
         /// Use the OAUTHBEARER mechanism.
-        public static func oAuthBearer(method: OAuthBearerMethod) -> SASLMechanism {
+        // This is currently disabled since it requires a curl dependency otherwise.
+        static func oAuthBearer(method: OAuthBearerMethod) -> SASLMechanism {
             SASLMechanism(
                 _internal: .oAuthBearer(method: method)
             )
