@@ -454,6 +454,10 @@ public final class KafkaConsumer: Sendable, Service {
             throw KafkaError.client(reason: err)
         }
     }
+    
+    public func metadata() async throws -> KafkaMetadata {
+        try await client().metadata()
+    }
 
     /// Start the ``KafkaConsumer``.
     ///
@@ -1058,7 +1062,7 @@ extension KafkaConsumer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+                self.state = .finished
             case .running(let client, _, let eventSource):
                 self.state = .running(client: client, messagePollLoopState: .finished, eventSource: eventSource)
             case .finishing, .finished:

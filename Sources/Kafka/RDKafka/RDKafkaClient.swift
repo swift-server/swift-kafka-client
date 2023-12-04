@@ -806,6 +806,22 @@ final class RDKafkaClient: Sendable {
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) async throws -> T) async rethrows -> T {
         return try await body(self.kafkaHandle)
     }
+    
+    func metadata() async throws -> KafkaMetadata {
+        let queue = DispatchQueue(label: "com.swift-server.swift-kafka.metadata")
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<KafkaMetadata, Error>) in
+            queue.async {
+                var metadata: UnsafePointer<rd_kafka_metadata>?
+                let error = rd_kafka_metadata(self.kafkaHandle, 1, nil, &metadata, -1)
+                guard error == RD_KAFKA_RESP_ERR_NO_ERROR,
+                      let metadata else {
+                    continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
+                    return
+                }
+                continuation.resume(returning: KafkaMetadata(metadata: metadata))
+            }
+        }
+    }
 
     func initTransactions(timeout: Duration) async throws {
         let result = await performBlockingCall(queue: gcdQueue) {

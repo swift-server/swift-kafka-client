@@ -758,7 +758,6 @@ final class KafkaTests: XCTestCase {
             }
             
             group.addTask {
-                let logger = Logger.kafkaTest
                 var messages = [KafkaConsumerMessage]()
                 for try await record in consumer.messages {
                     guard !record.eof else {
@@ -774,7 +773,52 @@ final class KafkaTests: XCTestCase {
             await consumerServiceGroup.triggerGracefulShutdown()
         }
     }
+    
+    func testMetadata() async throws {
+        let uniqueTopic = try createUniqueTopic(partitions: 7)
+        defer {
+            // delete topic
+            var basicConfig = KafkaConsumerConfiguration(
+                consumptionStrategy: .group(id: "no-group", topics: []),
+                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            )
+            basicConfig.broker.addressFamily = .v4
 
+            let client = try? RDKafkaClient.makeClient(
+                type: .consumer,
+                configDictionary: basicConfig.dictionary,
+                events: [],
+                logger: .kafkaTest
+            )
+            try? client?._deleteTopic(uniqueTopic, timeout: 10 * 1000)
+        }
+        
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: "test",
+                topics: []
+            ),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning // Read topic from beginning
+        consumerConfig.broker.addressFamily = .v4
+        consumerConfig.enablePartitionEof = true
+
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+        let metadata = try await consumer.metadata()
+        let topic = metadata.topics.first { topic in
+            topic.name == uniqueTopic
+        }
+        guard let topic else {
+            XCTFail("Topic was not found")
+            return
+        }
+        let partitions = topic.partitions
+        XCTAssertEqual(partitions.count, 7)
+    }
     // MARK: - Helpers
 
     func createUniqueTopic(partitions: Int32 = -1 /* default num for cluster */) throws -> String {
