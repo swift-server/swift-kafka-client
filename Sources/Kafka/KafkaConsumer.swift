@@ -601,9 +601,10 @@ public final class KafkaConsumer: Sendable, Service {
                 result = .failure(error)
             }
 
-            if let result {
-                messageResults.append(result)
+            guard let result else {
+                return messageResults
             }
+            messageResults.append(result)
         }
 
         return messageResults
