@@ -319,6 +319,8 @@ public final class KafkaConsumer: Sendable, Service {
                 )
             }
             try client.subscribe(topicPartitionList: subscription)
+        case .consumerClosed:
+            throw KafkaError.connectionClosed(reason: "Consumer deinitialized before setup")
         }
     }
 
@@ -339,6 +341,8 @@ public final class KafkaConsumer: Sendable, Service {
             let assignment = RDKafkaTopicPartitionList()
             assignment.setOffset(topic: topic, partition: partition, offset: Int64(offset.rawValue))
             try client.assign(topicPartitionList: assignment)
+        case .consumerClosed:
+            throw KafkaError.connectionClosed(reason: "Consumer deinitialized before setup")
         }
     }
 
@@ -467,9 +471,10 @@ public final class KafkaConsumer: Sendable, Service {
                 result = .failure(error)
             }
 
-            if let result {
-                messageResults.append(result)
+            guard let result else {
+                return messageResults
             }
+            messageResults.append(result)
         }
 
         return messageResults
@@ -722,6 +727,8 @@ extension KafkaConsumer {
             /// Set up the connection through ``subscribe()`` or ``assign()``.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case setUpConnection(client: RDKafkaClient)
+            /// The ``KafkaConsumer`` is closed.
+            case consumerClosed
         }
 
         /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
@@ -736,8 +743,10 @@ extension KafkaConsumer {
                 return .setUpConnection(client: client)
             case .running:
                 fatalError("\(#function) should not be invoked more than once")
-            case .finishing, .finished:
+            case .finishing:
                 fatalError("\(#function) should only be invoked when KafkaConsumer is running")
+            case .finished:
+                return .consumerClosed
             }
         }
 
@@ -891,7 +900,7 @@ extension KafkaConsumer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+                self.state = .finished
             case .running(let client, _):
                 self.state = .running(client: client, messagePollLoopState: .finished)
             case .finishing, .finished:
