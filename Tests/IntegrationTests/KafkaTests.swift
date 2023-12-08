@@ -445,7 +445,7 @@ final class KafkaTests: XCTestCase {
             try await group.next()
 
             // Verify that we receive the first message
-            var consumerIterator = consumer.messages.makeAsyncIterator()
+            let consumerIterator = consumer.messages.makeAsyncIterator()
 
             let consumedMessage = try await consumerIterator.next()
             XCTAssertEqual(testMessages.first!.topic, consumedMessage!.topic)
