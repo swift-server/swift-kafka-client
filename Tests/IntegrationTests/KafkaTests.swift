@@ -14,6 +14,7 @@
 
 import struct Foundation.UUID
 @testable import Kafka
+import Atomics
 import NIOCore
 import ServiceLifecycle
 import XCTest
@@ -598,6 +599,158 @@ final class KafkaTests: XCTestCase {
             await serviceGroup2.triggerGracefulShutdown()
         }
     }
+    
+    func testDuplicatedMessagesOnRebalance() async throws {
+        let partitionsNumber = 12
+        do {
+            var basicConfig = KafkaConsumerConfiguration(
+                consumptionStrategy: .group(id: "no-group", topics: []),
+                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            )
+            basicConfig.broker.addressFamily = .v4
+
+            // TODO: ok to block here? How to make setup async?
+            let client = try RDKafkaClient.makeClient(
+                type: .consumer,
+                configDictionary: basicConfig.dictionary,
+                events: [],
+                logger: .kafkaTest
+            )
+            // cleanup default test topic and create with 12 partitions
+            try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
+            self.uniqueTestTopic = try client._createUniqueTopic(numberOfPartitions: partitionsNumber, timeout: 10 * 1000)
+        }
+        
+        let numOfMessages: UInt = 50_000
+        let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: numOfMessages)
+        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: .kafkaTest)
+        
+        
+        let producerServiceGroupConfiguration = ServiceGroupConfiguration(services: [producer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
+        let producerServiceGroup = ServiceGroup(configuration: producerServiceGroupConfiguration)
+        
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await producerServiceGroup.run()
+            }
+            
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: acks,
+                    messages: testMessages
+                )
+            }
+            
+            // Wait for Producer Task to complete
+            try await group.next()
+            // Shutdown the serviceGroup
+            await producerServiceGroup.triggerGracefulShutdown()
+        }
+        
+    
+        // MARK: Consumer
+        let uniqueGroupID = UUID().uuidString
+        
+        var consumer1Config = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: [uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [bootstrapBrokerAddress]
+        )
+        consumer1Config.autoOffsetReset = .beginning
+        consumer1Config.broker.addressFamily = .v4
+        consumer1Config.pollInterval = .milliseconds(1)
+        consumer1Config.isAutoCommitEnabled = false
+        
+        let consumer1 = try KafkaConsumer(
+            configuration: consumer1Config,
+            logger: .kafkaTest
+        )
+        
+        var consumer2Config = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(
+                id: uniqueGroupID,
+                topics: [uniqueTestTopic]
+            ),
+            bootstrapBrokerAddresses: [bootstrapBrokerAddress]
+        )
+        consumer2Config.autoOffsetReset = .beginning
+        consumer2Config.broker.addressFamily = .v4
+        consumer2Config.pollInterval = .milliseconds(1)
+        consumer2Config.isAutoCommitEnabled = false
+
+        let consumer2 = try KafkaConsumer(
+            configuration: consumer2Config,
+            logger: .kafkaTest
+        )
+        
+        let serviceGroupConfiguration1 = ServiceGroupConfiguration(services: [consumer1], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
+        let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
+        
+        let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer2], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
+        let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
+        
+        let sharedCtr = ManagedAtomic(0)
+        
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task for 1st consumer
+            group.addTask {
+                try await serviceGroup1.run()
+            }
+            // Run Task for 2nd consumer
+            group.addTask {
+                try await Task.sleep(for: .seconds(20)) // wait a bit that first consumer would form a queue
+                try await serviceGroup2.run()
+            }
+            
+            // First Consumer Task
+            group.addTask {
+                // 6 partitions
+                for try await record in consumer1.messages {
+                    sharedCtr.wrappingIncrement(ordering: .relaxed)
+
+                    try await consumer1.commit(record) // commit time to time
+                }
+            }
+            
+            // Second Consumer Task
+            group.addTask {
+                // 6 partitions
+                for try await record in consumer2.messages {
+                    sharedCtr.wrappingIncrement(ordering: .relaxed)
+
+                    try await consumer2.commit(record) // commit time to time
+                }
+            }
+            
+            // Monitoring task
+            group.addTask {
+                while true {
+                    let currentCtr = sharedCtr.load(ordering: .relaxed)
+                    guard currentCtr >= numOfMessages else {
+                        try await Task.sleep(for: .seconds(5)) // wait if new messages come here
+                        continue
+                    }
+                    try await Task.sleep(for: .seconds(5)) // wait for extra messages
+                    await serviceGroup1.triggerGracefulShutdown()
+                    await serviceGroup2.triggerGracefulShutdown()
+                    break
+                }
+            }
+            
+            try await group.next()
+            try await group.next()
+            try await group.next()
+
+            // Wait for second Consumer Task to complete
+            let totalCtr = sharedCtr.load(ordering: .relaxed)
+            XCTAssertEqual(totalCtr, Int(numOfMessages))
+        }
+    }
 
     // MARK: - Helpers
 
@@ -607,11 +760,12 @@ final class KafkaTests: XCTestCase {
         count: UInt
     ) -> [KafkaProducerMessage<String, String>] {
         return Array(0..<count).map {
-            KafkaProducerMessage(
+            let date = Date()
+            return KafkaProducerMessage(
                 topic: topic,
                 headers: headers,
-                key: "key",
-                value: "Hello, World! \($0) - \(Date().description)"
+                key: "key \(date.timeIntervalSince1970)",
+                value: "Hello, World! \($0) - \(date.description)"
             )
         }
     }
@@ -619,7 +773,8 @@ final class KafkaTests: XCTestCase {
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
         events: KafkaProducerEvents,
-        messages: [KafkaProducerMessage<String, String>]
+        messages: [KafkaProducerMessage<String, String>],
+        skipMessagesValidation: Bool = false
     ) async throws {
         var messageIDs = Set<KafkaProducerMessageID>()
 
@@ -654,6 +809,9 @@ final class KafkaTests: XCTestCase {
         }
 
         XCTAssertEqual(messages.count, acknowledgedMessages.count)
+        guard skipMessagesValidation else {
+            return
+        }
         for message in messages {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }))
