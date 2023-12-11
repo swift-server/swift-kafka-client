@@ -640,7 +640,7 @@ final class KafkaTests: XCTestCase {
                     producer: producer,
                     events: acks,
                     messages: testMessages,
-                    skipMessagesValidation: trueg
+                    skipMessagesValidation: true
                 )
             }
 
