@@ -63,35 +63,32 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
-    
+
     let stateMachine: LockedMachine
     let pollInterval: Duration
 
     public typealias Element = KafkaConsumerMessage
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
-    public struct AsyncIterator:
-        AsyncIteratorProtocol,
-        @unchecked Sendable  /* 'unchecked' because of gcd queue */ {
+    public struct AsyncIterator: AsyncIteratorProtocol {
         // FIXME: there are two possibilities:
         // 1. Create gcd queue and wait blocking call client.consumerPoll() -> faster reaction on new messages
-        // 2. Sleep in case there are no messages -> easier to implement + no problems with gcd Sendability (* - implementation of 2nd is commented in next)
-        private let gcdQueue: DispatchQueue = .init(label: "com.swift-server.swift-kafka.consumer.iterator")
+        // 2. Sleep in case there are no messages -> easier to implement + no problems with gcd Sendability
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
-        
+
         private final class MachineHolder: Sendable { // only for deinit
             let stateMachine: LockedMachine
 
             init(stateMachine: LockedMachine) {
                 self.stateMachine = stateMachine
             }
-            
+
             deinit {
                 self.stateMachine.withLockedValue { $0.finishMessageConsumption() }
             }
         }
-        
+
         init(stateMachine: LockedMachine, pollInterval: Duration) {
             self.stateMachineHolder = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
@@ -100,31 +97,15 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         public func next() async throws -> Element? {
             while !Task.isCancelled {
                 let action = self.stateMachineHolder.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
-                
+
                 switch action {
                 case .poll(let client):
                     if let message = try client.consumerPoll() { // non-blocking call
                         return message
                     }
-                    #if true
-                    let message = try await withCheckedThrowingContinuation { continuation in
-                        gcdQueue.async {
-                            do {
-                                continuation.resume(returning: try client.consumerPoll(timeout: pollInterval))
-                            } catch {
-                                continuation.resume(throwing: error)
-                            }
-                        }
-                    }
-                    if let message {
-                        return message
-                    }
-                    #else
-                    // * - commented implementation with Task.sleep
-                    try await Task.sleep(for: pollInterval)
-                    #endif
+                    try await Task.sleep(for: self.pollInterval)
                 case .suspendPollLoop:
-                    try await Task.sleep(for: pollInterval) // not started yet
+                    try await Task.sleep(for: self.pollInterval) // not started yet
                 case .terminatePollLoop:
                     return nil
                 }

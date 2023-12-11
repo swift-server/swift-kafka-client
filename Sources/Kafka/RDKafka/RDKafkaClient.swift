@@ -435,10 +435,8 @@ final class RDKafkaClient: Sendable {
     ///
     /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    func consumerPoll(timeout: Duration = .zero /* non blocking */) throws -> KafkaConsumerMessage? {
-        assert(timeout == .zero || Task.basePriority == nil) // sanity: don't block in cooperative pool
-
-        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, Int32(timeout.inMilliseconds)) else {
+    func consumerPoll() throws -> KafkaConsumerMessage? {
+        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, 0) else {
             // No error, there might be no more messages
             return nil
         }

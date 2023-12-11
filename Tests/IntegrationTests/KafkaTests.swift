@@ -12,9 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Atomics
 import struct Foundation.UUID
 @testable import Kafka
-import Atomics
 import NIOCore
 import ServiceLifecycle
 import XCTest
@@ -599,7 +599,7 @@ final class KafkaTests: XCTestCase {
             await serviceGroup2.triggerGracefulShutdown()
         }
     }
-    
+
     func testDuplicatedMessagesOnRebalance() async throws {
         let partitionsNumber = 12
         do {
@@ -620,21 +620,20 @@ final class KafkaTests: XCTestCase {
             try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
             self.uniqueTestTopic = try client._createUniqueTopic(numberOfPartitions: partitionsNumber, timeout: 10 * 1000)
         }
-        
-        let numOfMessages: UInt = 50_000
+
+        let numOfMessages: UInt = 50000
         let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: numOfMessages)
         let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: .kafkaTest)
-        
-        
+
         let producerServiceGroupConfiguration = ServiceGroupConfiguration(services: [producer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
         let producerServiceGroup = ServiceGroup(configuration: producerServiceGroupConfiguration)
-        
+
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
             group.addTask {
                 try await producerServiceGroup.run()
             }
-            
+
             // Producer Task
             group.addTask {
                 try await Self.sendAndAcknowledgeMessages(
@@ -643,17 +642,17 @@ final class KafkaTests: XCTestCase {
                     messages: testMessages
                 )
             }
-            
+
             // Wait for Producer Task to complete
             try await group.next()
             // Shutdown the serviceGroup
             await producerServiceGroup.triggerGracefulShutdown()
         }
-        
-    
+
         // MARK: Consumer
+
         let uniqueGroupID = UUID().uuidString
-        
+
         var consumer1Config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
                 id: uniqueGroupID,
@@ -665,12 +664,12 @@ final class KafkaTests: XCTestCase {
         consumer1Config.broker.addressFamily = .v4
         consumer1Config.pollInterval = .milliseconds(1)
         consumer1Config.isAutoCommitEnabled = false
-        
+
         let consumer1 = try KafkaConsumer(
             configuration: consumer1Config,
             logger: .kafkaTest
         )
-        
+
         var consumer2Config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
                 id: uniqueGroupID,
@@ -687,15 +686,15 @@ final class KafkaTests: XCTestCase {
             configuration: consumer2Config,
             logger: .kafkaTest
         )
-        
+
         let serviceGroupConfiguration1 = ServiceGroupConfiguration(services: [consumer1], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
         let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
-        
+
         let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer2], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
         let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
-        
+
         let sharedCtr = ManagedAtomic(0)
-        
+
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task for 1st consumer
             group.addTask {
@@ -706,7 +705,7 @@ final class KafkaTests: XCTestCase {
                 try await Task.sleep(for: .seconds(20)) // wait a bit that first consumer would form a queue
                 try await serviceGroup2.run()
             }
-            
+
             // First Consumer Task
             group.addTask {
                 // 6 partitions
@@ -716,7 +715,7 @@ final class KafkaTests: XCTestCase {
                     try await consumer1.commit(record) // commit time to time
                 }
             }
-            
+
             // Second Consumer Task
             group.addTask {
                 // 6 partitions
@@ -726,7 +725,7 @@ final class KafkaTests: XCTestCase {
                     try await consumer2.commit(record) // commit time to time
                 }
             }
-            
+
             // Monitoring task
             group.addTask {
                 while true {
@@ -741,7 +740,7 @@ final class KafkaTests: XCTestCase {
                     break
                 }
             }
-            
+
             try await group.next()
             try await group.next()
             try await group.next()
