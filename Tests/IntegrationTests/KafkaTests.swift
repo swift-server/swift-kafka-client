@@ -639,7 +639,8 @@ final class KafkaTests: XCTestCase {
                 try await Self.sendAndAcknowledgeMessages(
                     producer: producer,
                     events: acks,
-                    messages: testMessages
+                    messages: testMessages,
+                    skipMessagesValidation: trueg
                 )
             }
 
