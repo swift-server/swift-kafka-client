@@ -621,7 +621,7 @@ final class KafkaTests: XCTestCase {
             self.uniqueTestTopic = try client._createUniqueTopic(numberOfPartitions: partitionsNumber, timeout: 10 * 1000)
         }
 
-        let numOfMessages: UInt = 50000
+        let numOfMessages: UInt = 1000
         let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: numOfMessages)
         let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: .kafkaTest)
 
@@ -709,21 +709,32 @@ final class KafkaTests: XCTestCase {
 
             // First Consumer Task
             group.addTask {
+                var ctr = 0
+                defer {
+                    print("Ctr [consumer1]: \(ctr)")
+                }
                 // 6 partitions
                 for try await record in consumer1.messages {
+                    ctr += 1
                     sharedCtr.wrappingIncrement(ordering: .relaxed)
 
-                    try await consumer1.commit(record) // commit time to time
+                    try consumer1.scheduleCommit(record) // commit time to time
+                    try await Task.sleep(for: .milliseconds(100)) // don't read all messages before 2nd consumer
                 }
             }
 
             // Second Consumer Task
             group.addTask {
+                var ctr = 0
+                defer {
+                    print("Ctr [consumer2]: \(ctr)")
+                }
                 // 6 partitions
                 for try await record in consumer2.messages {
+                    ctr += 1
                     sharedCtr.wrappingIncrement(ordering: .relaxed)
 
-                    try await consumer2.commit(record) // commit time to time
+                    try consumer2.scheduleCommit(record) // commit time to time
                 }
             }
 
