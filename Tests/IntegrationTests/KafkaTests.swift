@@ -709,13 +709,8 @@ final class KafkaTests: XCTestCase {
 
             // First Consumer Task
             group.addTask {
-                var ctr = 0
-                defer {
-                    print("Ctr [consumer1]: \(ctr)")
-                }
                 // 6 partitions
                 for try await record in consumer1.messages {
-                    ctr += 1
                     sharedCtr.wrappingIncrement(ordering: .relaxed)
 
                     try consumer1.scheduleCommit(record) // commit time to time
@@ -725,13 +720,8 @@ final class KafkaTests: XCTestCase {
 
             // Second Consumer Task
             group.addTask {
-                var ctr = 0
-                defer {
-                    print("Ctr [consumer2]: \(ctr)")
-                }
                 // 6 partitions
                 for try await record in consumer2.messages {
-                    ctr += 1
                     sharedCtr.wrappingIncrement(ordering: .relaxed)
 
                     try consumer2.scheduleCommit(record) // commit time to time
