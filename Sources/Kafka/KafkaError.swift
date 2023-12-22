@@ -44,6 +44,10 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     private var line: UInt {
         self.backing.line
     }
+    
+    public var isFatal: Bool {
+        self.backing.isFatal
+    }
 
     public var description: String {
         "KafkaError.\(self.code): \(self.reason) \(self.file):\(self.line)"
