@@ -492,8 +492,12 @@ public final class KafkaConsumer: Sendable, Service {
                     case .statistics(let statistics):
                         _ = eventSource?.yield(.statistics(statistics))
                     case .rebalance(let rebalance):
-                        self.logger.info("rebalance received \(rebalance)")
-                        _ = eventSource?.yield(.rebalance(rebalance))
+                        self.logger.info("rebalance received \(rebalance), source nil: \(eventSource == nil)")
+                        if let eventSource {
+                            _ = eventSource.yield(.rebalance(rebalance))
+                        } else {
+                            try await client.assign(topicPartitionList: nil) // fallback
+                        }
                     default:
                         break // Ignore
                     }
@@ -897,10 +901,11 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .running(let client, let eventSource):
+            case .running(let client, let eventSource),
+                 .finishing(let client, let eventSource):
                 self.state = .finishing(client: client, eventSource: eventSource)
                 return .triggerGracefulShutdown(client: client)
-            case .finishing, .finished:
+            case .finished:
                 return nil
             }
         }
@@ -940,7 +945,7 @@ extension KafkaConsumer {
             case .initializing:
                 self.state = .finished
             case .running(let client, let eventSource):
-                self.state = .finished
+                self.state = .finishing(client: client, eventSource: eventSource)
             case .finishing, .finished:
                 break
             }
