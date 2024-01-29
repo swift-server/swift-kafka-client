@@ -280,8 +280,8 @@ public final class KafkaProducer: Service, Sendable {
                     0...Int(Int32.max) ~= self.configuration.flushTimeoutMilliseconds,
                     "Flush timeout outside of valid range \(0...Int32.max)"
                 )
+                defer { source?.finish() }
                 try await client.flush(timeoutMilliseconds: Int32(self.configuration.flushTimeoutMilliseconds))
-                source?.finish()
                 return
             case .terminatePollLoop:
                 return
