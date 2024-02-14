@@ -39,10 +39,11 @@ extension RDKafkaClient {
 
     /// Create a topic with a unique name (`UUID`).
     /// Blocks for a maximum of `timeout` milliseconds.
+    /// - Parameter numberOfPartitions: Number of partitions (-1 - default for cluster by default)
     /// - Parameter timeout: Timeout in milliseconds.
     /// - Returns: Name of newly created topic.
     /// - Throws: A ``KafkaError`` if the topic creation failed.
-    func _createUniqueTopic(timeout: Int32) throws -> String {
+    func _createUniqueTopic(numberOfPartitions: Int = -1, timeout: Int32) throws -> String {
         let uniqueTopicName = UUID().uuidString
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
@@ -50,7 +51,7 @@ extension RDKafkaClient {
 
         guard let newTopic = rd_kafka_NewTopic_new(
             uniqueTopicName,
-            -1, // use default num_partitions
+            Int32(numberOfPartitions), // use default num_partitions
             -1, // use default replication_factor
             errorChars,
             RDKafkaClient.stringSize
