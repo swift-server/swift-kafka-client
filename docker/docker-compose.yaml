@@ -50,6 +50,7 @@ services:
     <<: *common
     depends_on: [kafka, runtime-setup]
     environment:
+      SWIFT_VERSION: 5.7
       KAFKA_HOST: kafka
     command: >
       /bin/bash -xcl "
