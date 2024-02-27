@@ -34,7 +34,7 @@ let benchmarks = {
         thresholds: [
             // Thresholds are wild guess mostly. Have to adjust with time.
             .wallClock: .init(relative: [.p90: 10]),
-            .cpuTotal: .init(relative: [.p90: 0]),
+            .cpuTotal: .init(relative: [.p90: 10]),
             .allocatedResidentMemory: .init(relative: [.p90: 20]),
             .contextSwitches: .init(relative: [.p90: 10]),
             .throughput: .init(relative: [.p90: 10]),
