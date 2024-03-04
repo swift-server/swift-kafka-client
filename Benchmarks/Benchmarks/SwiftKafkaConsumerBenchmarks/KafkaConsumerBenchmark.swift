@@ -21,12 +21,14 @@ import Kafka
 import Logging
 import ServiceLifecycle
 
+
+
 let benchmarks = {
     var uniqueTestTopic: String!
     let messageCount: UInt = 1000
 
     Benchmark.defaultConfiguration = .init(
-        metrics: [.wallClock, .cpuTotal, .allocatedResidentMemory, .contextSwitches, .throughput] + .arc,
+        metrics: metricsToMeasure,
         warmupIterations: 0,
         scalingFactor: .one,
         maxDuration: .seconds(5),

@@ -1,0 +1,10 @@
+{
+  "allocatedResidentMemory" : 70123520,
+  "cpuTotal" : 230000000,
+  "objectAllocCount" : 7026,
+  "releaseCount" : 32263,
+  "retainCount" : 21255,
+  "retainReleaseDelta" : 3982,
+  "throughput" : 2,
+  "wallClock" : 635520125
+}

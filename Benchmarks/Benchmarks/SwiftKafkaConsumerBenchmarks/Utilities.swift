@@ -126,3 +126,16 @@ extension Benchmark {
         return try await body()
     }
 }
+
+fileprivate let stableBenchmarkMetrics: [BenchmarkMetric] = [
+    .allocatedResidentMemory,
+] + .arc
+
+fileprivate let allMetricsToMeasure: [BenchmarkMetric] = [
+    .wallClock,
+    .cpuTotal,
+    .contextSwitches,
+    .throughput
+] + stableBenchmarkMetrics
+
+let metricsToMeasure: [BenchmarkMetric] = (Bool(ProcessInfo.processInfo.environment["KAFKA_USE_STABLE_BENCHMARK_METRICS"] ?? "false") == true) ? stableBenchmarkMetrics : allMetricsToMeasure
