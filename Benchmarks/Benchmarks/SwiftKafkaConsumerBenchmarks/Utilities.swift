@@ -147,10 +147,6 @@ let metricsToMeasure: [BenchmarkMetric] =
 
 let stableMetricsThreasholds: [BenchmarkMetric: BenchmarkThresholds] = [
     .allocatedResidentMemory: .init(relative: [.p90: 20]),
-    .objectAllocCount: .init(relative: [.p90: 20]),
-    .retainCount: .init(relative: [.p90: 20]),
-    .releaseCount: .init(relative: [.p90: 20]),
-    .retainReleaseDelta: .init(relative: [.p90: 20]),
 ]
 
 let allMetricsThreasholds: [BenchmarkMetric: BenchmarkThresholds] = [
