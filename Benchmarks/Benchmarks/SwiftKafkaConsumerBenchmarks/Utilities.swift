@@ -129,14 +129,14 @@ extension Benchmark {
 
 private let stableBenchmarkMetrics: [BenchmarkMetric] = [
     .allocatedResidentMemory,
-] + .arc
+]
 
 private let allMetricsToMeasure: [BenchmarkMetric] = [
     .wallClock,
     .cpuTotal,
     .contextSwitches,
     .throughput,
-] + stableBenchmarkMetrics
+] + stableBenchmarkMetrics + .arc
 
 private let useStableMetrics = Bool(ProcessInfo.processInfo.environment["KAFKA_USE_STABLE_BENCHMARK_METRICS"] ?? "false") == true
 
