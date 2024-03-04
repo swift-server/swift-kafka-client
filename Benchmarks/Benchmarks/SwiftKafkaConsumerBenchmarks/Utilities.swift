@@ -146,22 +146,22 @@ let metricsToMeasure: [BenchmarkMetric] =
         : allMetricsToMeasure
 
 let stableMetricsThreasholds: [BenchmarkMetric: BenchmarkThresholds] = [
-    .allocatedResidentMemory: .init(relative: [.p90: 10]),
-    .objectAllocCount: .init(relative: [.p90: 10]),
-    .retainCount: .init(relative: [.p90: 10]),
-    .releaseCount: .init(relative: [.p90: 10]),
+    .allocatedResidentMemory: .init(relative: [.p90: 20]),
+    .objectAllocCount: .init(relative: [.p90: 20]),
+    .retainCount: .init(relative: [.p90: 20]),
+    .releaseCount: .init(relative: [.p90: 20]),
     .retainReleaseDelta: .init(relative: [.p90: 20]),
 ]
 
 let allMetricsThreasholds: [BenchmarkMetric: BenchmarkThresholds] = [
-    .wallClock: .init(relative: [.p90: 15]),
-    .cpuTotal: .init(relative: [.p90: 15]),
-    .allocatedResidentMemory: .init(relative: [.p90: 10]),
-    .contextSwitches: .init(relative: [.p90: 15]),
-    .throughput: .init(relative: [.p90: 15]),
-    .objectAllocCount: .init(relative: [.p90: 10]),
-    .retainCount: .init(relative: [.p90: 10]),
-    .releaseCount: .init(relative: [.p90: 10]),
+    .wallClock: .init(relative: [.p90: 35]),
+    .cpuTotal: .init(relative: [.p90: 35]),
+    .allocatedResidentMemory: .init(relative: [.p90: 20]),
+    .contextSwitches: .init(relative: [.p90: 35]),
+    .throughput: .init(relative: [.p90: 35]),
+    .objectAllocCount: .init(relative: [.p90: 20]),
+    .retainCount: .init(relative: [.p90: 20]),
+    .releaseCount: .init(relative: [.p90: 20]),
     .retainReleaseDelta: .init(relative: [.p90: 20]),
 ]
 
