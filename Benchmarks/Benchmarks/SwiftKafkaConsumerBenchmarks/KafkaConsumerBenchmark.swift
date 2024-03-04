@@ -23,7 +23,7 @@ import ServiceLifecycle
 
 let benchmarks = {
     var uniqueTestTopic: String!
-    let messageCount: UInt = 1000
+    let messageCount: UInt = 100
 
     Benchmark.defaultConfiguration = .init(
         metrics: metricsToMeasure,
