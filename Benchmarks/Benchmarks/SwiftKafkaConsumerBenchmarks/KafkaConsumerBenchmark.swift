@@ -23,15 +23,31 @@ import ServiceLifecycle
 
 let benchmarks = {
     var uniqueTestTopic: String!
-    let messageCount: UInt = 100
+    let messageCount: UInt = 1000
 
     Benchmark.defaultConfiguration = .init(
-        metrics: metricsToMeasure,
+        metrics: [
+            .wallClock,
+            .cpuTotal,
+            .contextSwitches,
+            .throughput,
+            .allocatedResidentMemory,
+        ] + .arc,
         warmupIterations: 0,
         scalingFactor: .one,
         maxDuration: .seconds(5),
         maxIterations: 100,
-        thresholds: metricsThreasholds
+        thresholds: [
+            .wallClock: .init(relative: [.p90: 35]),
+            .cpuTotal: .init(relative: [.p90: 35]),
+            .allocatedResidentMemory: .init(relative: [.p90: 20]),
+            .contextSwitches: .init(relative: [.p90: 35]),
+            .throughput: .init(relative: [.p90: 35]),
+            .objectAllocCount: .init(relative: [.p90: 20]),
+            .retainCount: .init(relative: [.p90: 20]),
+            .releaseCount: .init(relative: [.p90: 20]),
+            .retainReleaseDelta: .init(relative: [.p90: 20]),
+        ]
     )
 
     Benchmark.setup = {
