@@ -127,15 +127,45 @@ extension Benchmark {
     }
 }
 
-fileprivate let stableBenchmarkMetrics: [BenchmarkMetric] = [
+private let stableBenchmarkMetrics: [BenchmarkMetric] = [
     .allocatedResidentMemory,
 ] + .arc
 
-fileprivate let allMetricsToMeasure: [BenchmarkMetric] = [
+private let allMetricsToMeasure: [BenchmarkMetric] = [
     .wallClock,
     .cpuTotal,
     .contextSwitches,
-    .throughput
+    .throughput,
 ] + stableBenchmarkMetrics
 
-let metricsToMeasure: [BenchmarkMetric] = (Bool(ProcessInfo.processInfo.environment["KAFKA_USE_STABLE_BENCHMARK_METRICS"] ?? "false") == true) ? stableBenchmarkMetrics : allMetricsToMeasure
+private let useStableMetrics = Bool(ProcessInfo.processInfo.environment["KAFKA_USE_STABLE_BENCHMARK_METRICS"] ?? "false") == true
+
+let metricsToMeasure: [BenchmarkMetric] =
+    useStableMetrics
+        ? stableBenchmarkMetrics
+        : allMetricsToMeasure
+
+let stableMetricsThreasholds: [BenchmarkMetric: BenchmarkThresholds] = [
+    .allocatedResidentMemory: .init(relative: [.p90: 10]),
+    .objectAllocCount: .init(relative: [.p90: 10]),
+    .retainCount: .init(relative: [.p90: 10]),
+    .releaseCount: .init(relative: [.p90: 10]),
+    .retainReleaseDelta: .init(relative: [.p90: 20]),
+]
+
+let allMetricsThreasholds: [BenchmarkMetric: BenchmarkThresholds] = [
+    .wallClock: .init(relative: [.p90: 15]),
+    .cpuTotal: .init(relative: [.p90: 15]),
+    .allocatedResidentMemory: .init(relative: [.p90: 10]),
+    .contextSwitches: .init(relative: [.p90: 15]),
+    .throughput: .init(relative: [.p90: 15]),
+    .objectAllocCount: .init(relative: [.p90: 10]),
+    .retainCount: .init(relative: [.p90: 10]),
+    .releaseCount: .init(relative: [.p90: 10]),
+    .retainReleaseDelta: .init(relative: [.p90: 20]),
+]
+
+let metricsThreasholds: [BenchmarkMetric: BenchmarkThresholds] =
+    useStableMetrics
+        ? stableMetricsThreasholds
+        : allMetricsThreasholds

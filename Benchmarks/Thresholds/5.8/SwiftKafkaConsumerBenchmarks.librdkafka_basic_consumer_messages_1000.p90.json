@@ -1,10 +1,7 @@
 {
-  "allocatedResidentMemory" : 45219840,
-  "cpuTotal" : 20000000,
+  "allocatedResidentMemory" : 42270720,
   "objectAllocCount" : 0,
   "releaseCount" : 0,
   "retainCount" : 0,
-  "retainReleaseDelta" : 0,
-  "throughput" : 2,
-  "wallClock" : 618535750
+  "retainReleaseDelta" : 0
 }
