@@ -1,7 +1,7 @@
 {
-  "allocatedResidentMemory" : 65404928,
-  "objectAllocCount" : 6980,
-  "releaseCount" : 32127,
-  "retainCount" : 21198,
-  "retainReleaseDelta" : 3952
+  "allocatedResidentMemory" : 12536000,
+  "objectAllocCount" : 4103,
+  "releaseCount" : 24088,
+  "retainCount" : 18163,
+  "retainReleaseDelta" : 2033
 }
