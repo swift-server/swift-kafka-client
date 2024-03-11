@@ -14,6 +14,7 @@
 
 import struct Foundation.UUID
 @testable import Kafka
+@_spi(Internal) import Kafka
 import NIOCore
 import ServiceLifecycle
 import XCTest
@@ -79,7 +80,9 @@ final class KafkaTests: XCTestCase {
             events: [],
             logger: .kafkaTest
         )
-        try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
+        if let uniqueTestTopic = self.uniqueTestTopic {
+            try client._deleteTopic(uniqueTestTopic, timeout: 10 * 1000)
+        }
 
         self.bootstrapBrokerAddress = nil
         self.producerConfig = nil
@@ -606,14 +609,7 @@ final class KafkaTests: XCTestCase {
         headers: [KafkaHeader] = [],
         count: UInt
     ) -> [KafkaProducerMessage<String, String>] {
-        return Array(0..<count).map {
-            KafkaProducerMessage(
-                topic: topic,
-                headers: headers,
-                key: "key",
-                value: "Hello, World! \($0) - \(Date().description)"
-            )
-        }
+        return _createTestMessages(topic: topic, headers: headers, count: count)
     }
 
     private static func sendAndAcknowledgeMessages(
@@ -621,43 +617,6 @@ final class KafkaTests: XCTestCase {
         events: KafkaProducerEvents,
         messages: [KafkaProducerMessage<String, String>]
     ) async throws {
-        var messageIDs = Set<KafkaProducerMessageID>()
-
-        for message in messages {
-            messageIDs.insert(try producer.send(message))
-        }
-
-        var receivedDeliveryReports = Set<KafkaDeliveryReport>()
-
-        for await event in events {
-            switch event {
-            case .deliveryReports(let deliveryReports):
-                for deliveryReport in deliveryReports {
-                    receivedDeliveryReports.insert(deliveryReport)
-                }
-            default:
-                break // Ignore any other events
-            }
-
-            if receivedDeliveryReports.count >= messages.count {
-                break
-            }
-        }
-
-        XCTAssertEqual(Set(receivedDeliveryReports.map(\.id)), messageIDs)
-
-        let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
-            guard case .acknowledged(let receivedMessage) = $0.status else {
-                return nil
-            }
-            return receivedMessage
-        }
-
-        XCTAssertEqual(messages.count, acknowledgedMessages.count)
-        for message in messages {
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
-        }
+        return try await _sendAndAcknowledgeMessages(producer: producer, events: events, messages: messages)
     }
 }

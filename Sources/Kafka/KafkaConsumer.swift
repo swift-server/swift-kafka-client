@@ -852,8 +852,10 @@ extension KafkaConsumer {
             switch consumerState {
             case .running(let source):
                 self.state = .running(client: client, messagePollLoopState: .waitingForMessages(source: source))
-            case .suspended, .waitingForMessages, .finished:
+            case .suspended, .waitingForMessages:
                 fatalError("\(#function) should not be invoked in state \(self.state)")
+            case .finished:
+                break // ok, skip action
             }
         }
 
