@@ -15,6 +15,7 @@
 import Atomics
 import struct Foundation.UUID
 @testable import Kafka
+@_spi(Internal) import Kafka
 import NIOCore
 import ServiceLifecycle
 import XCTest
@@ -80,7 +81,9 @@ final class KafkaTests: XCTestCase {
             events: [],
             logger: .kafkaTest
         )
-        try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
+        if let uniqueTestTopic = self.uniqueTestTopic {
+            try client._deleteTopic(uniqueTestTopic, timeout: 10 * 1000)
+        }
 
         self.bootstrapBrokerAddress = nil
         self.producerConfig = nil
@@ -601,7 +604,7 @@ final class KafkaTests: XCTestCase {
     }
 
     func testDuplicatedMessagesOnRebalance() async throws {
-        let partitionsNumber = 12
+        let partitionsNumber: Int32 = 12
         do {
             var basicConfig = KafkaConsumerConfiguration(
                 consumptionStrategy: .group(id: "no-group", topics: []),
@@ -618,7 +621,7 @@ final class KafkaTests: XCTestCase {
             )
             // cleanup default test topic and create with 12 partitions
             try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
-            self.uniqueTestTopic = try client._createUniqueTopic(numberOfPartitions: partitionsNumber, timeout: 10 * 1000)
+            self.uniqueTestTopic = try client._createUniqueTopic(partitions: partitionsNumber, timeout: 10 * 1000)
         }
 
         let numOfMessages: UInt = 1000
@@ -640,7 +643,7 @@ final class KafkaTests: XCTestCase {
                     producer: producer,
                     events: acks,
                     messages: testMessages,
-                    skipMessagesValidation: true
+                    skipConsistencyCheck: true
                 )
             }
 
@@ -760,63 +763,15 @@ final class KafkaTests: XCTestCase {
         headers: [KafkaHeader] = [],
         count: UInt
     ) -> [KafkaProducerMessage<String, String>] {
-        return Array(0..<count).map {
-            let date = Date()
-            return KafkaProducerMessage(
-                topic: topic,
-                headers: headers,
-                key: "key \(date.timeIntervalSince1970)",
-                value: "Hello, World! \($0) - \(date.description)"
-            )
-        }
+        return _createTestMessages(topic: topic, headers: headers, count: count)
     }
 
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
         events: KafkaProducerEvents,
         messages: [KafkaProducerMessage<String, String>],
-        skipMessagesValidation: Bool = false
+        skipConsistencyCheck: Bool = false
     ) async throws {
-        var messageIDs = Set<KafkaProducerMessageID>()
-
-        for message in messages {
-            messageIDs.insert(try producer.send(message))
-        }
-
-        var receivedDeliveryReports = Set<KafkaDeliveryReport>()
-
-        for await event in events {
-            switch event {
-            case .deliveryReports(let deliveryReports):
-                for deliveryReport in deliveryReports {
-                    receivedDeliveryReports.insert(deliveryReport)
-                }
-            default:
-                break // Ignore any other events
-            }
-
-            if receivedDeliveryReports.count >= messages.count {
-                break
-            }
-        }
-
-        XCTAssertEqual(Set(receivedDeliveryReports.map(\.id)), messageIDs)
-
-        let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
-            guard case .acknowledged(let receivedMessage) = $0.status else {
-                return nil
-            }
-            return receivedMessage
-        }
-
-        XCTAssertEqual(messages.count, acknowledgedMessages.count)
-        guard skipMessagesValidation else {
-            return
-        }
-        for message in messages {
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message.topic }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }))
-        }
+        return try await _sendAndAcknowledgeMessages(producer: producer, events: events, messages: messages, skipConsistencyCheck: skipConsistencyCheck)
     }
 }
