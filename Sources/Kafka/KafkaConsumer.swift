@@ -355,6 +355,8 @@ public final class KafkaConsumer: Sendable, Service {
                 )
             }
             try client.subscribe(topicPartitionList: subscription)
+        case .consumerClosed:
+            throw KafkaError.connectionClosed(reason: "Consumer deinitialized before setup")
         }
     }
 
@@ -375,6 +377,8 @@ public final class KafkaConsumer: Sendable, Service {
             let assignment = RDKafkaTopicPartitionList()
             assignment.setOffset(topic: topic, partition: partition, offset: offset)
             try await client.assign(topicPartitionList: assignment)
+        case .consumerClosed:
+            throw KafkaError.connectionClosed(reason: "Consumer deinitialized before setup")
         }
     }
     
@@ -813,6 +817,8 @@ extension KafkaConsumer {
             /// Set up the connection through ``subscribe()`` or ``assign()``.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case setUpConnection(client: RDKafkaClient)
+            /// The ``KafkaConsumer`` is closed.
+            case consumerClosed
         }
 
         /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
@@ -827,8 +833,10 @@ extension KafkaConsumer {
                 return .setUpConnection(client: client)
             case .running:
                 fatalError("\(#function) should not be invoked more than once")
-            case .finishing, .finished:
+            case .finishing:
                 fatalError("\(#function) should only be invoked when KafkaConsumer is running")
+            case .finished:
+                return .consumerClosed
             }
         }
 

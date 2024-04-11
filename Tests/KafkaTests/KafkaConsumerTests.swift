@@ -128,4 +128,52 @@ final class KafkaConsumerTests: XCTestCase {
             await serviceGroup.triggerGracefulShutdown()
         }
     }
+
+    func testConsumerConstructDeinit() async throws {
+        let uniqueGroupID = UUID().uuidString
+        let config = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
+            bootstrapBrokerAddresses: []
+        )
+
+        _ = try KafkaConsumer(configuration: config, logger: .kafkaTest) // deinit called before run
+        _ = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
+    }
+
+    func testConsumerMessagesReadCancelledBeforeRun() async throws {
+        let uniqueGroupID = UUID().uuidString
+        let config = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
+            bootstrapBrokerAddresses: []
+        )
+
+        let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
+
+        let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
+
+        // explicitly run and cancel message consuming task before serviceGroup.run()
+        let consumingTask = Task {
+            for try await record in consumer.messages {
+                XCTFail("Unexpected record \(record))")
+            }
+        }
+
+        try await Task.sleep(for: .seconds(1))
+
+        // explicitly cancel message consuming task before serviceGroup.run()
+        consumingTask.cancel()
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .seconds(1))
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
 }

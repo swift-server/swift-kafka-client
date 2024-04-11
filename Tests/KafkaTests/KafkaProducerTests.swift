@@ -383,4 +383,44 @@ final class KafkaProducerTests: XCTestCase {
             await serviceGroup.triggerGracefulShutdown()
         }
     }
+
+    func testProducerConstructDeinit() async throws {
+        let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+
+        _ = try KafkaProducer(configuration: config, logger: .kafkaTest) // deinit called before run
+        _ = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest) // deinit called before run
+    }
+
+    func testProducerEventsReadCancelledBeforeRun() async throws {
+        let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest)
+
+        let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
+
+        // explicitly run and cancel message consuming task before serviceGroup.run()
+        let producerEventsTask = Task {
+            for try await event in events {
+                XCTFail("Unexpected record \(event))")
+            }
+        }
+
+        try await Task.sleep(for: .seconds(1))
+
+        // explicitly cancel message consuming task before serviceGroup.run()
+        producerEventsTask.cancel()
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .seconds(1))
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
 }
