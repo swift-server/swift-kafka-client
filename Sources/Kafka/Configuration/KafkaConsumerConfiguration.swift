@@ -83,7 +83,7 @@ public struct KafkaConsumerConfiguration {
         ) -> ConsumptionStrategy {
             return .init(consumptionStrategy: .partition(groupID: groupID, topic: topic, partition: partition, offset: offset))
         }
-        
+
         /// A consumption strategy based on consumer group membership.
         /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
         ///
@@ -273,7 +273,7 @@ extension KafkaConsumerConfiguration {
                 // https://github.com/edenhill/librdkafka/issues/3261
                 resultDict["group.id"] = UUID().uuidString
             }
-            
+
         case .group(groupID: let groupID, topics: _):
             resultDict["group.id"] = groupID
         }
