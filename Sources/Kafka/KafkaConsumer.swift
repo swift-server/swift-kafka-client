@@ -70,9 +70,6 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
     /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct AsyncIterator: AsyncIteratorProtocol {
-        // FIXME: there are two possibilities:
-        // 1. Create gcd queue and wait blocking call client.consumerPoll() -> faster reaction on new messages
-        // 2. Sleep in case there are no messages -> easier to implement + no problems with gcd Sendability
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
 
@@ -94,6 +91,8 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         }
 
         public func next() async throws -> Element? {
+            // Currently use Task.sleep() if no new messages, should use task executor preference when implemented:
+            // https://github.com/apple/swift-evolution/blob/main/proposals/0417-task-executor-preference.md
             while !Task.isCancelled {
                 let action = self.stateMachineHolder.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
 
