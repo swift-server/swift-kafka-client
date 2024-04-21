@@ -492,6 +492,28 @@ public final class KafkaConsumer: Sendable, Service {
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func scheduleCommit(_ message: KafkaConsumerMessage) throws {
+        try scheduleCommit(
+            topic: message.topic,
+            partition: message.partition,
+            offset: message.offset)
+    }
+
+    /// Mark all messages up to the passed message in the topic as read.
+    /// Schedules a commit and returns immediately.
+    /// Any errors encountered after scheduling the commit will be discarded.
+    ///
+    /// This method is only used for manual offset management.
+    ///
+    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    ///
+    /// - Parameters:
+    ///     - topic: Topic where the message that should be marked as read resides.
+    ///     - partition: Partition where the message that should be marked as read resides.
+    ///     - offset: Offset of the message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
+    public func scheduleCommit(topic: String,
+                               partition: KafkaPartition,
+                               offset: KafkaOffset) throws {
         let action = self.stateMachine.withLockedValue { $0.commit() }
         switch action {
         case .throwClosedError:
@@ -500,8 +522,10 @@ public final class KafkaConsumer: Sendable, Service {
             guard self.configuration.isAutoCommitEnabled == false else {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
-
-            try client.scheduleCommit(message)
+            try client.scheduleCommit(
+                topic: topic,
+                partition: partition,
+                offset: offset)
         }
     }
 
@@ -521,6 +545,26 @@ public final class KafkaConsumer: Sendable, Service {
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func commit(_ message: KafkaConsumerMessage) async throws {
+        try await commit(topic: message.topic,
+               partition: message.partition,
+               offset: message.offset)
+    }
+
+    /// Mark all messages up to the passed message in the topic as read.
+    /// Awaits until the commit succeeds or an error is encountered.
+    ///
+    /// This method is only used for manual offset management.
+    ///
+    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    ///
+    /// - Parameters:
+    ///     - topic: Topic where the message that should be marked as read resides.
+    ///     - partition: Partition where the message that should be marked as read resides.
+    ///     - offset: Offset of the message that shall be marked as read.
+    /// - Throws: A ``KafkaError`` if committing failed.
+    public func commit(topic: String,
+                       partition: KafkaPartition,
+                       offset: KafkaOffset) async throws {
         let action = self.stateMachine.withLockedValue { $0.commit() }
         switch action {
         case .throwClosedError:
@@ -530,10 +574,12 @@ public final class KafkaConsumer: Sendable, Service {
                 throw KafkaError.config(reason: "Committing manually only works if isAutoCommitEnabled set to false")
             }
 
-            try await client.commit(message)
+            try await client.commit(topic: topic,
+                                    partition: partition,
+                                    offset: offset)
         }
     }
-
+    
     /// This function is used to gracefully shut down a Kafka consumer client.
     ///
     /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
