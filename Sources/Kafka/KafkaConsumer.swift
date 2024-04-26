@@ -91,6 +91,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         }
 
         public func next() async throws -> Element? {
+            // swift-kafka-client issue: https://github.com/swift-server/swift-kafka-client/issues/165
             // Currently use Task.sleep() if no new messages, should use task executor preference when implemented:
             // https://github.com/apple/swift-evolution/blob/main/proposals/0417-task-executor-preference.md
             while !Task.isCancelled {

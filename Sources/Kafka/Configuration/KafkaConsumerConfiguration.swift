@@ -22,27 +22,6 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
-    public struct BackPressureStrategy: Sendable, Hashable {
-        /// A back pressure strategy based on high and low watermarks.
-        ///
-        /// The consumer maintains a buffer size between a low watermark and a high watermark
-        /// to control the flow of incoming messages.
-        ///
-        /// - Parameter low: The lower threshold for the buffer size (low watermark).
-        /// - Parameter high: The upper threshold for the buffer size (high watermark).
-        @available(*, deprecated, message: "Use MessageOptions to control backpressure")
-        public static func watermark(low _: Int, high _: Int) -> BackPressureStrategy {
-            return .init()
-        }
-    }
-
-    @available(*, deprecated, message: "Use message.maximumBytes and message.maximumBytesToCopy to control backpressure")
-    public var backPressureStrategy: BackPressureStrategy = .watermark(
-        low: 10,
-        high: 50
-    )
-
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {
