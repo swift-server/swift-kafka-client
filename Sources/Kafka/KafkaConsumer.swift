@@ -321,7 +321,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     private func _run() async throws {
         switch self.configuration.consumptionStrategy._internal {
-        case .partition(topic: let topic, partition: let partition, offset: let offset):
+        case .partition(groupID: _, topic: let topic, partition: let partition, offset: let offset):
             try self.assign(topic: topic, partition: partition, offset: offset)
         case .group(groupID: _, topics: let topics):
             try self.subscribe(topics: topics)
