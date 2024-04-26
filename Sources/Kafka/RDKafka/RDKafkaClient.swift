@@ -68,10 +68,6 @@ public final class RDKafkaClient: Sendable {
         // Manually override some of the configuration options
         // Handle logs in event queue
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
-        // KafkaConsumer is manually storing read offsets
-        if type == .consumer {
-            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
-        }
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
@@ -490,40 +486,6 @@ public final class RDKafkaClient: Sendable {
 
         init(_ closure: @escaping Closure) {
             self.closure = closure
-        }
-    }
-
-    /// Store `message`'s offset for next auto-commit.
-    ///
-    /// - Important: `enable.auto.offset.store` must be set to `false` when using this API.
-    func storeMessageOffset(_ message: KafkaConsumerMessage) throws {
-        // The offset committed is always the offset of the next requested message.
-        // Thus, we increase the offset of the current message by one before committing it.
-        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        let changesList = RDKafkaTopicPartitionList()
-        changesList.setOffset(
-            topic: message.topic,
-            partition: message.partition,
-            offset: Int64(message.offset.rawValue + 1)
-        )
-
-        let error = changesList.withListPointer { listPointer in
-            rd_kafka_offsets_store(
-                self.kafkaHandle,
-                listPointer
-            )
-        }
-
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            // Ignore RD_KAFKA_RESP_ERR__STATE error.
-            // RD_KAFKA_RESP_ERR__STATE indicates an attempt to commit to an unassigned partition,
-            // which can occur during rebalancing or when the consumer is shutting down.
-            // See "Upgrade considerations" for more details: https://github.com/confluentinc/librdkafka/releases/tag/v1.9.0
-            // Since Kafka Consumers are designed for at-least-once processing, failing to commit here is acceptable.
-            if error == RD_KAFKA_RESP_ERR__STATE {
-                return
-            }
-            throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
 
