@@ -48,7 +48,7 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
         topic: String,
         partition: KafkaPartition = .unassigned,
         headers: [KafkaHeader] = [],
-        key: Key,
+        key: Key?,
         value: Value
     ) {
         self.topic = topic

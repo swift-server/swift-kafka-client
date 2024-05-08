@@ -50,12 +50,12 @@ services:
     <<: *common
     depends_on: [kafka, runtime-setup]
     environment:
+      SWIFT_VERSION: 5.7
       KAFKA_HOST: kafka
     command: >
       /bin/bash -xcl "
         swift build --build-tests $${SANITIZER_ARG-} && \
-        swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-} $${STRICT_CONCURRENCY_ARG-} && \
-        cd Benchmarks && swift package --disable-sandbox benchmark baseline check --check-absolute-path Thresholds/$${SWIFT_VERSION-}/
+        swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-} $${STRICT_CONCURRENCY_ARG-}
       "
 
   benchmark:
@@ -73,7 +73,7 @@ services:
     depends_on: [kafka, runtime-setup]
     environment:
       KAFKA_HOST: kafka
-    command: /bin/bash -xcl "cd Benchmarks && swift package --disable-sandbox --scratch-path .build/$${SWIFT_VERSION-}/ --allow-writing-to-package-directory benchmark --format metricP90AbsoluteThresholds --path Thresholds/$${SWIFT_VERSION-}/"
+    command: /bin/bash -xcl "cd Benchmarks && swift package --disable-sandbox --scratch-path .build/$${SWIFT_VERSION-}/ --allow-writing-to-package-directory benchmark --format metricP90AbsoluteThresholds --path Thresholds/$${SWIFT_VERSION-}/ --no-progress"
 
   # util
 

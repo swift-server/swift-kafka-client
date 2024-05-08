@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Crdkafka
 import struct Foundation.UUID
 
 public struct KafkaConsumerConfiguration {
@@ -23,41 +22,10 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
-    public struct BackPressureStrategy: Sendable, Hashable {
-        enum _BackPressureStrategy: Sendable, Hashable {
-            case watermark(low: Int, high: Int)
-        }
-
-        let _internal: _BackPressureStrategy
-
-        private init(backPressureStrategy: _BackPressureStrategy) {
-            self._internal = backPressureStrategy
-        }
-
-        /// A back pressure strategy based on high and low watermarks.
-        ///
-        /// The consumer maintains a buffer size between a low watermark and a high watermark
-        /// to control the flow of incoming messages.
-        ///
-        /// - Parameter low: The lower threshold for the buffer size (low watermark).
-        /// - Parameter high: The upper threshold for the buffer size (high watermark).
-        public static func watermark(low: Int, high: Int) -> BackPressureStrategy {
-            return .init(backPressureStrategy: .watermark(low: low, high: high))
-        }
-    }
-
-    /// The backpressure strategy to be used for message consumption.
-    /// See ``KafkaConsumerConfiguration/BackPressureStrategy-swift.struct`` for more information.
-    public var backPressureStrategy: BackPressureStrategy = .watermark(
-        low: 10,
-        high: 50
-    )
-
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {
-            case partition(topic: String, partition: KafkaPartition, offset: KafkaOffset)
+            case partition(groupID: String?, topic: String, partition: KafkaPartition, offset: KafkaOffset)
             case group(groupID: String, topics: [String])
         }
 
@@ -72,14 +40,16 @@ public struct KafkaConsumerConfiguration {
         ///
         /// - Parameters:
         ///     - partition: The partition of the topic to consume from.
+        ///     - groupID: The ID of the consumer group to commit to. Defaults to no group ID. Specifying a group ID is useful if partitions assignment is manually managed but committed offsets should still be tracked in a consumer group.
         ///     - topic: The name of the Kafka topic.
         ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
         public static func partition(
             _ partition: KafkaPartition,
+            groupID: String? = nil,
             topic: String,
             offset: KafkaOffset = .end
         ) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
+            return .init(consumptionStrategy: .partition(groupID: groupID, topic: topic, partition: partition, offset: offset))
         }
 
         /// A consumption strategy based on consumer group membership.
@@ -261,12 +231,17 @@ extension KafkaConsumerConfiguration {
         var resultDict: [String: String] = [:]
 
         switch self.consumptionStrategy._internal {
-        case .partition:
-            // Although an assignment is not related to a consumer group,
-            // librdkafka requires us to set a `group.id`.
-            // This is a known issue:
-            // https://github.com/edenhill/librdkafka/issues/3261
-            resultDict["group.id"] = UUID().uuidString
+        case .partition(groupID: let groupID, topic: _, partition: _, offset: _):
+            if let groupID = groupID {
+                resultDict["group.id"] = groupID
+            } else {
+                // Although an assignment is not related to a consumer group,
+                // librdkafka requires us to set a `group.id`.
+                // This is a known issue:
+                // https://github.com/edenhill/librdkafka/issues/3261
+                resultDict["group.id"] = UUID().uuidString
+            }
+
         case .group(groupID: let groupID, topics: _):
             resultDict["group.id"] = groupID
         }
