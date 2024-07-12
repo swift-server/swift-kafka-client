@@ -367,15 +367,15 @@ public final class KafkaConsumer: Sendable, Service {
     /// Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
     /// - Throws: A ``KafkaError`` if the consumer could not be assigned to the topic + partition pair.
     private func assign(
-        topic: String,
-        partition: KafkaPartition,
-        offset: KafkaOffset
+        partitions: [KafkaConsumerConfiguration.ConsumptionStrategy.TopicPartition]
     ) async throws {
         let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
         switch action {
         case .setUpConnection(let client):
             let assignment = RDKafkaTopicPartitionList()
-            assignment.setOffset(topic: topic, partition: partition, offset: offset)
+            for partition in partitions {
+                assignment.setOffset(topic: partition.topic, partition: partition.partition, offset: partition.offset)
+            }
             try await client.assign(topicPartitionList: assignment)
         case .consumerClosed:
             throw KafkaError.connectionClosed(reason: "Consumer deinitialized before setup")
@@ -457,8 +457,8 @@ public final class KafkaConsumer: Sendable, Service {
 
     private func _run() async throws {
         switch self.configuration.consumptionStrategy._internal {
-        case .partition(topic: let topic, partition: let partition, offset: let offset):
-            try await self.assign(topic: topic, partition: partition, offset: offset)
+        case .partitions(_, let partitions):
+            try await self.assign(partitions: partitions)
         case .group(groupID: _, topics: let topics):
             try self.subscribe(topics: topics)
         }

@@ -60,8 +60,20 @@ public struct KafkaConsumerConfiguration {
 
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
+        public struct TopicPartition: Sendable, Hashable {
+            public let partition: KafkaPartition
+            public let topic: String
+            public let offset: KafkaOffset
+
+            public init(partition: KafkaPartition, topic: String, offset: KafkaOffset) {
+                self.partition = partition
+                self.topic = topic
+                self.offset = offset
+            }
+        }
+
         enum _ConsumptionStrategy: Sendable, Hashable {
-            case partition(topic: String, partition: KafkaPartition, offset: KafkaOffset)
+            case partitions(groupID: String?, [TopicPartition])
             case group(groupID: String, topics: [String])
         }
 
@@ -78,12 +90,11 @@ public struct KafkaConsumerConfiguration {
         ///     - partition: The partition of the topic to consume from.
         ///     - topic: The name of the Kafka topic.
         ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
-        public static func partition(
-            _ partition: KafkaPartition,
-            topic: String,
-            offset: KafkaOffset = .end
+        public static func partitions(
+            groupID: String? = nil,
+            partitions: [TopicPartition]
         ) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .partition(topic: topic, partition: partition, offset: offset))
+            return .init(consumptionStrategy: .partitions(groupID: groupID, partitions))
         }
 
         /// A consumption strategy based on consumer group membership.
@@ -273,12 +284,16 @@ extension KafkaConsumerConfiguration {
         var resultDict: [String: String] = [:]
 
         switch self.consumptionStrategy._internal {
-        case .partition:
-            // Although an assignment is not related to a consumer group,
-            // librdkafka requires us to set a `group.id`.
-            // This is a known issue:
-            // https://github.com/edenhill/librdkafka/issues/3261
-            resultDict["group.id"] = UUID().uuidString
+        case .partitions(let groupID, _):
+            if let groupID = groupID {
+                resultDict["group.id"] = groupID
+            } else {
+                // Although an assignment is not related to a consumer group,
+                // librdkafka requires us to set a `group.id`.
+                // This is a known issue:
+                // https://github.com/edenhill/librdkafka/issues/3261
+                resultDict["group.id"] = UUID().uuidString
+            }
         case .group(groupID: let groupID, topics: _):
             resultDict["group.id"] = groupID
         }

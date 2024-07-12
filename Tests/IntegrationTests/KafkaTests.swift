@@ -142,17 +142,73 @@ final class KafkaTests: XCTestCase {
             await serviceGroup.triggerGracefulShutdown()
         }
     }
+
     #if false
+    func testTempNoConsumerGroupLeft() async throws {
+        // resources-snapshots-dc-1
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .partitions(partitions: [
+                .init(partition: .init(rawValue: 0), topic: "xxx-snapshots-dc-1", offset: .init(rawValue: 0))
+            ]),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.broker.addressFamily = .v4
+        consumerConfig.isAutoCommitEnabled = false
+        consumerConfig.debugOptions = [.all]
+
+        let logger = {
+            var logger = Logger(label: "test")
+            logger.logLevel = .info
+            return logger
+        } ()
+        let consumer = try KafkaConsumer(
+            configuration: consumerConfig,
+            logger: logger
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigint, .sigterm], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                logger.info("Service task started")
+                defer {
+                    logger.info("Service task exited")
+                }
+                try await serviceGroup.run()
+            }
+
+            // Consumer Task
+            group.addTask {
+                logger.info("Consumer task started")
+                defer {
+                    logger.info("Consumer task exited")
+                }
+
+                for try await message in consumer.messages {
+                    logger.info("\(message)")
+//                    consumer.triggerGracefulShutdown()
+//                    return
+                }
+            }
+
+            try await group.waitForAll()
+
+        }
+
+    }
+
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
 
         var consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .partition(
-                KafkaPartition(rawValue: 0),
-                topic: self.uniqueTestTopic,
-                offset: KafkaOffset(rawValue: 0)
-            ),
+            consumptionStrategy: .partitions(partitions: [
+                .init(partition: .init(rawValue: 0), topic: self.uniqueTestTopic, offset: .init(rawValue: 0))
+            ]),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
