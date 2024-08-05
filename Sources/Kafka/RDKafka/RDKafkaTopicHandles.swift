@@ -16,7 +16,7 @@ import Crdkafka
 import NIOConcurrencyHelpers
 
 /// Swift class that matches topic names with their respective `rd_kafka_topic_t` handles.
-internal final class RDKafkaTopicHandles: Sendable {
+internal final class RDKafkaTopicHandles: @unchecked Sendable {
     private let _internal: NIOLockedValueBox<[String: OpaquePointer]>
 
     // Note: we retain the client to ensure it does not get

@@ -20,7 +20,7 @@ import Logging
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
 @_spi(Internal)
-public final class RDKafkaClient: Sendable {
+public final class RDKafkaClient: @unchecked Sendable {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
