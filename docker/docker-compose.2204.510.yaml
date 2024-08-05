@@ -6,7 +6,7 @@ services:
     image: swift-kafka-client:22.04-5.10
     build:
       args:
-        base_image: "swiftlang/swift:nightly-5.10-jammy"
+        base_image: "swiftlang/swift:5.10-jammy"
 
   build:
     image: swift-kafka-client:22.04-5.10
