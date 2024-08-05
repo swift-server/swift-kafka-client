@@ -6,7 +6,8 @@ services:
     image: swift-kafka-client:22.04-5.10
     build:
       args:
-        base_image: "swiftlang/swift:5.10-jammy"
+        ubuntu_version: "jammy"
+        swift_version: "5.10"
 
   build:
     image: swift-kafka-client:22.04-5.10
