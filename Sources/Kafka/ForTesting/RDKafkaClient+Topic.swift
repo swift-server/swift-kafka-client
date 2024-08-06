@@ -27,11 +27,23 @@ extension RDKafkaClient {
     public func _createUniqueTopic(partitions: Int32 = -1, timeout: Int32) throws -> String {
         let uniqueTopicName = UUID().uuidString
 
+        try _createTopic(topicName: uniqueTopicName, partitions: partitions, timeout: timeout)
+
+        return uniqueTopicName
+    }
+
+    /// Create a topic with specified name
+    /// Blocks for a maximum of `timeout` milliseconds.
+    /// - Parameter partitions: Partitions in topic (default: -1 - default for broker)
+    /// - Parameter timeout: Timeout in milliseconds.
+    /// - Returns: Name of newly created topic.
+    /// - Throws: A ``KafkaError`` if the topic creation failed.
+    public func _createTopic(topicName: String, partitions: Int32 = -1, timeout: Int32) throws {
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
         guard let newTopic = rd_kafka_NewTopic_new(
-            uniqueTopicName,
+            topicName,
             partitions,
             -1, // use default replication_factor
             errorChars,
@@ -85,12 +97,10 @@ extension RDKafkaClient {
             }
 
             let receivedTopicName = String(cString: rd_kafka_topic_result_name(topicResult))
-            guard receivedTopicName == uniqueTopicName else {
+            guard receivedTopicName == topicName else {
                 throw KafkaError.topicCreation(reason: "Received topic result for topic with different name")
             }
         }
-
-        return uniqueTopicName
     }
 
     /// Delete a topic.
