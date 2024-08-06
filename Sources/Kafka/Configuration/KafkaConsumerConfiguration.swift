@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import Crdkafka
 import struct Foundation.UUID
 
 public struct KafkaConsumerConfiguration {
@@ -26,37 +25,6 @@ public struct KafkaConsumerConfiguration {
     public var listenForRebalance: Bool = false
     
     public var enablePartitionEof: Bool = false
-
-    /// A struct representing different back pressure strategies for consuming messages in ``KafkaConsumer``.
-    public struct BackPressureStrategy: Sendable, Hashable {
-        enum _BackPressureStrategy: Sendable, Hashable {
-            case watermark(low: Int, high: Int)
-        }
-
-        let _internal: _BackPressureStrategy
-
-        private init(backPressureStrategy: _BackPressureStrategy) {
-            self._internal = backPressureStrategy
-        }
-
-        /// A back pressure strategy based on high and low watermarks.
-        ///
-        /// The consumer maintains a buffer size between a low watermark and a high watermark
-        /// to control the flow of incoming messages.
-        ///
-        /// - Parameter low: The lower threshold for the buffer size (low watermark).
-        /// - Parameter high: The upper threshold for the buffer size (high watermark).
-        public static func watermark(low: Int, high: Int) -> BackPressureStrategy {
-            return .init(backPressureStrategy: .watermark(low: low, high: high))
-        }
-    }
-
-    /// The backpressure strategy to be used for message consumption.
-    /// See ``KafkaConsumerConfiguration/BackPressureStrategy-swift.struct`` for more information.
-    public var backPressureStrategy: BackPressureStrategy = .watermark(
-        low: 10,
-        high: 50
-    )
 
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
@@ -88,6 +56,7 @@ public struct KafkaConsumerConfiguration {
         ///
         /// - Parameters:
         ///     - partition: The partition of the topic to consume from.
+        ///     - groupID: The ID of the consumer group to commit to. Defaults to no group ID. Specifying a group ID is useful if partitions assignment is manually managed but committed offsets should still be tracked in a consumer group.
         ///     - topic: The name of the Kafka topic.
         ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
         public static func partitions(
@@ -253,8 +222,8 @@ public struct KafkaConsumerConfiguration {
     /// Reconnect options.
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
-    /// Interval for librdkafka statistics reports
-    public var statisticsInterval: KafkaConfiguration.KeyRefreshAttempts = .disable
+    /// Options for librdkafka metrics updates
+    public var metrics: KafkaConfiguration.ConsumerMetrics = .init()
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
@@ -333,8 +302,6 @@ extension KafkaConsumerConfiguration {
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
         resultDict["queued.max.messages.kbytes"] = String(8 * 1024) // XX MB per partition // TODO: remove
         
-        resultDict["statistics.interval.ms"] = String(statisticsInterval.rawValue)
-        
         if let isolationLevel {
             resultDict["isolation.level"] = isolationLevel
         }
@@ -349,6 +316,11 @@ extension KafkaConsumerConfiguration {
         
         if let rebalanceStrategy {
             resultDict["partition.assignment.strategy"] = rebalanceStrategy
+        }
+
+        if self.metrics.enabled,
+           let updateInterval = self.metrics.updateInterval {
+            resultDict["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 
         // Merge with SecurityProtocol configuration dictionary

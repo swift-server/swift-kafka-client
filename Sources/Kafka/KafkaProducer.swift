@@ -61,8 +61,8 @@ internal protocol KafkaProducerSharedProperties: Sendable {
     var flushTimeoutMilliseconds: Int { get }
 
     /// Interval for librdkafka statistics reports
-    var statisticsInterval: KafkaConfiguration.KeyRefreshAttempts { get }
-    
+    var metrics: KafkaConfiguration.ProducerMetrics { get }
+
     var dictionary: [String: String] { get }
 }
 
@@ -151,10 +151,16 @@ public final class KafkaProducer: Service, Sendable {
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
+        var subscribedEvents: [RDKafkaEvent] = [.log] // No .deliveryReport here!
+
+        if configuration.metrics.enabled {
+            subscribedEvents.append(.statistics)
+        }
+
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: configuration.dictionary,
-            events: [.log], // No .deliveryReport here!
+            events: subscribedEvents,
             logger: logger
         )
 
@@ -199,10 +205,16 @@ public final class KafkaProducer: Service, Sendable {
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
+        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
+        // Listen to statistics events when statistics enabled
+        if configuration.metrics.enabled {
+            subscribedEvents.append(.statistics)
+        }
+
         let client = try RDKafkaClient.makeClient(
             type: .producer,
             configDictionary: configuration.dictionary,
-            events: [.log, .deliveryReport],
+            events: subscribedEvents,
             logger: logger
         )
 
@@ -220,6 +232,7 @@ public final class KafkaProducer: Service, Sendable {
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaProducerEvent.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            finishOnDeinit: true,
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
 
@@ -261,9 +274,8 @@ public final class KafkaProducer: Service, Sendable {
                     case .deliveryReport(let reports):
                         // Ignore YieldResult as we don't support back pressure in KafkaProducer
                         _ = source?.yield(.deliveryReports(reports))
-                    case .statistics(let stats):
-                        // Ignore YieldResult as we don't support back pressure in KafkaProducer
-                        _ = source?.yield(.statistics(stats))
+                    case .statistics(let statistics):
+                        self.configuration.metrics.update(with: statistics)
                     default:
                         fatalError("Cannot cast \(event) to KafkaProducerEvent")
                     }
@@ -280,7 +292,9 @@ public final class KafkaProducer: Service, Sendable {
                     0...Int(Int32.max) ~= self.configuration.flushTimeoutMilliseconds,
                     "Flush timeout outside of valid range \(0...Int32.max)"
                 )
-                defer { source?.finish() }
+                defer { // we should finish source indefinetely of exception in client.flush()
+                    source?.finish()
+                }
                 try await client.flush(timeoutMilliseconds: Int32(self.configuration.flushTimeoutMilliseconds))
                 return
             case .terminatePollLoop:

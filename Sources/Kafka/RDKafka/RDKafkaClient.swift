@@ -14,11 +14,13 @@
 
 import Crdkafka
 import Dispatch
+import class Foundation.JSONDecoder
 import Logging
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
-final class RDKafkaClient: Sendable {
+@_spi(Internal)
+public final class RDKafkaClient: Sendable {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
@@ -343,7 +345,7 @@ final class RDKafkaClient: Sendable {
     /// Swift wrapper for events from `librdkafka`'s event queue.
     enum KafkaEvent {
         case deliveryReport(results: [KafkaDeliveryReport])
-        case statistics(KafkaStatistics)
+        case statistics(RDKafkaStatistics)
         case rebalance(RebalanceAction)
     }
 
@@ -376,8 +378,6 @@ final class RDKafkaClient: Sendable {
             case .offsetCommit:
                 self.handleOffsetCommitEvent(event)
                 shouldSleep = false
-            case .statistics:
-                events.append(self.handleStatistics(event))
             case .rebalance:
                 self.logger.info("rebalance received (RDClient)")
                 events.append(self.handleRebalance(event))
@@ -402,6 +402,10 @@ final class RDKafkaClient: Sendable {
 //                }
 //                #endif
 //                break
+            case .statistics:
+                if let forwardEvent = self.handleStatistics(event) {
+                    events.append(forwardEvent)
+                }
             case .none:
                 // Finished reading events, return early
                 return shouldSleep
@@ -433,11 +437,6 @@ final class RDKafkaClient: Sendable {
         return .deliveryReport(results: deliveryReportResults)
     }
 
-    private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent {
-        let jsonStr = String(cString: rd_kafka_event_stats(event))
-        return .statistics(KafkaStatistics(jsonString: jsonStr))
-    }
-
     private func handleRebalance(_ event: OpaquePointer?) -> KafkaEvent {
         guard let partitions = rd_kafka_event_topic_partition_list(event) else {
             fatalError("Must never happen") // TODO: remove
@@ -457,6 +456,21 @@ final class RDKafkaClient: Sendable {
         default:
             return .rebalance(.error(rebalanceProtocol, list, KafkaError.rdKafkaError(wrapping: code)))
         }
+    }
+    /// Handle event of type `RDKafkaEvent.statistics`.
+    ///
+    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
+    private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent? {
+        let jsonStr = String(cString: rd_kafka_event_stats(event))
+        do {
+            if let jsonData = jsonStr.data(using: .utf8) {
+                let json = try JSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
+                return .statistics(json)
+            }
+        } catch {
+            assertionFailure("Error occurred when decoding JSON statistics: \(error) when decoding \(jsonStr)")
+        }
+        return nil
     }
 
     /// Handle event of type `RDKafkaEvent.log`.
@@ -644,40 +658,6 @@ final class RDKafkaClient: Sendable {
 
         init(_ closure: @escaping Closure) {
             self.closure = closure
-        }
-    }
-
-    /// Store `message`'s offset for next auto-commit.
-    ///
-    /// - Important: `enable.auto.offset.store` must be set to `false` when using this API.
-    func storeMessageOffset(_ message: KafkaConsumerMessage) throws {
-        // The offset committed is always the offset of the next requested message.
-        // Thus, we increase the offset of the current message by one before committing it.
-        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        let changesList = RDKafkaTopicPartitionList()
-        changesList.setOffset(
-            topic: message.topic,
-            partition: message.partition,
-            offset: message.eof ? message.offset : .init(rawValue: message.offset.rawValue + 1)
-        )
-
-        let error = changesList.withListPointer { listPointer in
-            rd_kafka_offsets_store(
-                self.kafkaHandle,
-                listPointer
-            )
-        }
-
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            // Ignore RD_KAFKA_RESP_ERR__STATE error.
-            // RD_KAFKA_RESP_ERR__STATE indicates an attempt to commit to an unassigned partition,
-            // which can occur during rebalancing or when the consumer is shutting down.
-            // See "Upgrade considerations" for more details: https://github.com/confluentinc/librdkafka/releases/tag/v1.9.0
-            // Since Kafka Consumers are designed for at-least-once processing, failing to commit here is acceptable.
-            if error == RD_KAFKA_RESP_ERR__STATE {
-                return
-            }
-            throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
 

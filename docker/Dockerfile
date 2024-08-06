@@ -1,4 +1,4 @@
-ARG swift_version=5.7
+ARG swift_version=5.9
 ARG ubuntu_version=jammy
 ARG base_image=swift:$swift_version-$ubuntu_version
 FROM $base_image
@@ -15,6 +15,8 @@ ENV LANGUAGE en_US.UTF-8
 # Dependencies
 RUN apt-get update
 RUN apt-get install libsasl2-dev -y
+RUN apt-get install libjemalloc-dev -y
+
 
 # tools
 RUN mkdir -p $HOME/.tools

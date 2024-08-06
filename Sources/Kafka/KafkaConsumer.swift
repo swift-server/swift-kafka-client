@@ -30,7 +30,7 @@ extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
     }
 
     func didTerminate() {
-        return  // no backpressure
+        return // We have to call poll for events anyway, nothing to do here
     }
 }
 
@@ -221,8 +221,7 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
-        
-        if configuration.statisticsInterval != .disable {
+        if configuration.metrics.enabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -265,7 +264,7 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
-        if configuration.statisticsInterval != .disable {
+        if configuration.metrics.enabled {
             subscribedEvents.append(.statistics)
         }
 //        NOTE: since now consumer is being polled with rd_kafka_consumer_poll,
@@ -463,21 +462,6 @@ public final class KafkaConsumer: Sendable, Service {
             try self.subscribe(topics: topics)
         }
         try await self.eventRunLoop()
-        /*
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try await self.eventRunLoop()
-            }
-
-            group.addTask {
-                try await self.messageRunLoop()
-            }
-
-            // Throw when one of the two child task throws
-            try await group.next()
-            try await group.next()
-        }
-         */
     }
 
     /// Run loop polling Kafka for new events.
@@ -494,7 +478,7 @@ public final class KafkaConsumer: Sendable, Service {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        _ = eventSource?.yield(.statistics(statistics))
+                        self.configuration.metrics.update(with: statistics)
                     case .rebalance(let rebalance):
                         self.logger.info("rebalance received \(rebalance), source nil: \(eventSource == nil)")
                         if let eventSource {
@@ -517,88 +501,6 @@ public final class KafkaConsumer: Sendable, Service {
                 return
             }
         }
-    }
-/*
-    /// Run loop polling Kafka for new consumer messages.
-    private func messageRunLoop() async throws {
-        let maxAllowedMessages: Int
-        switch configuration.backPressureStrategy._internal {
-        case .watermark(let lowWatermark, let highWatermark):
-            maxAllowedMessages = max(highWatermark - lowWatermark, 1)
-        }
-        while !Task.isCancelled {
-            let nextAction = self.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
-            switch nextAction {
-            case .pollForAndYieldMessages(let client, let source):
-                // Poll for new consumer messages.
-                let messageResults = self.batchConsumerPoll(client: client, maxMessages: maxAllowedMessages)
-                if messageResults.isEmpty {
-                    self.stateMachine.withLockedValue { $0.waitForNewMessages() }
-                } else {
-                    let yieldResult = source.yield(contentsOf: messageResults)
-                    switch yieldResult {
-                    case .produceMore:
-                        break
-                    case .stopProducing:
-                        self.stateMachine.withLockedValue { $0.stopProducing() }
-                    case .dropped:
-                        return
-                    }
-                }
-            case .pollForMessagesIfAvailable(let client, let source):
-                let messageResults = self.batchConsumerPoll(client: client, maxMessages: maxAllowedMessages)
-                if messageResults.isEmpty {
-                    // Still no new messages, so sleep.
-                    try await Task.sleep(for: self.configuration.pollInterval)
-                } else {
-                    // New messages were produced to the partition that we previously finished reading.
-                    let yieldResult = source.yield(contentsOf: messageResults)
-                    switch yieldResult {
-                    case .produceMore:
-                        break
-                    case .stopProducing:
-                        self.stateMachine.withLockedValue { $0.stopProducing() }
-                    case .dropped:
-                        return
-                    }
-                }
-            case .suspendPollLoop:
-                try await Task.sleep(for: self.configuration.pollInterval)
-            case .terminatePollLoop:
-                return
-            }
-        }
-    }
-*/
-    /// Read `maxMessages` consumer messages from Kafka.
-    ///
-    /// - Parameters:
-    ///     - client: Client used for handling the connection to the Kafka cluster.
-    ///     - maxMessages: Maximum amount of consumer messages to read in this invocation.
-    private func batchConsumerPoll(
-        client: RDKafkaClient,
-        maxMessages: Int = 100
-    ) -> [Result<KafkaConsumerMessage, Error>] {
-        var messageResults = [Result<KafkaConsumerMessage, Error>]()
-        messageResults.reserveCapacity(maxMessages)
-
-        for _ in 0..<maxMessages {
-            var result: Result<KafkaConsumerMessage, Error>?
-            do {
-                if let message = try client.consumerPoll() {
-                    result = .success(message)
-                }
-            } catch {
-                result = .failure(error)
-            }
-
-            guard let result else {
-                return messageResults
-            }
-            messageResults.append(result)
-        }
-
-        return messageResults
     }
 
     /// Mark all messages up to the passed message in the topic as read.
@@ -784,8 +686,7 @@ extension KafkaConsumer {
 
         /// Action to be taken when wanting to poll for a new message.
         enum ConsumerPollLoopAction {
-            /// Poll for a new ``KafkaConsumerMessage`` or sleep for ``KafkaConsumerConfiguration/pollInterval``
-            /// if there are no new messages to read from the partition.
+            /// Poll for a new ``KafkaConsumerMessage``.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case poll(client: RDKafkaClient)

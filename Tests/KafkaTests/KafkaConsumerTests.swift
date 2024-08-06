@@ -12,9 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+@testable import CoreMetrics // for MetricsSystem.bootstrapInternal
 import struct Foundation.UUID
 @testable import Kafka
 import Logging
+import Metrics
+import MetricsTestKit
 import ServiceLifecycle
 import XCTest
 
@@ -33,6 +36,17 @@ import XCTest
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
 final class KafkaConsumerTests: XCTestCase {
+    var metrics: TestMetrics! = TestMetrics()
+
+    override func setUp() async throws {
+        MetricsSystem.bootstrapInternal(self.metrics)
+    }
+
+    override func tearDown() async throws {
+        self.metrics = nil
+        MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
+    }
+
     func testConsumerLog() async throws {
         let recorder = LogEventRecorder()
         let mockLogger = Logger(label: "kafka.test.consumer.log") {
@@ -89,15 +103,13 @@ final class KafkaConsumerTests: XCTestCase {
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
             bootstrapBrokerAddresses: []
         )
-        config.statisticsInterval = .value(.milliseconds(10))
+        config.metrics.updateInterval = .milliseconds(100)
+        config.metrics.queuedOperation = .init(label: "operations")
 
-        let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
+        let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
 
-        let serviceGroup = ServiceGroup(
-            services: [consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -105,28 +117,13 @@ final class KafkaConsumerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            // check for librdkafka statistics
-            group.addTask {
-                var statistics: KafkaStatistics? = nil
-                for try await event in events {
-                    if case let .statistics(stat) = event {
-                        statistics = stat
-                        break
-                    }
-                }
-                guard let statistics else {
-                    XCTFail("stats are not occurred")
-                    return
-                }
-                XCTAssertFalse(statistics.jsonString.isEmpty)
-                XCTAssertNoThrow(try statistics.json)
-            }
-
-            try await group.next()
+            try await Task.sleep(for: .seconds(1))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
+        let value = try metrics.expectGauge("operations").lastValue
+        XCTAssertNotNil(value)
     }
 
     func testConsumerConstructDeinit() async throws {

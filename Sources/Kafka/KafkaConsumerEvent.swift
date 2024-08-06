@@ -98,8 +98,6 @@ public enum RebalanceAction : Sendable, Hashable {
 
 /// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
 public enum KafkaConsumerEvent: Sendable, Hashable {
-    /// Statistics from librdkafka
-    case statistics(KafkaStatistics)
     /// Rebalance from librdkafka
     case rebalance(RebalanceAction)
     /// - Important: Always provide a `default` case when switiching over this `enum`.
@@ -107,8 +105,8 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
 
     internal init(_ event: RDKafkaClient.KafkaEvent) {
         switch event {
-        case .statistics(let stat):
-            self = .statistics(stat)
+        case .statistics:
+            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         case .rebalance(let action):
             self = .rebalance(action)
         case .deliveryReport:

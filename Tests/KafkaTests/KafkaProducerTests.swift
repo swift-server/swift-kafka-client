@@ -12,8 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+@testable import CoreMetrics // for MetricsSystem.bootstrapInternal
 @testable import Kafka
 import Logging
+import Metrics
+import MetricsTestKit
 import NIOCore
 import ServiceLifecycle
 import XCTest
@@ -38,6 +41,7 @@ final class KafkaProducerTests: XCTestCase {
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
     var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
     var config: KafkaProducerConfiguration!
+    var metrics: TestMetrics! = TestMetrics()
 
     override func setUpWithError() throws {
         self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
@@ -49,11 +53,16 @@ final class KafkaProducerTests: XCTestCase {
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         self.config.broker.addressFamily = .v4
+
+        MetricsSystem.bootstrapInternal(self.metrics)
     }
 
     override func tearDownWithError() throws {
         self.bootstrapBrokerAddress = nil
         self.config = nil
+
+        self.metrics = nil
+        MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
 
     func testSend() async throws {
@@ -342,18 +351,16 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testProducerStatistics() async throws {
-        self.config.statisticsInterval = .value(.milliseconds(10))
+        self.config.metrics.updateInterval = .milliseconds(100)
+        self.config.metrics.queuedOperation = .init(label: "operations")
 
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+        let producer = try KafkaProducer(
             configuration: self.config,
             logger: .kafkaTest
         )
 
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: .kafkaTest
-        )
+        let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
             // Run Task
@@ -361,27 +368,14 @@ final class KafkaProducerTests: XCTestCase {
                 try await serviceGroup.run()
             }
 
-            // check for librdkafka statistics
-            group.addTask {
-                var statistics: KafkaStatistics? = nil
-                for try await e in events {
-                    if case let .statistics(stat) = e {
-                        statistics = stat
-                        break
-                    }
-                }
-                guard let statistics else {
-                    XCTFail("stats are not occurred")
-                    return
-                }
-                XCTAssertFalse(statistics.jsonString.isEmpty)
-                XCTAssertNoThrow(try statistics.json)
-            }
+            try await Task.sleep(for: .seconds(1))
 
-            try await group.next()
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
+
+        let value = try metrics.expectGauge("operations").lastValue
+        XCTAssertNotNil(value)
     }
 
     func testProducerConstructDeinit() async throws {

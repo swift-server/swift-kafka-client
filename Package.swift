@@ -49,10 +49,10 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssl", from: "2.25.0"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.1.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-metrics", from: "2.4.1"),
         // The zstd Swift package produces warnings that we cannot resolve:
         // https://github.com/facebook/zstd/issues/3328
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.0"),
-        .package(url: "https://github.com/swift-extras/swift-extras-json.git", .upToNextMajor(from: "0.6.0")),
     ],
     targets: [
         .target(
@@ -84,7 +84,7 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "ExtrasJSON", package: "swift-extras-json"),
+                .product(name: "Metrics", package: "swift-metrics"),
             ]
         ),
         .target(
@@ -95,7 +95,10 @@ let package = Package(
         ),
         .testTarget(
             name: "KafkaTests",
-            dependencies: ["Kafka"]
+            dependencies: [
+                "Kafka",
+                .product(name: "MetricsTestKit", package: "swift-metrics"),
+            ]
         ),
         .testTarget(
             name: "IntegrationTests",
