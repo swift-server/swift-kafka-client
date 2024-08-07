@@ -16,6 +16,10 @@ import Crdkafka
 
 public struct KafkaGroup {
     public let name: String
+    public let broker: KafkaMetadataBroker
+    public let state: String
+    public let protocolType: String
+    public let `protocol`: String
 }
 
 extension KafkaGroup {
@@ -62,8 +66,12 @@ extension KafkaGroup {
             var groups = [KafkaGroup]()
             for idx in 0..<Int(grplist.pointee.group_cnt) {
                 let rdGroupInfo = grplist.pointee.groups[idx]
-                let groupName = String(cString: rdGroupInfo.group)
-                groups.append(KafkaGroup(name: groupName))
+                let group = KafkaGroup(name: String(cString: rdGroupInfo.group),
+                                       broker: KafkaMetadataBroker(rdGroupInfo.broker),
+                                       state: String(cString: rdGroupInfo.state),
+                                       protocolType: String(cString: rdGroupInfo.protocol_type),
+                                       protocol: String(cString: rdGroupInfo.protocol))
+                groups.append(group)
             }
             return groups
         } else {
