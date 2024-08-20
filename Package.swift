@@ -70,6 +70,7 @@ let package = Package(
                 .headerSearchPath("./custom/include"),
                 .headerSearchPath("./librdkafka/src"),
                 .define("_GNU_SOURCE", to: "1"), // Fix build error for Swift 5.9 onwards
+                .unsafeFlags(["-Wno-error=implicit-function-declaration"])
             ],
             linkerSettings: [
                 .linkedLibrary("curl", .when(platforms: [.macOS, .linux])),
