@@ -6,6 +6,8 @@
 #define SOLIB_EXT ".dylib"
 #elif defined(__linux__)
 #define SOLIB_EXT ".so"
+
+#pragma clang diagnostic ignored "-Wimplicit-function-declaration"
 #endif
 
 #ifdef __x86_64__
