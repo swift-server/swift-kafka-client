@@ -14,8 +14,6 @@
 
 import Crdkafka
 
-let uuu: Int = 0
-
 public struct KafkaGroup {
     /// Swift `enum` wrapping `librdkafka`'s `RD_KAFKA_CONSUMER_GROUP_STATE_*` values.
     /// See `rd_kafka_consumer_group_state_t` in rdkafka.h for reference.

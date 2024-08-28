@@ -54,24 +54,26 @@ extension RDKafkaClient {
 
             let result = rd_kafka_event_ListConsumerGroups_result(resultEvent)
 
-            var ret = [KafkaGroup]()
             var groupsCnt: size_t = 0
             let groups = rd_kafka_ListConsumerGroups_result_valid(result, &groupsCnt)
-            if let groups {
-                for idx in 0..<groupsCnt {
-                    let group = groups[idx]
-                    let groupId = rd_kafka_ConsumerGroupListing_group_id(group)
-                    guard let groupId else {
-                        throw KafkaError.rdKafkaError(errorMessage: "rd_kafka_ConsumerGroupListing_group_id() unexpectedly returned nil")
-                    }
-                    let kafkaGroupState = rd_kafka_ConsumerGroupListing_state(group)
-                    guard let state = KafkaGroup.State(rawValue: kafkaGroupState.rawValue) else {
-                        throw KafkaError.rdKafkaError(errorMessage: "unexpected value \(kafkaGroupState) for rd_kafka_consumer_group_state_t enumeration")
-                    }
-                    let isSimple = rd_kafka_ConsumerGroupListing_is_simple_consumer_group(group)
-                    let kafkaGroup = KafkaGroup(name: String(cString: groupId), state: state, isSimple: isSimple != 0)
-                    ret.append(kafkaGroup)
+            guard let groups else {
+                return []
+            }
+
+            var ret = [KafkaGroup]()
+            for idx in 0..<groupsCnt {
+                let group = groups[idx]
+                let groupId = rd_kafka_ConsumerGroupListing_group_id(group)
+                guard let groupId else {
+                    throw KafkaError.rdKafkaError(errorMessage: "rd_kafka_ConsumerGroupListing_group_id() unexpectedly returned nil")
                 }
+                let kafkaGroupState = rd_kafka_ConsumerGroupListing_state(group)
+                guard let state = KafkaGroup.State(rawValue: kafkaGroupState.rawValue) else {
+                    throw KafkaError.rdKafkaError(errorMessage: "unexpected value \(kafkaGroupState) for rd_kafka_consumer_group_state_t enumeration")
+                }
+                let isSimple = rd_kafka_ConsumerGroupListing_is_simple_consumer_group(group)
+                let kafkaGroup = KafkaGroup(name: String(cString: groupId), state: state, isSimple: isSimple != 0)
+                ret.append(kafkaGroup)
             }
 
             return ret
