@@ -70,6 +70,27 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         )
     }
 
+    static func rdKafkaError(
+        wrapping error: rd_kafka_resp_err_t, errorMessage: String, isFatal: Bool = false, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        let errorMessage = String(cString: rd_kafka_err2str(error)) + ": " + errorMessage
+        return KafkaError(
+            backing: .init(
+                code: .underlying, reason: errorMessage, file: file, line: line
+            )
+        )
+    }
+
+    static func rdKafkaError(
+        errorMessage: String, isFatal: Bool = false, file: String = #fileID, line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .underlying, reason: errorMessage, file: file, line: line
+            )
+        )
+    }
+
     static func config(
         reason: String, file: String = #fileID, line: UInt = #line
     ) -> KafkaError {
