@@ -14,68 +14,21 @@
 
 import Crdkafka
 
+let uuu: Int = 0
+
 public struct KafkaGroup {
-    public let name: String
-    public let broker: KafkaMetadataBroker
-    public let state: String
-    public let protocolType: String
-    public let `protocol`: String
-}
-
-extension KafkaGroup {
-    public static func list(configuration: KafkaGroupConfiguration,
-                            group: String? = nil,
-                            retries: Int = 5,
-                            timeout: Duration = .seconds(5)) throws -> [KafkaGroup] {
-        let configDictionary = configuration.dictionary
-        let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
-
-        let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
-        defer { errorChars.deallocate() }
-
-        guard let kafkaHandle = rd_kafka_new(RD_KAFKA_PRODUCER, rdConfig, errorChars, RDKafkaClient.stringSize) else {
-            rd_kafka_conf_destroy(rdConfig)
-            let errorString = String(cString: errorChars)
-            throw KafkaError.client(reason: errorString)
-        }
-        defer { rd_kafka_destroy(kafkaHandle) }
-
-        let rdGroup = group?.cString(using: .utf8)
-        let timeoutMs = Int32(timeout.inMilliseconds)
-        var err = RD_KAFKA_RESP_ERR_NO_ERROR
-        var grplist: UnsafePointer<rd_kafka_group_list>? = nil
-        var retries = min(retries, 1)
-        while true {
-            err = rd_kafka_list_groups(kafkaHandle, rdGroup, &grplist, timeoutMs)
-            if err == RD_KAFKA_RESP_ERR_NO_ERROR {
-                break
-            }
-            else if (err == RD_KAFKA_RESP_ERR__TRANSPORT) || (err == RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS) {
-                retries -= 1
-                if retries == 0 {
-                    throw KafkaError.rdKafkaError(wrapping: err)
-                }
-            } else {
-                throw KafkaError.rdKafkaError(wrapping: err)
-            }
-        }
-
-        defer { rd_kafka_group_list_destroy(grplist) }
-
-        if let grplist {
-            var groups = [KafkaGroup]()
-            for idx in 0..<Int(grplist.pointee.group_cnt) {
-                let rdGroupInfo = grplist.pointee.groups[idx]
-                let group = KafkaGroup(name: String(cString: rdGroupInfo.group),
-                                       broker: KafkaMetadataBroker(rdGroupInfo.broker),
-                                       state: String(cString: rdGroupInfo.state),
-                                       protocolType: String(cString: rdGroupInfo.protocol_type),
-                                       protocol: String(cString: rdGroupInfo.protocol))
-                groups.append(group)
-            }
-            return groups
-        } else {
-            return []
-        }
+    /// Swift `enum` wrapping `librdkafka`'s `RD_KAFKA_CONSUMER_GROUP_STATE_*` values.
+    /// See `rd_kafka_consumer_group_state_t` in rdkafka.h for reference.
+    public enum State: UInt32 {
+        case unknown = 0
+        case preparingRebalance = 1
+        case completingRebalance = 2
+        case stable = 3
+        case dead = 4
+        case empty = 5
     }
+
+    public let name: String
+    public let state: State
+    public let isSimple: Bool
 }
