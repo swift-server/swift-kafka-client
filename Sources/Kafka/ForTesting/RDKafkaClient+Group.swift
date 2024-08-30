@@ -137,9 +137,9 @@ extension RDKafkaClient {
             var ret = [(String, String)]()
             for idx in 0..<resultGroupsCnt {
                 if let groupResultError = rd_kafka_group_result_error(resultGroups[idx]) {
-                    let groupResultName = String(cString: rd_kafka_group_result_name(groupResultError))
+                    let groupName = String(cString: rd_kafka_group_result_name(resultGroups[idx]))
                     let errorString = String(cString: rd_kafka_error_string(groupResultError))
-                    ret.append((groupResultName, errorString))
+                    ret.append((groupName, errorString))
                 }
             }
 
