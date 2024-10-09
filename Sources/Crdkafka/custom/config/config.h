@@ -8,6 +8,8 @@
 #define SOLIB_EXT ".so"
 #endif
 
+#pragma clang diagnostic ignored "-Wimplicit-function-declaration"
+
 #ifdef __x86_64__
 #define ARCH "x86_64"
 #elif defined(__arm64__) || defined(__arm__) || defined(__aarch64__)
