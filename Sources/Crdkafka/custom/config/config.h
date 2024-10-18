@@ -23,7 +23,7 @@
 #define ENABLE_ZSTD 1
 #define ENABLE_SSL 1
 #define ENABLE_GSSAPI 1
-#define ENABLE_CURL 1
+#define ENABLE_CURL 0
 #define ENABLE_DEVEL 0
 #define ENABLE_VALGRIND 0
 #define ENABLE_REFCNT_DEBUG 0
