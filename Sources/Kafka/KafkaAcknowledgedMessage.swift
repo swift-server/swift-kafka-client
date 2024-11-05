@@ -27,6 +27,8 @@ public struct KafkaAcknowledgedMessage {
     public var value: ByteBuffer
     /// The offset of the message in its partition.
     public var offset: KafkaOffset
+    /// The headers of the message.
+    public var headers: [KafkaHeader]
 
     /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
@@ -53,7 +55,7 @@ public struct KafkaAcknowledgedMessage {
         self.topic = topic
 
         self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
-
+        self.headers = try RDKafkaClient.getHeaders(for: messagePointer)
         if let keyPointer = rdKafkaMessage.key {
             let keyBufferPointer = UnsafeRawBufferPointer(
                 start: keyPointer,

@@ -82,8 +82,10 @@ final class KafkaProducerTests: XCTestCase {
             }
 
             let expectedTopic = "test-topic"
+            let headers = [KafkaHeader(key: "some", value: ByteBuffer.init(string: "test"))]
             let message = KafkaProducerMessage(
                 topic: expectedTopic,
+                headers: headers,
                 key: "key",
                 value: "Hello, World!"
             )
@@ -118,6 +120,7 @@ final class KafkaProducerTests: XCTestCase {
             XCTAssertEqual(expectedTopic, receivedMessage.topic)
             XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
             XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
+            XCTAssertEqual(headers, receivedMessage.headers)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
