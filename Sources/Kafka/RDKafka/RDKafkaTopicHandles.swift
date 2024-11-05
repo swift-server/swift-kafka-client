@@ -17,7 +17,7 @@ import NIOConcurrencyHelpers
 
 /// Swift class that matches topic names with their respective `rd_kafka_topic_t` handles.
 internal final class RDKafkaTopicHandles: Sendable {
-    private let _internal: NIOLockedValueBox<[String: OpaquePointer]>
+    private let _internal: NIOLockedValueBox<[String: SendableOpaquePointer]>
 
     // Note: we retain the client to ensure it does not get
     // deinitialized before rd_kafka_topic_destroy() is invoked (required)
@@ -31,7 +31,7 @@ internal final class RDKafkaTopicHandles: Sendable {
     deinit {
         self._internal.withLockedValue { dict in
             for (_, topicHandle) in dict {
-                rd_kafka_topic_destroy(topicHandle)
+                rd_kafka_topic_destroy(topicHandle.pointer)
             }
         }
     }
@@ -59,7 +59,7 @@ internal final class RDKafkaTopicHandles: Sendable {
     ) throws -> OpaquePointer {
         try self._internal.withLockedValue { dict in
             if let handle = dict[topic] {
-                return handle
+                return handle.pointer
             } else {
                 let rdTopicConf = try RDKafkaTopicConfig.createFrom(topicConfiguration: topicConfiguration)
                 let newHandle = self.client.withKafkaHandlePointer { kafkaHandle in
@@ -76,7 +76,7 @@ internal final class RDKafkaTopicHandles: Sendable {
                     let error = KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
                     throw error
                 }
-                dict[topic] = newHandle
+                dict[topic] = .init(newHandle)
                 return newHandle
             }
         }
