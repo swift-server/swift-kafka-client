@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -72,6 +73,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
+        let queue: NaiveQueueExecutor
 
         private final class MachineHolder: Sendable {  // only for deinit
             let stateMachine: LockedMachine
@@ -88,21 +90,30 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         init(stateMachine: LockedMachine, pollInterval: Duration) {
             self.stateMachineHolder = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
+            self.queue = NaiveQueueExecutor(DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer"))
         }
 
         public func next() async throws -> Element? {
-            // swift-kafka-client issue: https://github.com/swift-server/swift-kafka-client/issues/165
-            // Currently use Task.sleep() if no new messages, should use task executor preference when implemented:
-            // https://github.com/apple/swift-evolution/blob/main/proposals/0417-task-executor-preference.md
             while !Task.isCancelled {
                 let action = self.stateMachineHolder.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
 
                 switch action {
                 case .poll(let client):
-                    if let message = try client.consumerPoll() {  // non-blocking call
+                    // Attempt to fetch a message synchronously. Bail
+                    // immediately if no message is waiting for us.
+                    if let message = try client.consumerPoll() {
                         return message
                     }
-                    try await Task.sleep(for: self.pollInterval)
+
+                    #if swift(>=6.0)
+                    // Wait on a separate thread for the next message.
+                    return try await withTaskExecutorPreference(queue) {
+                        try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds))
+                    }
+                    #else
+                    // No messages. Sleep a little.
+                    return try await Task.sleep(for: self.pollInterval)
+                    #endif
                 case .suspendPollLoop:
                     try await Task.sleep(for: self.pollInterval)  // not started yet
                 case .terminatePollLoop:
