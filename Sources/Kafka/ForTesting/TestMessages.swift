@@ -11,8 +11,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
-import struct Foundation.Date
 import NIOCore
+
+import struct Foundation.Date
 
 @_spi(Internal)
 public enum _TestMessagesError: Error {
@@ -27,7 +28,7 @@ public func _createTestMessages(
     headers: [KafkaHeader] = [],
     count: UInt
 ) -> [KafkaProducerMessage<String, String>] {
-    return Array(0..<count).map {
+    Array(0..<count).map {
         KafkaProducerMessage(
             topic: topic,
             headers: headers,
@@ -69,7 +70,7 @@ public func _sendAndAcknowledgeMessages(
                 receivedDeliveryReports.insert(deliveryReport)
             }
         default:
-            break // Ignore any other events
+            break  // Ignore any other events
         }
 
         if receivedDeliveryReports.count >= messages.count {
@@ -96,8 +97,9 @@ public func _sendAndAcknowledgeMessages(
     }
     for message in messages {
         guard acknowledgedMessages.contains(where: { $0.topic == message.topic }),
-              acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }),
-              acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }) else {
+            acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }),
+            acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) })
+        else {
             throw _TestMessagesError.deliveryReportsIncorrect
         }
     }

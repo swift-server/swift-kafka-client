@@ -26,11 +26,11 @@ internal struct KafkaConsumerEventsDelegate: Sendable {
 
 extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        return // No back pressure
+        return  // No back pressure
     }
 
     func didTerminate() {
-        return // We have to call poll for events anyway, nothing to do here
+        return  // We have to call poll for events anyway, nothing to do here
     }
 }
 
@@ -53,7 +53,7 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        return AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+        AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
 }
 
@@ -73,7 +73,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
 
-        private final class MachineHolder: Sendable { // only for deinit
+        private final class MachineHolder: Sendable {  // only for deinit
             let stateMachine: LockedMachine
 
             init(stateMachine: LockedMachine) {
@@ -99,12 +99,12 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
                 switch action {
                 case .poll(let client):
-                    if let message = try client.consumerPoll() { // non-blocking call
+                    if let message = try client.consumerPoll() {  // non-blocking call
                         return message
                     }
                     try await Task.sleep(for: self.pollInterval)
                 case .suspendPollLoop:
-                    try await Task.sleep(for: self.pollInterval) // not started yet
+                    try await Task.sleep(for: self.pollInterval)  // not started yet
                 case .terminatePollLoop:
                     return nil
                 }
@@ -114,7 +114,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        return AsyncIterator(
+        AsyncIterator(
             stateMachine: self.stateMachine,
             pollInterval: self.pollInterval
         )
@@ -321,9 +321,9 @@ public final class KafkaConsumer: Sendable, Service {
 
     private func _run() async throws {
         switch self.configuration.consumptionStrategy._internal {
-        case .partition(groupID: _, topic: let topic, partition: let partition, offset: let offset):
+        case .partition(groupID: _, let topic, let partition, let offset):
             try self.assign(topic: topic, partition: partition, offset: offset)
-        case .group(groupID: _, topics: let topics):
+        case .group(groupID: _, let topics):
             try self.subscribe(topics: topics)
         }
         try await self.eventRunLoop()
@@ -480,7 +480,9 @@ extension KafkaConsumer {
             client: RDKafkaClient
         ) {
             guard case .uninitialized = self.state else {
-                fatalError("\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)")
+                fatalError(
+                    "\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)"
+                )
             }
             self.state = .initializing(
                 client: client

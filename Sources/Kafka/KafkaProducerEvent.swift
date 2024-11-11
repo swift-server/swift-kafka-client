@@ -21,7 +21,7 @@ public enum KafkaProducerEvent: Sendable, Hashable {
 
     internal init(_ event: RDKafkaClient.KafkaEvent) {
         switch event {
-        case .deliveryReport(results: let results):
+        case .deliveryReport(let results):
             self = .deliveryReports(results)
         case .statistics:
             fatalError("Cannot cast \(event) to KafkaProducerEvent")

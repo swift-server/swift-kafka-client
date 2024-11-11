@@ -18,7 +18,7 @@ import PackageDescription
 let package = Package(
     name: "benchmarks",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v13)
     ],
     dependencies: [
         .package(path: "../"),
@@ -33,7 +33,7 @@ let package = Package(
             ],
             path: "Benchmarks/SwiftKafkaConsumerBenchmarks",
             plugins: [
-                .plugin(name: "BenchmarkPlugin", package: "package-benchmark"),
+                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
             ]
         ),
         .executableTarget(
@@ -44,7 +44,7 @@ let package = Package(
             ],
             path: "Benchmarks/SwiftKafkaProducerBenchmarks",
             plugins: [
-                .plugin(name: "BenchmarkPlugin", package: "package-benchmark"),
+                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
             ]
         ),
     ]

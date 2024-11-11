@@ -49,7 +49,7 @@ public struct KafkaConsumerConfiguration {
             topic: String,
             offset: KafkaOffset = .end
         ) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .partition(groupID: groupID, topic: topic, partition: partition, offset: offset))
+            .init(consumptionStrategy: .partition(groupID: groupID, topic: topic, partition: partition, offset: offset))
         }
 
         /// A consumption strategy based on consumer group membership.
@@ -59,7 +59,7 @@ public struct KafkaConsumerConfiguration {
         ///     - id: The ID of the consumer group to join.
         ///     - topics: An array of topic names to consume from.
         public static func group(id groupID: String, topics: [String]) -> ConsumptionStrategy {
-            return .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
+            .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
         }
     }
 
@@ -231,7 +231,7 @@ extension KafkaConsumerConfiguration {
         var resultDict: [String: String] = [:]
 
         switch self.consumptionStrategy._internal {
-        case .partition(groupID: let groupID, topic: _, partition: _, offset: _):
+        case .partition(let groupID, topic: _, partition: _, offset: _):
             if let groupID = groupID {
                 resultDict["group.id"] = groupID
             } else {
@@ -242,7 +242,7 @@ extension KafkaConsumerConfiguration {
                 resultDict["group.id"] = UUID().uuidString
             }
 
-        case .group(groupID: let groupID, topics: _):
+        case .group(let groupID, topics: _):
             resultDict["group.id"] = groupID
         }
 
@@ -264,7 +264,7 @@ extension KafkaConsumerConfiguration {
         resultDict["topic.metadata.refresh.fast.interval.ms"] = String(topicMetadata.refreshFastInterval.inMilliseconds)
         resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.isSparseRefreshingEnabled)
         resultDict["topic.metadata.propagation.max.ms"] = String(topicMetadata.maximumPropagation.inMilliseconds)
-        resultDict["topic.blacklist"] = topicDenylist.joined(separator: ",")
+        resultDict["topic.blacklist"] = topicDenylist.joined(separator: ",")  // ignore-unacceptable-language
         if !debugOptions.isEmpty {
             resultDict["debug"] = debugOptions.map(\.description).joined(separator: ",")
         }
@@ -281,7 +281,8 @@ extension KafkaConsumerConfiguration {
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
 
         if self.metrics.enabled,
-           let updateInterval = self.metrics.updateInterval {
+            let updateInterval = self.metrics.updateInterval
+        {
             resultDict["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 

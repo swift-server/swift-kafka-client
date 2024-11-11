@@ -20,14 +20,11 @@ extension KafkaConfiguration {
     /// Configuration for the consumer metrics emitted by `SwiftKafka`.
     public struct ConsumerMetrics: Sendable {
         internal var enabled: Bool {
-            self.updateInterval != nil &&
-                (self.queuedOperation != nil ||
-                    self.totalKafkaBrokerRequests != nil ||
-                    self.totalKafkaBrokerBytesSent != nil ||
-                    self.totalKafkaBrokerResponses != nil ||
-                    self.totalKafkaBrokerResponsesSize != nil ||
-                    self.totalKafkaBrokerMessagesBytesRecieved != nil ||
-                    self.topicsInMetadataCache != nil)
+            self.updateInterval != nil
+                && (self.queuedOperation != nil || self.totalKafkaBrokerRequests != nil
+                    || self.totalKafkaBrokerBytesSent != nil || self.totalKafkaBrokerResponses != nil
+                    || self.totalKafkaBrokerResponsesSize != nil || self.totalKafkaBrokerMessagesBytesRecieved != nil
+                    || self.topicsInMetadataCache != nil)
         }
 
         /// Update interval for statistics.
@@ -55,7 +52,8 @@ extension KafkaConfiguration {
 
         private static func record<T: BinaryInteger>(_ value: T?, to: Gauge?) {
             guard let value,
-                  let to else {
+                let to
+            else {
                 return
             }
             to.record(value)
@@ -70,7 +68,10 @@ extension KafkaConfiguration {
             Self.record(rdKafkaStatistics.totalKafkaBrokerResponsesSize, to: self.totalKafkaBrokerResponsesSize)
 
             Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesRecieved, to: self.totalKafkaBrokerMessagesRecieved)
-            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesBytesRecieved, to: self.totalKafkaBrokerMessagesBytesRecieved)
+            Self.record(
+                rdKafkaStatistics.totalKafkaBrokerMessagesBytesRecieved,
+                to: self.totalKafkaBrokerMessagesBytesRecieved
+            )
 
             Self.record(rdKafkaStatistics.topicsInMetadataCache, to: self.topicsInMetadataCache)
         }
@@ -79,17 +80,12 @@ extension KafkaConfiguration {
     /// Configuration for the producer metrics emitted by `SwiftKafka`.
     public struct ProducerMetrics: Sendable {
         internal var enabled: Bool {
-            self.updateInterval != nil &&
-                (self.queuedOperation != nil ||
-                    self.queuedProducerMessages != nil ||
-                    self.queuedProducerMessagesSize != nil ||
-                    self.totalKafkaBrokerRequests != nil ||
-                    self.totalKafkaBrokerBytesSent != nil ||
-                    self.totalKafkaBrokerResponses != nil ||
-                    self.totalKafkaBrokerResponsesSize != nil ||
-                    self.totalKafkaBrokerMessagesSent != nil ||
-                    self.totalKafkaBrokerMessagesBytesSent != nil ||
-                    self.topicsInMetadataCache != nil)
+            self.updateInterval != nil
+                && (self.queuedOperation != nil || self.queuedProducerMessages != nil
+                    || self.queuedProducerMessagesSize != nil || self.totalKafkaBrokerRequests != nil
+                    || self.totalKafkaBrokerBytesSent != nil || self.totalKafkaBrokerResponses != nil
+                    || self.totalKafkaBrokerResponsesSize != nil || self.totalKafkaBrokerMessagesSent != nil
+                    || self.totalKafkaBrokerMessagesBytesSent != nil || self.topicsInMetadataCache != nil)
         }
 
         /// Update interval for statistics.
@@ -121,7 +117,8 @@ extension KafkaConfiguration {
 
         private static func record<T: BinaryInteger>(_ value: T?, to: Gauge?) {
             guard let value,
-                  let to else {
+                let to
+            else {
                 return
             }
             to.record(value)

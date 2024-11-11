@@ -13,7 +13,7 @@
 ##
 ##===----------------------------------------------------------------------===##
 
-cd Benchmarks
+cd Benchmarks || exit
 swift package --disable-sandbox benchmark baseline update PR --no-progress
 git checkout main
 swift package --disable-sandbox benchmark baseline update main --no-progress

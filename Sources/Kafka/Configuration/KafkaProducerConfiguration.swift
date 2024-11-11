@@ -60,7 +60,7 @@ public struct KafkaProducerConfiguration {
             }
 
             public static func maximumLimit(_ value: Int) -> MessageLimit {
-                return .init(rawValue: value)
+                .init(rawValue: value)
             }
 
             /// No limit for the maximum number of messages allowed on the producer queue.
@@ -196,10 +196,12 @@ extension KafkaProducerConfiguration {
         resultDict["max.in.flight.requests.per.connection"] = String(self.maximumInFlightRequestsPerConnection)
         resultDict["metadata.max.age.ms"] = String(self.maximumMetadataAge.inMilliseconds)
         resultDict["topic.metadata.refresh.interval.ms"] = String(self.topicMetadata.refreshInterval.rawValue)
-        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(self.topicMetadata.refreshFastInterval.inMilliseconds)
+        resultDict["topic.metadata.refresh.fast.interval.ms"] = String(
+            self.topicMetadata.refreshFastInterval.inMilliseconds
+        )
         resultDict["topic.metadata.refresh.sparse"] = String(self.topicMetadata.isSparseRefreshingEnabled)
         resultDict["topic.metadata.propagation.max.ms"] = String(self.topicMetadata.maximumPropagation.inMilliseconds)
-        resultDict["topic.blacklist"] = self.topicDenylist.joined(separator: ",")
+        resultDict["topic.blacklist"] = self.topicDenylist.joined(separator: ",")  // ignore-unacceptable-language
         if !self.debugOptions.isEmpty {
             resultDict["debug"] = self.debugOptions.map(\.description).joined(separator: ",")
         }
@@ -216,7 +218,8 @@ extension KafkaProducerConfiguration {
         resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.maximumBackoff.inMilliseconds)
 
         if self.metrics.enabled,
-           let updateInterval = self.metrics.updateInterval {
+            let updateInterval = self.metrics.updateInterval
+        {
             resultDict["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 

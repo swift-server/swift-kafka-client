@@ -12,8 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.UUID
 import Logging
+
+import struct Foundation.UUID
 
 extension Logger {
     static var kafkaTest: Logger {

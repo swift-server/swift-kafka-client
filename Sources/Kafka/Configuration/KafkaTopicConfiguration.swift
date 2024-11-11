@@ -23,7 +23,7 @@ public struct KafkaTopicConfiguration {
         }
 
         public static func atLeast(_ value: Int) -> RequiredAcknowledgments {
-            return .init(rawValue: value)
+            .init(rawValue: value)
         }
 
         /// Broker will block until the message is committed by all in-sync replicas (ISRs).
@@ -114,7 +114,7 @@ public struct KafkaTopicConfiguration {
             }
 
             public static func level(_ value: Int) -> Level {
-                return .init(rawValue: value)
+                .init(rawValue: value)
             }
 
             /// Codec-dependent default compression level.
@@ -126,7 +126,7 @@ public struct KafkaTopicConfiguration {
             private enum _Codec: Sendable, Hashable, CustomStringConvertible {
                 case none
                 case gzip(compressionLevel: Level)
-                case snappy // only compression level is 0
+                case snappy  // only compression level is 0
                 case lz4(compressionLevel: Level)
                 case zstd(compressionLevel: Level)
                 case inherit
@@ -206,7 +206,7 @@ public struct KafkaTopicConfiguration {
 
             /// zstd compression.
             public func zstd(compressionLevel: Level) -> Codec {
-                return Codec(_internal: .zstd(compressionLevel: compressionLevel))
+                Codec(_internal: .zstd(compressionLevel: compressionLevel))
             }
 
             /// Inherit global `compression.codec` configuration.

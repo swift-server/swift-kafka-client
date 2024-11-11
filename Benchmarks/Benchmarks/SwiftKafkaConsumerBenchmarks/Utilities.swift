@@ -13,18 +13,20 @@
 //===----------------------------------------------------------------------===//
 
 import Benchmark
-import class Foundation.ProcessInfo
-import struct Foundation.UUID
 import Kafka
 @_spi(Internal) import Kafka
 import Logging
 import ServiceLifecycle
+
+import class Foundation.ProcessInfo
+import struct Foundation.UUID
 
 let brokerAddress = KafkaConfiguration.BrokerAddress(
     host: ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost",
     port: 9092
 )
 
+// swift-format-ignore: DontRepeatTypeInStaticProperties
 extension Logger {
     static let perfLogger = {
         var logger = Logger(label: "perf logger")
@@ -76,7 +78,11 @@ func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = 
 
     let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: logger)
 
-    let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], gracefulShutdownSignals: [.sigterm, .sigint], logger: logger)
+    let serviceGroupConfiguration = ServiceGroupConfiguration(
+        services: [producer],
+        gracefulShutdownSignals: [.sigterm, .sigint],
+        logger: logger
+    )
     let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
     try await withThrowingTaskGroup(of: Void.self) { group in
@@ -107,6 +113,7 @@ func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = 
     return uniqueTestTopic
 }
 
+// swift-format-ignore: AmbiguousTrailingClosureOverload
 extension Benchmark {
     @discardableResult
     func withMeasurement<T>(_ body: () throws -> T) rethrows -> T {

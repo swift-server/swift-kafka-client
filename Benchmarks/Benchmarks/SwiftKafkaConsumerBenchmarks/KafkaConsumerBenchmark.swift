@@ -15,11 +15,12 @@
 import Benchmark
 import Crdkafka
 import Dispatch
-import struct Foundation.Date
-import struct Foundation.UUID
 import Kafka
 import Logging
 import ServiceLifecycle
+
+import struct Foundation.Date
+import struct Foundation.UUID
 
 let benchmarks = {
     var uniqueTestTopic: String!
@@ -80,7 +81,11 @@ let benchmarks = {
             logger: .perfLogger
         )
 
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
+        let serviceGroupConfiguration = ServiceGroupConfiguration(
+            services: [consumer],
+            gracefulShutdownSignals: [.sigterm, .sigint],
+            logger: .perfLogger
+        )
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -119,7 +124,9 @@ let benchmarks = {
 
                 let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
                 let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-                benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+                benchLog(
+                    "All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec"
+                )
             }
 
             // Wait for second Consumer Task to complete
@@ -149,7 +156,11 @@ let benchmarks = {
             logger: .perfLogger
         )
 
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .perfLogger)
+        let serviceGroupConfiguration = ServiceGroupConfiguration(
+            services: [consumer],
+            gracefulShutdownSignals: [.sigterm, .sigint],
+            logger: .perfLogger
+        )
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -190,7 +201,9 @@ let benchmarks = {
 
                 let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
                 let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-                benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+                benchLog(
+                    "All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec"
+                )
             }
 
             // Wait for second Consumer Task to complete
@@ -265,7 +278,9 @@ let benchmarks = {
 
         let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
         let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-        benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+        benchLog(
+            "All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec"
+        )
     }
 
     Benchmark("librdkafka_with_offset_commit_messages_\(messageCount)") { benchmark in
@@ -340,6 +355,8 @@ let benchmarks = {
 
         let timeIntervalTotal = Date.timeIntervalSinceReferenceDate - totalStartDate
         let avgRateMb = Double(totalBytes) / timeIntervalTotal / 1024
-        benchLog("All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec")
+        benchLog(
+            "All read up to ctr: \(ctr), avgRate: (\(Int(avgRateMb))KB/s), timePassed: \(Int(timeIntervalTotal))sec"
+        )
     }
 }
