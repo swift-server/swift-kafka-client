@@ -1,3 +1,4 @@
+.dockerignore
 .gitignore
 **/.gitignore
 .licenseignore
