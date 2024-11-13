@@ -20,6 +20,6 @@ extension Duration {
     }
 
     internal var canBeRepresentedAsMilliseconds: Bool {
-        return self.inMilliseconds > 0
+        self.inMilliseconds > 0
     }
 }

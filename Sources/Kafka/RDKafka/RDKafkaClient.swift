@@ -14,8 +14,9 @@
 
 import Crdkafka
 import Dispatch
-import class Foundation.JSONDecoder
 import Logging
+
+import class Foundation.JSONDecoder
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
@@ -74,12 +75,14 @@ public final class RDKafkaClient: Sendable {
         defer { errorChars.deallocate() }
 
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
-        guard let handle = rd_kafka_new(
-            clientType,
-            rdConfig,
-            errorChars,
-            RDKafkaClient.stringSize
-        ) else {
+        guard
+            let handle = rd_kafka_new(
+                clientType,
+                rdConfig,
+                errorChars,
+                RDKafkaClient.stringSize
+            )
+        else {
             // rd_kafka_new only frees the rd_kafka_conf_t upon success
             rd_kafka_conf_destroy(rdConfig)
 
@@ -113,7 +116,7 @@ public final class RDKafkaClient: Sendable {
             topic: message.topic,
             topicConfiguration: topicConfiguration
         ) { topicHandle in
-            return try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
+            try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
                 if message.headers.isEmpty {
                     // No message headers set, normal produce method can be used.
                     rd_kafka_produce(
@@ -224,12 +227,12 @@ public final class RDKafkaClient: Sendable {
     @discardableResult
     private static func withMessageKeyAndValueBuffer<T, Key, Value>(
         for message: KafkaProducerMessage<Key, Value>,
-        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T // (keyBuffer, valueBuffer)
+        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T  // (keyBuffer, valueBuffer)
     ) rethrows -> T {
-        return try message.value.withUnsafeBytes { valueBuffer in
+        try message.value.withUnsafeBytes { valueBuffer in
             if let key = message.key {
                 return try key.withUnsafeBytes { keyBuffer in
-                    return try body(keyBuffer, valueBuffer)
+                    try body(keyBuffer, valueBuffer)
                 }
             } else {
                 return try body(nil, valueBuffer)
@@ -328,7 +331,7 @@ public final class RDKafkaClient: Sendable {
                 // Finished reading events, return early
                 return events
             default:
-                break // Ignored Event
+                break  // Ignored Event
             }
         }
 
@@ -382,29 +385,35 @@ public final class RDKafkaClient: Sendable {
             if let faculty, let buffer {
                 // Mapping according to https://en.wikipedia.org/wiki/Syslog
                 switch level {
-                case 0...2: /* Emergency, Alert, Critical */
+                case 0...2:  // Emergency, Alert, Critical
                     self.logger.critical(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 3: /* Error */
+                case 3:  // Error
                     self.logger.error(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 4: /* Warning */
+                case 4:  // Warning
                     self.logger.warning(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 5: /* Notice */
+                case 5:  // Notice
                     self.logger.notice(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 6: /* Informational */
+                case 6:  // Informational
                     self.logger.info(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                default: /* Debug */
+                default:  // Debug
                     self.logger.debug(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
                 }
             }
@@ -507,10 +516,10 @@ public final class RDKafkaClient: Sendable {
         )
 
         let error = changesList.withListPointer { listPointer in
-            return rd_kafka_commit(
+            rd_kafka_commit(
                 self.kafkaHandle,
                 listPointer,
-                1 // async = true
+                1  // async = true
             )
         }
 
@@ -604,6 +613,6 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter body: The closure will use the Kafka handle pointer.
     @discardableResult
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
-        return try body(self.kafkaHandle)
+        try body(self.kafkaHandle)
     }
 }

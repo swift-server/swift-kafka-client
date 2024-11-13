@@ -29,14 +29,14 @@ extension KafkaConfiguration {
 
             /// Read certificate chain from a file.
             public static func file(location: String) -> LeafAndIntermediates {
-                return LeafAndIntermediates(
+                LeafAndIntermediates(
                     _internal: .file(location: location)
                 )
             }
 
             /// Read X.509 certificate from String.
             public static func pem(_ pem: String) -> LeafAndIntermediates {
-                return LeafAndIntermediates(
+                LeafAndIntermediates(
                     _internal: .pem(pem)
                 )
             }
@@ -56,14 +56,14 @@ extension KafkaConfiguration {
 
             /// File or directory path to root certificate(s) for verifying the broker's key.
             public static func file(location: String) -> TrustRoots {
-                return TrustRoots(
+                TrustRoots(
                     _internal: .file(location: location)
                 )
             }
 
             /// Trust roots certificate String for verifying the broker's key.
             public static func pem(_ pem: String) -> TrustRoots {
-                return TrustRoots(
+                TrustRoots(
                     _internal: .pem(pem)
                 )
             }
@@ -81,14 +81,14 @@ extension KafkaConfiguration {
 
                 /// A key located in a file at the given `location`.
                 public static func file(location: String) -> Location {
-                    return Location(
+                    Location(
                         _internal: .file(location: location)
                     )
                 }
 
                 /// A key String (PEM format).
                 public static func pem(_ pem: String) -> Location {
-                    return Location(
+                    Location(
                         _internal: .pem(pem)
                     )
                 }
@@ -139,7 +139,7 @@ extension KafkaConfiguration {
                 privateKey: PrivateKey,
                 certificates: LeafAndIntermediates
             ) -> ClientIdentity {
-                return .init(
+                .init(
                     _internal: .keyPair(
                         privateKey: privateKey,
                         certificates: certificates
@@ -152,7 +152,7 @@ extension KafkaConfiguration {
             /// - Parameters:
             ///     - keyStore: The client's keystore (PKCS#12) used for authentication.
             public static func keyStore(keyStore: KeyStore) -> ClientIdentity {
-                return .init(_internal: .keyStore(keyStore: keyStore))
+                .init(_internal: .keyStore(keyStore: keyStore))
             }
         }
 
@@ -180,7 +180,7 @@ extension KafkaConfiguration {
                 trustRoots: TrustRoots = .probe,
                 certificateRevocationListPath: String? = nil
             ) -> BrokerVerification {
-                return .init(
+                .init(
                     _internal: .verify(
                         trustRoots: trustRoots,
                         certificateRevocationListPath: certificateRevocationListPath
@@ -213,14 +213,14 @@ extension KafkaConfiguration {
                 break
             case .keyPair(let privateKey, let certificate):
                 switch privateKey.key._internal {
-                case .file(location: let location):
+                case .file(let location):
                     resultDict["ssl.key.location"] = location
                 case .pem(let pem):
                     resultDict["ssl.key.pem"] = pem
                 }
                 resultDict["ssl.key.password"] = privateKey.password
                 switch certificate._internal {
-                case .file(location: let location):
+                case .file(let location):
                     resultDict["ssl.key.location"] = location
                     resultDict["ssl.certificate.location"] = location
                 case .pem(let pem):
@@ -240,7 +240,7 @@ extension KafkaConfiguration {
                 switch trustRoots._internal {
                 case .probe:
                     resultDict["ssl.ca.location"] = "probe"
-                case .file(location: let location):
+                case .file(let location):
                     resultDict["ssl.ca.location"] = location
                 case .pem(let pem):
                     resultDict["ssl.ca.pem"] = pem
@@ -269,9 +269,9 @@ extension KafkaConfiguration {
             /// %{config.prop.name} is replaced by corresponding config object value.
             /// Default: `kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"`.
             public var kinitCommand: String = """
-            kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || \
-            kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"
-            """
+                kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || \
+                kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"
+                """
             /// Path to Kerberos keytab file.
             /// This configuration property is only used as a variable in ``KafkaConfiguration/SASLMechanism/KerberosConfiguration/kinitCommand``
             /// as  ... -t "%{sasl.kerberos.keytab}".
@@ -338,7 +338,7 @@ extension KafkaConfiguration {
             ///     In addition, SASL extensions can be communicated to the broker via `extension_NAME=value`.
             ///     For example: `principal=admin extension_traceId=123`
             public static func `default`(configuration: String? = nil) -> OAuthBearerMethod {
-                return OAuthBearerMethod(_internal: .default(configuration: configuration))
+                OAuthBearerMethod(_internal: .default(configuration: configuration))
             }
 
             /// OpenID Connect (OIDC).
@@ -367,7 +367,7 @@ extension KafkaConfiguration {
                 scope: String? = nil,
                 extensions: String? = nil
             ) -> OAuthBearerMethod {
-                return OAuthBearerMethod(
+                OAuthBearerMethod(
                     _internal: .oidc(
                         configuration: configuration,
                         clientID: clientID,
@@ -392,35 +392,35 @@ extension KafkaConfiguration {
 
         /// Use the GSSAPI mechanism.
         public static func gssapi(kerberosConfiguration: KerberosConfiguration) -> SASLMechanism {
-            return SASLMechanism(
+            SASLMechanism(
                 _internal: .gssapi(kerberosConfiguration: kerberosConfiguration)
             )
         }
 
         /// Use the PLAIN mechanism.
         public static func plain(username: String, password: String) -> SASLMechanism {
-            return SASLMechanism(
+            SASLMechanism(
                 _internal: .plain(username: username, password: password)
             )
         }
 
         /// Use the SCRAM-SHA-256 mechanism.
         public static func scramSHA256(username: String, password: String) -> SASLMechanism {
-            return SASLMechanism(
+            SASLMechanism(
                 _internal: .scramSHA256(username: username, password: password)
             )
         }
 
         /// Use the SCRAM-SHA-512 mechanism.
         public static func scramSHA512(username: String, password: String) -> SASLMechanism {
-            return SASLMechanism(
+            SASLMechanism(
                 _internal: .scramSHA512(username: username, password: password)
             )
         }
 
         /// Use the OAUTHBEARER mechanism.
         public static func oAuthBearer(method: OAuthBearerMethod) -> SASLMechanism {
-            return SASLMechanism(
+            SASLMechanism(
                 _internal: .oAuthBearer(method: method)
             )
         }
@@ -437,7 +437,9 @@ extension KafkaConfiguration {
                 resultDict["sasl.kerberos.principal"] = kerberosConfiguration.principal
                 resultDict["sasl.kerberos.kinit.cmd"] = kerberosConfiguration.kinitCommand
                 resultDict["sasl.kerberos.keytab"] = kerberosConfiguration.keytab
-                resultDict["sasl.kerberos.min.time.before.relogin"] = String(kerberosConfiguration.minTimeBeforeRelogin.rawValue)
+                resultDict["sasl.kerberos.min.time.before.relogin"] = String(
+                    kerberosConfiguration.minTimeBeforeRelogin.rawValue
+                )
             case .plain(let username, let password):
                 resultDict["sasl.mechanism"] = "PLAIN"
                 resultDict["sasl.username"] = username
@@ -498,14 +500,14 @@ extension KafkaConfiguration {
 
         /// Use the Transport Layer Security (TLS) protocol.
         public static func tls(configuration: TLSConfiguration = TLSConfiguration()) -> SecurityProtocol {
-            return SecurityProtocol(
+            SecurityProtocol(
                 _internal: .tls(configuration: configuration)
             )
         }
 
         /// Use the Simple Authentication and Security Layer (SASL).
         public static func saslPlaintext(mechanism: SASLMechanism) -> SecurityProtocol {
-            return SecurityProtocol(
+            SecurityProtocol(
                 _internal: .saslPlaintext(mechanism: mechanism)
             )
         }
@@ -515,7 +517,7 @@ extension KafkaConfiguration {
             saslMechanism: SASLMechanism,
             tlsConfiguration: TLSConfiguration = TLSConfiguration()
         ) -> SecurityProtocol {
-            return SecurityProtocol(
+            SecurityProtocol(
                 _internal: .saslTLS(saslMechanism: saslMechanism, tlsConfiguration: tlsConfiguration)
             )
         }

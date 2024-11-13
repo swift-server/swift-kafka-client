@@ -15,6 +15,7 @@ needs to be listed here.
 - Felix Schlegel <schlegel@apple.com>
 - Franz Busch <f.busch@apple.com>
 - FranzBusch <f.busch@apple.com>
+- Rick Newton-Rogers <rnewtonrogers@apple.com>
 - SHILPEE GUPTA <78029920+shilpeegupta14@users.noreply.github.com>
 - Yim Lee <yim_lee@apple.com>
 - blindspotbounty <127803250+blindspotbounty@users.noreply.github.com>

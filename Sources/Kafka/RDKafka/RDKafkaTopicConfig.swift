@@ -22,7 +22,7 @@ struct RDKafkaTopicConfig {
     /// - Throws: A ``KafkaError`` if setting a config value failed.
     static func createFrom(topicConfiguration: KafkaTopicConfiguration) throws -> OpaquePointer {
         let configPointer: OpaquePointer = rd_kafka_topic_conf_new()
-        try topicConfiguration.dictionary.forEach { key, value in
+        for (key, value) in topicConfiguration.dictionary {
             try Self.set(configPointer: configPointer, key: key, value: value)
         }
 

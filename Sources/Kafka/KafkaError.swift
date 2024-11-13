@@ -56,82 +56,122 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     }
 
     static func rdKafkaError(
-        wrapping error: rd_kafka_resp_err_t, file: String = #fileID, line: UInt = #line
+        wrapping error: rd_kafka_resp_err_t,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
         let errorMessage = String(cString: rd_kafka_err2str(error))
         return KafkaError(
             backing: .init(
-                code: .underlying, reason: errorMessage, file: file, line: line
+                code: .underlying,
+                reason: errorMessage,
+                file: file,
+                line: line
             )
         )
     }
 
     static func config(
-        reason: String, file: String = #fileID, line: UInt = #line
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
-        return KafkaError(
+        KafkaError(
             backing: .init(
-                code: .config, reason: reason, file: file, line: line
+                code: .config,
+                reason: reason,
+                file: file,
+                line: line
             )
         )
     }
 
     static func topicConfig(
-        reason: String, file: String = #fileID, line: UInt = #line
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
-        return KafkaError(
+        KafkaError(
             backing: .init(
-                code: .topicConfig, reason: reason, file: file, line: line
+                code: .topicConfig,
+                reason: reason,
+                file: file,
+                line: line
             )
         )
     }
 
     static func client(
-        reason: String, file: String = #fileID, line: UInt = #line
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
-        return KafkaError(
+        KafkaError(
             backing: .init(
-                code: .connectionFailed, reason: reason, file: file, line: line
+                code: .connectionFailed,
+                reason: reason,
+                file: file,
+                line: line
             )
         )
     }
 
     static func connectionClosed(
-        reason: String, file: String = #fileID, line: UInt = #line
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
-        return KafkaError(
+        KafkaError(
             backing: .init(
-                code: .shutdown, reason: reason, file: file, line: line
+                code: .shutdown,
+                reason: reason,
+                file: file,
+                line: line
             )
         )
     }
 
     static func messageConsumption(
-        reason: String, file: String = #fileID, line: UInt = #line
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
-        return KafkaError(
+        KafkaError(
             backing: .init(
-                code: .messageConsumptionFailed, reason: reason, file: file, line: line
+                code: .messageConsumptionFailed,
+                reason: reason,
+                file: file,
+                line: line
             )
         )
     }
 
     static func topicCreation(
-        reason: String, file: String = #fileID, line: UInt = #line
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
-        return KafkaError(
+        KafkaError(
             backing: .init(
-                code: .topicCreationFailed, reason: reason, file: file, line: line
+                code: .topicCreationFailed,
+                reason: reason,
+                file: file,
+                line: line
             )
         )
     }
 
     static func topicDeletion(
-        reason: String, file: String = #fileID, line: UInt = #line
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
     ) -> KafkaError {
-        return KafkaError(
+        KafkaError(
             backing: .init(
-                code: .topicDeletionFailed, reason: reason, file: file, line: line
+                code: .topicDeletionFailed,
+                reason: reason,
+                file: file,
+                line: line
             )
         )
     }
@@ -179,7 +219,7 @@ extension KafkaError {
         public static let topicDeletionFailed = ErrorCode(.topicDeletion)
 
         public var description: String {
-            return String(describing: self.backingCode)
+            String(describing: self.backingCode)
         }
     }
 }
@@ -210,7 +250,7 @@ extension KafkaError {
 
         // Only the error code matters for equality.
         static func == (lhs: Backing, rhs: Backing) -> Bool {
-            return lhs.code == rhs.code
+            lhs.code == rhs.code
         }
 
         func hash(into hasher: inout Hasher) {
@@ -218,7 +258,7 @@ extension KafkaError {
         }
 
         fileprivate func copy() -> Backing {
-            return Backing(code: self.code, reason: self.reason, file: self.file, line: self.line)
+            Backing(code: self.code, reason: self.reason, file: self.file, line: self.line)
         }
     }
 }
@@ -227,7 +267,7 @@ extension KafkaError {
 
 extension KafkaError: Hashable {
     public static func == (lhs: KafkaError, rhs: KafkaError) -> Bool {
-        return lhs.backing == rhs.backing
+        lhs.backing == rhs.backing
     }
 
     public func hash(into hasher: inout Hasher) {

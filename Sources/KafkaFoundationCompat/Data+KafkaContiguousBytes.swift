@@ -12,7 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-import struct Foundation.Data
 import Kafka
+
+import struct Foundation.Data
 
 extension Data: KafkaContiguousBytes {}

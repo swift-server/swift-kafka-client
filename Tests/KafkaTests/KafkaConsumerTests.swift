@@ -12,14 +12,16 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import CoreMetrics // for MetricsSystem.bootstrapInternal
-import struct Foundation.UUID
-@testable import Kafka
 import Logging
 import Metrics
 import MetricsTestKit
 import ServiceLifecycle
 import XCTest
+
+import struct Foundation.UUID
+
+@testable import CoreMetrics  // for MetricsSystem.bootstrapInternal
+@testable import Kafka
 
 // For testing locally on Mac, do the following:
 //
@@ -82,15 +84,14 @@ final class KafkaConsumerTests: XCTestCase {
 
         let recordedEvents = recorder.recordedEvents
         let expectedLogs: [(level: Logger.Level, source: String, message: String)] = [
-            (Logger.Level.debug, "MEMBERID", uniqueGroupID),
+            (Logger.Level.debug, "MEMBERID", uniqueGroupID)
         ]
 
         for expectedLog in expectedLogs {
             XCTAssertTrue(
                 recordedEvents.contains(where: { event in
-                    event.level == expectedLog.level &&
-                        event.source == expectedLog.source &&
-                        event.message.description.contains(expectedLog.message)
+                    event.level == expectedLog.level && event.source == expectedLog.source
+                        && event.message.description.contains(expectedLog.message)
                 }),
                 "Expected log \(expectedLog) but was not found"
             )
@@ -135,7 +136,7 @@ final class KafkaConsumerTests: XCTestCase {
             bootstrapBrokerAddresses: []
         )
 
-        _ = try KafkaConsumer(configuration: config, logger: .kafkaTest) // deinit called before run
+        _ = try KafkaConsumer(configuration: config, logger: .kafkaTest)  // deinit called before run
         _ = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
     }
 

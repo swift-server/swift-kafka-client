@@ -27,7 +27,7 @@ internal struct KafkaProducerCloseOnTerminate: Sendable {
 
 extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        return // No back pressure
+        return  // No back pressure
     }
 
     func didTerminate() {
@@ -60,7 +60,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        return AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+        AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
 }
 
@@ -116,7 +116,7 @@ public final class KafkaProducer: Service, Sendable {
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        var subscribedEvents: [RDKafkaEvent] = [.log] // No .deliveryReport here!
+        var subscribedEvents: [RDKafkaEvent] = [.log]  // No .deliveryReport here!
 
         if configuration.metrics.enabled {
             subscribedEvents.append(.statistics)
@@ -238,7 +238,7 @@ public final class KafkaProducer: Service, Sendable {
                     0...Int(Int32.max) ~= self.configuration.flushTimeoutMilliseconds,
                     "Flush timeout outside of valid range \(0...Int32.max)"
                 )
-                defer { // we should finish source indefinetely of exception in client.flush()
+                defer {  // we should finish source indefinetely of exception in client.flush()
                     source?.finish()
                 }
                 try await client.flush(timeoutMilliseconds: Int32(self.configuration.flushTimeoutMilliseconds))
@@ -336,7 +336,9 @@ extension KafkaProducer {
             source: Producer.Source?
         ) {
             guard case .uninitialized = self.state else {
-                fatalError("\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)")
+                fatalError(
+                    "\(#function) can only be invoked in state .uninitialized, but was invoked in state \(self.state)"
+                )
             }
             self.state = .started(
                 client: client,
@@ -419,7 +421,9 @@ extension KafkaProducer {
                     topicHandles: topicHandles
                 )
             case .eventConsumptionFinished:
-                throw KafkaError.connectionClosed(reason: "Sequence consuming events was abruptly terminated, producer closed")
+                throw KafkaError.connectionClosed(
+                    reason: "Sequence consuming events was abruptly terminated, producer closed"
+                )
             case .finishing:
                 throw KafkaError.connectionClosed(reason: "Producer in the process of finishing")
             case .finished:
