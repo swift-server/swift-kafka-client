@@ -11,6 +11,7 @@ jobs:
     with:
       license_header_check_project_name: "swift-kafka-client"
       api_breakage_check_enabled: false  # requires libsasl2-dev
+      docs_check_enabled: false  # requires libsasl2-dev
 
   unit-tests:
     name: Unit tests
