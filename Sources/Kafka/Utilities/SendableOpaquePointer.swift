@@ -16,7 +16,7 @@
 ///
 /// This wrapper silences `Sendable` warnings for the pointer introduced in Swift 5.10, and should
 /// only be used for handles from `librdkafka` that are known to be thread-safe.
-internal struct SendableOpaquePointer: @unchecked Sendable {
+struct SendableOpaquePointer: @unchecked Sendable {
     let pointer: OpaquePointer
 
     init(_ pointer: OpaquePointer) {
