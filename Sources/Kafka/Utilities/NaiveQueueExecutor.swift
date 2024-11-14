@@ -15,22 +15,23 @@
 import Dispatch
 
 final class NaiveQueueExecutor: TaskExecutor {
-  let queue: DispatchQueue
+    let queue: DispatchQueue
 
-  init(_ queue: DispatchQueue) {
-    self.queue = queue
-  }
-
-  public func enqueue(_ _job: consuming ExecutorJob) {
-  let job = UnownedJob(_job)
-  queue.async {
-    job.runSynchronously(
-        on: self.asUnownedTaskExecutor())
+    init(_ queue: DispatchQueue) {
+        self.queue = queue
     }
-  }
 
-  @inlinable
-  public func asUnownedTaskExecutor() -> UnownedTaskExecutor {
-    UnownedTaskExecutor(ordinary: self)
-  }
+    public func enqueue(_ _job: consuming ExecutorJob) {
+        let job = UnownedJob(_job)
+        queue.async {
+            job.runSynchronously(
+                on: self.asUnownedTaskExecutor()
+            )
+        }
+    }
+
+    @inlinable
+    public func asUnownedTaskExecutor() -> UnownedTaskExecutor {
+        UnownedTaskExecutor(ordinary: self)
+    }
 }
