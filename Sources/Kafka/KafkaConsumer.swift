@@ -112,7 +112,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                     }
                     #else
                     // No messages. Sleep a little.
-                    return try await Task.sleep(for: self.pollInterval)
+                    try await Task.sleep(for: self.pollInterval)
                     #endif
                 case .suspendPollLoop:
                     try await Task.sleep(for: self.pollInterval)  // not started yet
