@@ -73,7 +73,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
+        #if swift(>=6.0)
         let queue: NaiveQueueExecutor
+        #endif
 
         private final class MachineHolder: Sendable {  // only for deinit
             let stateMachine: LockedMachine
@@ -90,7 +92,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         init(stateMachine: LockedMachine, pollInterval: Duration) {
             self.stateMachineHolder = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
+            #if swift(>=6.0)
             self.queue = NaiveQueueExecutor(DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer"))
+            #endif
         }
 
         public func next() async throws -> Element? {
