@@ -12,14 +12,15 @@
 //
 //===----------------------------------------------------------------------===//
 
-@testable import CoreMetrics // for MetricsSystem.bootstrapInternal
-@testable import Kafka
 import Logging
 import Metrics
 import MetricsTestKit
 import NIOCore
 import ServiceLifecycle
 import XCTest
+
+@testable import CoreMetrics  // for MetricsSystem.bootstrapInternal
+@testable import Kafka
 
 // For testing locally on Mac, do the following:
 //
@@ -66,7 +67,10 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSend() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.config,
+            logger: .kafkaTest
+        )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -95,7 +99,7 @@ final class KafkaProducerTests: XCTestCase {
                         receivedDeliveryReports.insert(deliveryReport)
                     }
                 default:
-                    break // Ignore any other events
+                    break  // Ignore any other events
                 }
 
                 if receivedDeliveryReports.count >= 1 {
@@ -121,7 +125,10 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendEmptyMessage() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.config,
+            logger: .kafkaTest
+        )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -149,7 +156,7 @@ final class KafkaProducerTests: XCTestCase {
                         receivedDeliveryReports.insert(deliveryReport)
                     }
                 default:
-                    break // Ignore any other events
+                    break  // Ignore any other events
                 }
 
                 if receivedDeliveryReports.count >= 1 {
@@ -174,7 +181,10 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendTwoTopics() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.config,
+            logger: .kafkaTest
+        )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -210,7 +220,7 @@ final class KafkaProducerTests: XCTestCase {
                         receivedDeliveryReports.insert(deliveryReport)
                     }
                 default:
-                    break // Ignore any other events
+                    break  // Ignore any other events
                 }
 
                 if receivedDeliveryReports.count >= 2 {
@@ -270,7 +280,8 @@ final class KafkaProducerTests: XCTestCase {
         let recordedEvents = recorder.recordedEvents
         XCTAssertEqual(1, recordedEvents.count)
 
-        let expectedMessage = "[thrd:app]: No `bootstrap.servers` configured: client will not be able to connect to Kafka cluster"
+        let expectedMessage =
+            "[thrd:app]: No `bootstrap.servers` configured: client will not be able to connect to Kafka cluster"
         let expectedLevel = Logger.Level.notice
         let expectedSource = "CONFWARN"
 
@@ -281,7 +292,10 @@ final class KafkaProducerTests: XCTestCase {
     }
 
     func testSendFailsAfterTerminatingAcknowledgementSequence() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.config,
+            logger: .kafkaTest
+        )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -381,8 +395,11 @@ final class KafkaProducerTests: XCTestCase {
     func testProducerConstructDeinit() async throws {
         let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
 
-        _ = try KafkaProducer(configuration: config, logger: .kafkaTest) // deinit called before run
-        _ = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest) // deinit called before run
+        // deinit called before run
+        _ = try KafkaProducer(configuration: config, logger: .kafkaTest)
+
+        // deinit called before run
+        _ = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest)
     }
 
     func testProducerEventsReadCancelledBeforeRun() async throws {

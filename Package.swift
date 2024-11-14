@@ -1,4 +1,4 @@
-// swift-tools-version: 5.7
+// swift-tools-version: 5.9
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the swift-kafka-client open source project
@@ -69,12 +69,12 @@ let package = Package(
                 .headerSearchPath("./custom/config/dummy"),
                 .headerSearchPath("./custom/include"),
                 .headerSearchPath("./librdkafka/src"),
-                .define("_GNU_SOURCE", to: "1"), // Fix build error for Swift 5.9 onwards
+                .define("_GNU_SOURCE", to: "1"),  // Fix build error for Swift 5.9 onwards
             ],
             linkerSettings: [
                 .linkedLibrary("curl"),
                 .linkedLibrary("sasl2"),
-                .linkedLibrary("z"), // zlib
+                .linkedLibrary("z"),  // zlib
             ]
         ),
         .target(
@@ -90,7 +90,7 @@ let package = Package(
         .target(
             name: "KafkaFoundationCompat",
             dependencies: [
-                "Kafka",
+                "Kafka"
             ]
         ),
         .testTarget(

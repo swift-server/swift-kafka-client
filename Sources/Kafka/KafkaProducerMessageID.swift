@@ -27,7 +27,7 @@ public struct KafkaProducerMessageID {
 
 extension KafkaProducerMessageID: CustomStringConvertible {
     public var description: String {
-        return String(self.rawValue)
+        String(self.rawValue)
     }
 }
 

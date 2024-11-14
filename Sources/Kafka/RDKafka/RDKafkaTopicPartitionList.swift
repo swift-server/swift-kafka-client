@@ -50,11 +50,13 @@ final class RDKafkaTopicPartitionList {
             "Partition ID outside of valid range \(0...Int32.max)"
         )
 
-        guard let partitionPointer = rd_kafka_topic_partition_list_add(
-            self._internal,
-            topic,
-            Int32(partition.rawValue)
-        ) else {
+        guard
+            let partitionPointer = rd_kafka_topic_partition_list_add(
+                self._internal,
+                topic,
+                Int32(partition.rawValue)
+            )
+        else {
             fatalError("rd_kafka_topic_partition_list_add returned invalid pointer")
         }
         partitionPointer.pointee.offset = offset
@@ -65,6 +67,6 @@ final class RDKafkaTopicPartitionList {
     /// - Parameter body: The closure will use the pointer.
     @discardableResult
     func withListPointer<T>(_ body: (UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws -> T) rethrows -> T {
-        return try body(self._internal)
+        try body(self._internal)
     }
 }

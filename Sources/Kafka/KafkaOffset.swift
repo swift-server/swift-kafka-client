@@ -35,7 +35,7 @@ public struct KafkaOffset: RawRepresentable {
     /// Example: Current end offset is at `12345` and `count = 200`.
     /// This means start reading offset from offset `12345 - 200 = 12145`.
     public static func tail(_ count: Int) -> KafkaOffset {
-        return KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_TAIL_BASE) - count)
+        KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_TAIL_BASE) - count)
     }
 }
 

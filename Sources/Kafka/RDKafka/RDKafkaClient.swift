@@ -14,8 +14,9 @@
 
 import Crdkafka
 import Dispatch
-import class Foundation.JSONDecoder
 import Logging
+
+import class Foundation.JSONDecoder
 
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
 /// which is used to handle the connection to the Kafka ecosystem.
@@ -31,30 +32,30 @@ public final class RDKafkaClient: Sendable {
     }
 
     /// Handle for the C library's Kafka instance.
-    private let kafkaHandle: OpaquePointer
+    private let kafkaHandle: SendableOpaquePointer
     /// A logger.
     private let logger: Logger
 
     /// `librdkafka`'s `rd_kafka_queue_t` that events are received on.
-    private let queue: OpaquePointer
+    private let queueHandle: SendableOpaquePointer
 
     // Use factory method to initialize
     private init(
         type: ClientType,
-        kafkaHandle: OpaquePointer,
+        kafkaHandle: SendableOpaquePointer,
         logger: Logger
     ) {
         self.kafkaHandle = kafkaHandle
         self.logger = logger
-        self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
+        self.queueHandle = .init(rd_kafka_queue_get_main(self.kafkaHandle.pointer))
 
-        rd_kafka_set_log_queue(self.kafkaHandle, self.queue)
+        rd_kafka_set_log_queue(self.kafkaHandle.pointer, self.queueHandle.pointer)
     }
 
     deinit {
         // Loose reference to librdkafka's event queue
-        rd_kafka_queue_destroy(self.queue)
-        rd_kafka_destroy(kafkaHandle)
+        rd_kafka_queue_destroy(self.queueHandle.pointer)
+        rd_kafka_destroy(kafkaHandle.pointer)
     }
 
     /// Factory method creating a new instance of a ``RDKafkaClient``.
@@ -74,12 +75,14 @@ public final class RDKafkaClient: Sendable {
         defer { errorChars.deallocate() }
 
         let clientType = type == .producer ? RD_KAFKA_PRODUCER : RD_KAFKA_CONSUMER
-        guard let handle = rd_kafka_new(
-            clientType,
-            rdConfig,
-            errorChars,
-            RDKafkaClient.stringSize
-        ) else {
+        guard
+            let handle = rd_kafka_new(
+                clientType,
+                rdConfig,
+                errorChars,
+                RDKafkaClient.stringSize
+            )
+        else {
             // rd_kafka_new only frees the rd_kafka_conf_t upon success
             rd_kafka_conf_destroy(rdConfig)
 
@@ -87,7 +90,8 @@ public final class RDKafkaClient: Sendable {
             throw KafkaError.client(reason: errorString)
         }
 
-        return RDKafkaClient(type: type, kafkaHandle: handle, logger: logger)
+        let kafkaHandle = SendableOpaquePointer(handle)
+        return RDKafkaClient(type: type, kafkaHandle: kafkaHandle, logger: logger)
     }
 
     /// Produce a message to the Kafka cluster.
@@ -113,7 +117,7 @@ public final class RDKafkaClient: Sendable {
             topic: message.topic,
             topicConfiguration: topicConfiguration
         ) { topicHandle in
-            return try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
+            try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
                 if message.headers.isEmpty {
                     // No message headers set, normal produce method can be used.
                     rd_kafka_produce(
@@ -212,7 +216,7 @@ public final class RDKafkaClient: Sendable {
         assert(arguments.count == size)
 
         return rd_kafka_produceva(
-            self.kafkaHandle,
+            self.kafkaHandle.pointer,
             arguments,
             arguments.count
         )
@@ -224,12 +228,12 @@ public final class RDKafkaClient: Sendable {
     @discardableResult
     private static func withMessageKeyAndValueBuffer<T, Key, Value>(
         for message: KafkaProducerMessage<Key, Value>,
-        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T // (keyBuffer, valueBuffer)
+        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T  // (keyBuffer, valueBuffer)
     ) rethrows -> T {
-        return try message.value.withUnsafeBytes { valueBuffer in
+        try message.value.withUnsafeBytes { valueBuffer in
             if let key = message.key {
                 return try key.withUnsafeBytes { keyBuffer in
-                    return try body(keyBuffer, valueBuffer)
+                    try body(keyBuffer, valueBuffer)
                 }
             } else {
                 return try body(nil, valueBuffer)
@@ -304,7 +308,7 @@ public final class RDKafkaClient: Sendable {
         events.reserveCapacity(maxEvents)
 
         for _ in 0..<maxEvents {
-            let event = rd_kafka_queue_poll(self.queue, 0)
+            let event = rd_kafka_queue_poll(self.queueHandle.pointer, 0)
             defer { rd_kafka_event_destroy(event) }
 
             let rdEventType = rd_kafka_event_type(event)
@@ -328,7 +332,7 @@ public final class RDKafkaClient: Sendable {
                 // Finished reading events, return early
                 return events
             default:
-                break // Ignored Event
+                break  // Ignored Event
             }
         }
 
@@ -382,29 +386,35 @@ public final class RDKafkaClient: Sendable {
             if let faculty, let buffer {
                 // Mapping according to https://en.wikipedia.org/wiki/Syslog
                 switch level {
-                case 0...2: /* Emergency, Alert, Critical */
+                case 0...2:  // Emergency, Alert, Critical
                     self.logger.critical(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 3: /* Error */
+                case 3:  // Error
                     self.logger.error(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 4: /* Warning */
+                case 4:  // Warning
                     self.logger.warning(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 5: /* Notice */
+                case 5:  // Notice
                     self.logger.notice(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                case 6: /* Informational */
+                case 6:  // Informational
                     self.logger.info(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
-                default: /* Debug */
+                default:  // Debug
                     self.logger.debug(
-                        Logger.Message(stringLiteral: String(cString: buffer)), source: String(cString: faculty)
+                        Logger.Message(stringLiteral: String(cString: buffer)),
+                        source: String(cString: faculty)
                     )
                 }
             }
@@ -437,7 +447,7 @@ public final class RDKafkaClient: Sendable {
     /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     func consumerPoll() throws -> KafkaConsumerMessage? {
-        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle, 0) else {
+        guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle.pointer, 0) else {
             // No error, there might be no more messages
             return nil
         }
@@ -460,7 +470,7 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func subscribe(topicPartitionList: RDKafkaTopicPartitionList) throws {
         try topicPartitionList.withListPointer { pointer in
-            let result = rd_kafka_subscribe(self.kafkaHandle, pointer)
+            let result = rd_kafka_subscribe(self.kafkaHandle.pointer, pointer)
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)
             }
@@ -471,7 +481,7 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func assign(topicPartitionList: RDKafkaTopicPartitionList) throws {
         try topicPartitionList.withListPointer { pointer in
-            let result = rd_kafka_assign(self.kafkaHandle, pointer)
+            let result = rd_kafka_assign(self.kafkaHandle.pointer, pointer)
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)
             }
@@ -507,10 +517,10 @@ public final class RDKafkaClient: Sendable {
         )
 
         let error = changesList.withListPointer { listPointer in
-            return rd_kafka_commit(
-                self.kafkaHandle,
+            rd_kafka_commit(
+                self.kafkaHandle.pointer,
                 listPointer,
-                1 // async = true
+                1  // async = true
             )
         }
 
@@ -551,9 +561,9 @@ public final class RDKafkaClient: Sendable {
 
             changesList.withListPointer { listPointer in
                 rd_kafka_commit_queue(
-                    self.kafkaHandle,
+                    self.kafkaHandle.pointer,
                     listPointer,
-                    self.queue,
+                    self.queueHandle.pointer,
                     nil,
                     opaquePointer
                 )
@@ -572,7 +582,7 @@ public final class RDKafkaClient: Sendable {
         let queue = DispatchQueue(label: "com.swift-server.swift-kafka.flush")
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async {
-                let error = rd_kafka_flush(self.kafkaHandle, timeoutMilliseconds)
+                let error = rd_kafka_flush(self.kafkaHandle.pointer, timeoutMilliseconds)
                 if error != RD_KAFKA_RESP_ERR_NO_ERROR {
                     continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
                 } else {
@@ -587,7 +597,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// Make sure to run poll loop until ``RDKafkaClient/consumerIsClosed`` returns `true`.
     func consumerClose() throws {
-        let result = rd_kafka_consumer_close_queue(self.kafkaHandle, self.queue)
+        let result = rd_kafka_consumer_close_queue(self.kafkaHandle.pointer, self.queueHandle.pointer)
         let kafkaError = rd_kafka_error_code(result)
         if kafkaError != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: kafkaError)
@@ -596,7 +606,7 @@ public final class RDKafkaClient: Sendable {
 
     /// Returns `true` if the underlying `librdkafka` consumer is closed.
     var isConsumerClosed: Bool {
-        rd_kafka_consumer_closed(self.kafkaHandle) == 1
+        rd_kafka_consumer_closed(self.kafkaHandle.pointer) == 1
     }
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
@@ -604,6 +614,6 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter body: The closure will use the Kafka handle pointer.
     @discardableResult
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
-        return try body(self.kafkaHandle)
+        try body(self.kafkaHandle.pointer)
     }
 }

@@ -66,7 +66,7 @@ internal struct MockLogHandler: LogHandler {
     var logLevel: Logger.Level {
         get {
             // get from config unless set
-            return self._logLevel ?? .debug
+            self._logLevel ?? .debug
         }
         set {
             self._logLevel = newValue
@@ -82,7 +82,7 @@ internal struct MockLogHandler: LogHandler {
 
     public var metadata: Logger.Metadata {
         get {
-            return self._metadata
+            self._metadata
         }
         set {
             self._metadata = newValue
@@ -91,7 +91,7 @@ internal struct MockLogHandler: LogHandler {
 
     subscript(metadataKey metadataKey: Logger.Metadata.Key) -> Logger.Metadata.Value? {
         get {
-            return self._metadata[metadataKey]
+            self._metadata[metadataKey]
         }
         set {
             self._metadata[metadataKey] = newValue

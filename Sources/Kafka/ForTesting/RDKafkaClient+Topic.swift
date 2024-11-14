@@ -13,8 +13,9 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import struct Foundation.UUID
 import Logging
+
+import struct Foundation.UUID
 
 @_spi(Internal)
 extension RDKafkaClient {
@@ -30,13 +31,15 @@ extension RDKafkaClient {
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
 
-        guard let newTopic = rd_kafka_NewTopic_new(
-            uniqueTopicName,
-            partitions,
-            -1, // use default replication_factor
-            errorChars,
-            RDKafkaClient.stringSize
-        ) else {
+        guard
+            let newTopic = rd_kafka_NewTopic_new(
+                uniqueTopicName,
+                partitions,
+                -1,  // use default replication_factor
+                errorChars,
+                RDKafkaClient.stringSize
+            )
+        else {
             let errorString = String(cString: errorChars)
             throw KafkaError.topicCreation(reason: errorString)
         }
@@ -66,7 +69,9 @@ extension RDKafkaClient {
             }
 
             guard let topicsResultEvent = rd_kafka_event_CreateTopics_result(resultEvent) else {
-                throw KafkaError.topicCreation(reason: "Received event that is not of type rd_kafka_CreateTopics_result_t")
+                throw KafkaError.topicCreation(
+                    reason: "Received event that is not of type rd_kafka_CreateTopics_result_t"
+                )
             }
 
             var resultTopicCount = 0
@@ -126,7 +131,9 @@ extension RDKafkaClient {
             }
 
             guard let topicsResultEvent = rd_kafka_event_DeleteTopics_result(resultEvent) else {
-                throw KafkaError.topicDeletion(reason: "Received event that is not of type rd_kafka_DeleteTopics_result_t")
+                throw KafkaError.topicDeletion(
+                    reason: "Received event that is not of type rd_kafka_DeleteTopics_result_t"
+                )
             }
 
             var resultTopicCount = 0
@@ -152,6 +159,6 @@ extension RDKafkaClient {
     }
 
     public static func makeClientForTopics(config: KafkaConsumerConfiguration, logger: Logger) throws -> RDKafkaClient {
-        return try Self.makeClient(type: .consumer, configDictionary: config.dictionary, events: [], logger: logger)
+        try Self.makeClient(type: .consumer, configDictionary: config.dictionary, events: [], logger: logger)
     }
 }

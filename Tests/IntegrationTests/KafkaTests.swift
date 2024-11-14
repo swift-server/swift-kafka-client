@@ -13,12 +13,14 @@
 //===----------------------------------------------------------------------===//
 
 import Atomics
-import struct Foundation.UUID
-@testable import Kafka
 @_spi(Internal) import Kafka
 import NIOCore
 import ServiceLifecycle
 import XCTest
+
+import struct Foundation.UUID
+
+@testable import Kafka
 
 // For testing locally on Mac, do the following:
 //
@@ -90,15 +92,18 @@ final class KafkaTests: XCTestCase {
         self.uniqueTestTopic = nil
     }
 
-    func testProduceAndConsumeWithConsumerGroup() async throws {
+    func testProduceAndConsumeWithConsumerGrouptestProduceAndConsumeWithConsumerGroup() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "subscription-test-group-id", topics: [self.uniqueTestTopic]),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
-        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -154,7 +159,10 @@ final class KafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithAssignedTopicPartition() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .partition(
@@ -164,7 +172,7 @@ final class KafkaTests: XCTestCase {
             ),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
-        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -220,14 +228,17 @@ final class KafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithScheduleCommit() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         consumerConfig.isAutoCommitEnabled = false
-        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -278,14 +289,17 @@ final class KafkaTests: XCTestCase {
 
     func testProduceAndConsumeWithCommit() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         consumerConfig.isAutoCommitEnabled = false
-        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -344,14 +358,17 @@ final class KafkaTests: XCTestCase {
             count: 10
         )
 
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
 
         var consumerConfig = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: "commit-sync-test-group-id", topics: [self.uniqueTestTopic]),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         consumerConfig.isAutoCommitEnabled = false
-        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
         consumerConfig.broker.addressFamily = .v4
 
         let consumer = try KafkaConsumer(
@@ -409,7 +426,10 @@ final class KafkaTests: XCTestCase {
 
     func testNoNewConsumerMessagesAfterGracefulShutdown() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 2)
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
 
         let uniqueGroupID = UUID().uuidString
 
@@ -420,7 +440,7 @@ final class KafkaTests: XCTestCase {
             ),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
-        consumerConfig.autoOffsetReset = .beginning // Read topic from beginning
+        consumerConfig.autoOffsetReset = .beginning  // Read topic from beginning
 
         let consumer = try KafkaConsumer(
             configuration: consumerConfig,
@@ -473,7 +493,10 @@ final class KafkaTests: XCTestCase {
     func testCommittedOffsetsAreCorrect() async throws {
         let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
         let firstConsumerOffset = testMessages.count / 2
-        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
 
         // Important: both consumer must have the same group.id
         let uniqueGroupID = UUID().uuidString
@@ -487,7 +510,7 @@ final class KafkaTests: XCTestCase {
             ),
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
-        consumer1Config.autoOffsetReset = .beginning // Read topic from beginning
+        consumer1Config.autoOffsetReset = .beginning  // Read topic from beginning
         consumer1Config.broker.addressFamily = .v4
 
         let consumer1 = try KafkaConsumer(
@@ -591,8 +614,14 @@ final class KafkaTests: XCTestCase {
 
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[firstConsumerOffset + index].topic, consumedMessage.topic)
-                    XCTAssertEqual(ByteBuffer(string: testMessages[firstConsumerOffset + index].key!), consumedMessage.key)
-                    XCTAssertEqual(ByteBuffer(string: testMessages[firstConsumerOffset + index].value), consumedMessage.value)
+                    XCTAssertEqual(
+                        ByteBuffer(string: testMessages[firstConsumerOffset + index].key!),
+                        consumedMessage.key
+                    )
+                    XCTAssertEqual(
+                        ByteBuffer(string: testMessages[firstConsumerOffset + index].value),
+                        consumedMessage.value
+                    )
                 }
             }
 
@@ -626,9 +655,16 @@ final class KafkaTests: XCTestCase {
 
         let numOfMessages: UInt = 1000
         let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: numOfMessages)
-        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: .kafkaTest)
+        let (producer, acks) = try KafkaProducer.makeProducerWithEvents(
+            configuration: producerConfig,
+            logger: .kafkaTest
+        )
 
-        let producerServiceGroupConfiguration = ServiceGroupConfiguration(services: [producer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
+        let producerServiceGroupConfiguration = ServiceGroupConfiguration(
+            services: [producer],
+            gracefulShutdownSignals: [.sigterm, .sigint],
+            logger: .kafkaTest
+        )
         let producerServiceGroup = ServiceGroup(configuration: producerServiceGroupConfiguration)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
@@ -691,10 +727,18 @@ final class KafkaTests: XCTestCase {
             logger: .kafkaTest
         )
 
-        let serviceGroupConfiguration1 = ServiceGroupConfiguration(services: [consumer1], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
+        let serviceGroupConfiguration1 = ServiceGroupConfiguration(
+            services: [consumer1],
+            gracefulShutdownSignals: [.sigterm, .sigint],
+            logger: .kafkaTest
+        )
         let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
 
-        let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer2], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
+        let serviceGroupConfiguration2 = ServiceGroupConfiguration(
+            services: [consumer2],
+            gracefulShutdownSignals: [.sigterm, .sigint],
+            logger: .kafkaTest
+        )
         let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
 
         let sharedCtr = ManagedAtomic(0)
@@ -706,7 +750,7 @@ final class KafkaTests: XCTestCase {
             }
             // Run Task for 2nd consumer
             group.addTask {
-                try await Task.sleep(for: .seconds(20)) // wait a bit that first consumer would form a queue
+                try await Task.sleep(for: .seconds(20))  // wait a bit that first consumer would form a queue
                 try await serviceGroup2.run()
             }
 
@@ -716,8 +760,8 @@ final class KafkaTests: XCTestCase {
                 for try await record in consumer1.messages {
                     sharedCtr.wrappingIncrement(ordering: .relaxed)
 
-                    try consumer1.scheduleCommit(record) // commit time to time
-                    try await Task.sleep(for: .milliseconds(100)) // don't read all messages before 2nd consumer
+                    try consumer1.scheduleCommit(record)  // commit time to time
+                    try await Task.sleep(for: .milliseconds(100))  // don't read all messages before 2nd consumer
                 }
             }
 
@@ -727,7 +771,7 @@ final class KafkaTests: XCTestCase {
                 for try await record in consumer2.messages {
                     sharedCtr.wrappingIncrement(ordering: .relaxed)
 
-                    try consumer2.scheduleCommit(record) // commit time to time
+                    try consumer2.scheduleCommit(record)  // commit time to time
                 }
             }
 
@@ -736,10 +780,10 @@ final class KafkaTests: XCTestCase {
                 while true {
                     let currentCtr = sharedCtr.load(ordering: .relaxed)
                     guard currentCtr >= numOfMessages else {
-                        try await Task.sleep(for: .seconds(5)) // wait if new messages come here
+                        try await Task.sleep(for: .seconds(5))  // wait if new messages come here
                         continue
                     }
-                    try await Task.sleep(for: .seconds(5)) // wait for extra messages
+                    try await Task.sleep(for: .seconds(5))  // wait for extra messages
                     await serviceGroup1.triggerGracefulShutdown()
                     await serviceGroup2.triggerGracefulShutdown()
                     break
@@ -763,7 +807,7 @@ final class KafkaTests: XCTestCase {
         headers: [KafkaHeader] = [],
         count: UInt
     ) -> [KafkaProducerMessage<String, String>] {
-        return _createTestMessages(topic: topic, headers: headers, count: count)
+        _createTestMessages(topic: topic, headers: headers, count: count)
     }
 
     private static func sendAndAcknowledgeMessages(
@@ -772,6 +816,11 @@ final class KafkaTests: XCTestCase {
         messages: [KafkaProducerMessage<String, String>],
         skipConsistencyCheck: Bool = false
     ) async throws {
-        return try await _sendAndAcknowledgeMessages(producer: producer, events: events, messages: messages, skipConsistencyCheck: skipConsistencyCheck)
+        try await _sendAndAcknowledgeMessages(
+            producer: producer,
+            events: events,
+            messages: messages,
+            skipConsistencyCheck: skipConsistencyCheck
+        )
     }
 }
