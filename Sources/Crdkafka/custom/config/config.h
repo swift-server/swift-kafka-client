@@ -35,7 +35,6 @@
 #define ENABLE_ZSTD 1
 #define ENABLE_SSL 1
 #define ENABLE_GSSAPI 1
-#define ENABLE_CURL 1
 #define ENABLE_LZ4_EXT 1
 #define WITH_STATIC_LINKING 1
 #define MKL_APP_NAME "librdkafka"
