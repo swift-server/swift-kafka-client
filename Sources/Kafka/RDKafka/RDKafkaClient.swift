@@ -617,7 +617,7 @@ public final class RDKafkaClient: Sendable {
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
         try body(self.kafkaHandle.pointer)
     }
-    
+
     /// Extract ``KafkaHeader``s from a `rd_kafka_message_t` pointer.
     ///
     /// - Parameters:
