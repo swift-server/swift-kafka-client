@@ -15,7 +15,7 @@
 #if swift(>=6.0)
 import Dispatch
 
-final class NaiveQueueExecutor: TaskExecutor {
+final class DispatchQueueTaskExecutor: TaskExecutor {
     let queue: DispatchQueue
 
     init(_ queue: DispatchQueue) {
