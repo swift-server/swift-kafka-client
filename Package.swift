@@ -24,6 +24,12 @@ let rdkafkaExclude = [
     "./librdkafka/src/rdkafka_sasl_win32.c",
     "./librdkafka/src/rdwin32.h",
     "./librdkafka/src/win32_config.h",
+    // Remove dependency on cURL. Disabling `ENABLE_CURL` and `WITH_CURL` does
+    // not appear to prevent processing of the below files, so we have to exclude
+    // them explicitly.
+    "./librdkafka/src/rdkafka_sasl_oauthbearer.c",
+    "./librdkafka/src/rdkafka_sasl_oauthbearer_oidc.c",
+    "./librdkafka/src/rdhttp.c",
 ]
 
 let package = Package(
