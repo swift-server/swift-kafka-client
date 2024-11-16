@@ -135,7 +135,7 @@
 // libzstd
 #define WITH_ZSTD 1
 // libcurl
-#define WITH_CURL 1
+#define WITH_CURL 0
 // WITH_HDRHISTOGRAM
 #define WITH_HDRHISTOGRAM 1
 // WITH_SNAPPY
