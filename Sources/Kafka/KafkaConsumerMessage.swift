@@ -66,7 +66,7 @@ public struct KafkaConsumerMessage {
 
         self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
 
-        self.headers = try Self.getHeaders(for: messagePointer)
+        self.headers = try RDKafkaClient.getHeaders(for: messagePointer)
 
         if let keyPointer = rdKafkaMessage.key {
             let keyBufferPointer = UnsafeRawBufferPointer(
@@ -91,82 +91,3 @@ extension KafkaConsumerMessage: Hashable {}
 // MARK: - KafkaConsumerMessage + Sendable
 
 extension KafkaConsumerMessage: Sendable {}
-
-// MARK: - Helpers
-
-extension KafkaConsumerMessage {
-    /// Extract ``KafkaHeader``s from a `rd_kafka_message_t` pointer.
-    ///
-    /// - Parameters:
-    ///    - for: Pointer to the `rd_kafka_message_t` object to extract the headers from.
-    private static func getHeaders(
-        for messagePointer: UnsafePointer<rd_kafka_message_t>
-    ) throws -> [KafkaHeader] {
-        var result: [KafkaHeader] = []
-        var headers: OpaquePointer?
-
-        var readStatus = rd_kafka_message_headers(messagePointer, &headers)
-
-        if readStatus == RD_KAFKA_RESP_ERR__NOENT {
-            // No Header Entries
-            return result
-        }
-
-        guard readStatus == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(wrapping: readStatus)
-        }
-
-        guard let headers else {
-            return result
-        }
-
-        let headerCount = rd_kafka_header_cnt(headers)
-        result.reserveCapacity(headerCount)
-
-        var headerIndex = 0
-
-        while readStatus != RD_KAFKA_RESP_ERR__NOENT && headerIndex < headerCount {
-            var headerKeyPointer: UnsafePointer<CChar>?
-            var headerValuePointer: UnsafeRawPointer?
-            var headerValueSize = 0
-
-            readStatus = rd_kafka_header_get_all(
-                headers,
-                headerIndex,
-                &headerKeyPointer,
-                &headerValuePointer,
-                &headerValueSize
-            )
-
-            if readStatus == RD_KAFKA_RESP_ERR__NOENT {
-                // No Header Entries
-                return result
-            }
-
-            guard readStatus == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                throw KafkaError.rdKafkaError(wrapping: readStatus)
-            }
-
-            guard let headerKeyPointer else {
-                fatalError("Found null pointer when reading KafkaConsumerMessage header key")
-            }
-            let headerKey = String(cString: headerKeyPointer)
-
-            var headerValue: ByteBuffer?
-            if let headerValuePointer, headerValueSize > 0 {
-                let headerValueBufferPointer = UnsafeRawBufferPointer(
-                    start: headerValuePointer,
-                    count: headerValueSize
-                )
-                headerValue = ByteBuffer(bytes: headerValueBufferPointer)
-            }
-
-            let newHeader = KafkaHeader(key: headerKey, value: headerValue)
-            result.append(newHeader)
-
-            headerIndex += 1
-        }
-
-        return result
-    }
-}

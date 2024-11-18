@@ -23,7 +23,7 @@
 #define ENABLE_ZSTD 1
 #define ENABLE_SSL 1
 #define ENABLE_GSSAPI 1
-#define ENABLE_CURL 1
+#define ENABLE_CURL 0
 #define ENABLE_DEVEL 0
 #define ENABLE_VALGRIND 0
 #define ENABLE_REFCNT_DEBUG 0
@@ -35,7 +35,6 @@
 #define ENABLE_ZSTD 1
 #define ENABLE_SSL 1
 #define ENABLE_GSSAPI 1
-#define ENABLE_CURL 1
 #define ENABLE_LZ4_EXT 1
 #define WITH_STATIC_LINKING 1
 #define MKL_APP_NAME "librdkafka"
@@ -136,7 +135,7 @@
 // libzstd
 #define WITH_ZSTD 1
 // libcurl
-#define WITH_CURL 1
+#define WITH_CURL 0
 // WITH_HDRHISTOGRAM
 #define WITH_HDRHISTOGRAM 1
 // WITH_SNAPPY
@@ -146,9 +145,9 @@
 // WITH_SASL_SCRAM
 #define WITH_SASL_SCRAM 1
 // WITH_SASL_OAUTHBEARER
-#define WITH_SASL_OAUTHBEARER 1
+#define WITH_SASL_OAUTHBEARER 0
 // WITH_OAUTHBEARER_OIDC
-#define WITH_OAUTHBEARER_OIDC 1
+#define WITH_OAUTHBEARER_OIDC 0
 // regex
 #define HAVE_REGEX 1
 // strndup
