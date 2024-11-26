@@ -24,7 +24,7 @@ import struct Foundation.UUID
 
 let benchmarks = {
     var uniqueTestTopic: String!
-    let numberOfPartitions: UInt = 4
+    let numberOfPartitions: Int32 = 4
     // We perform every benchmark this many times
     let numberOfBatches: UInt = 1000
     // In every benchmark iteration, we consume this many messages
