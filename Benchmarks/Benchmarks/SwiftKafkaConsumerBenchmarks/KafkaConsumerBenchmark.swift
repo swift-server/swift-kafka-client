@@ -56,7 +56,10 @@ let benchmarks = {
     )
 
     Benchmark.setup = {
-        uniqueTestTopic = try await prepareTopic(messagesCount: messageCountPerBatch * numberOfBatches, partitions: numberOfPartitions)
+        uniqueTestTopic = try await prepareTopic(
+            messagesCount: messageCountPerBatch * numberOfBatches,
+            partitions: numberOfPartitions
+        )
     }
 
     Benchmark.teardown = {
