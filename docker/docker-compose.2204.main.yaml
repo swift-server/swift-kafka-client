@@ -1,7 +1,5 @@
-version: "3"
-
+name: swift-kafka-client-22.04-main
 services:
-
   runtime-setup:
     image: swift-kafka-client:22.04-main
     build:

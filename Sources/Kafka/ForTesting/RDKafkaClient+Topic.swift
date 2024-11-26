@@ -59,7 +59,7 @@ extension RDKafkaClient {
             )
 
             guard let resultEvent = rd_kafka_queue_poll(resultQueue, timeout) else {
-                throw KafkaError.topicCreation(reason: "No CreateTopics result after 10s timeout")
+                throw KafkaError.topicCreation(reason: "No CreateTopics result after \(timeout)ms timeout")
             }
             defer { rd_kafka_event_destroy(resultEvent) }
 
