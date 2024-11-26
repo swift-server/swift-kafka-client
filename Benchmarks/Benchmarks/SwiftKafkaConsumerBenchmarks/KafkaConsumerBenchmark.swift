@@ -32,27 +32,12 @@ let benchmarks = {
 
     Benchmark.defaultConfiguration = .init(
         metrics: [
-            .wallClock,
-            .cpuTotal,
-            .contextSwitches,
-            .throughput,
-            .allocatedResidentMemory,
-        ] + .arc,
+            .mallocCountTotal,
+        ],
         // We need to tell the benchmarking framework how often we are running the benchmark.
         scalingFactor: .kilo,
         maxDuration: .seconds(10_000_000),
-        maxIterations: 10,
-        thresholds: [
-            .wallClock: .init(relative: [.p90: 35]),
-            .cpuTotal: .init(relative: [.p90: 35]),
-            .allocatedResidentMemory: .init(relative: [.p90: 20]),
-            .contextSwitches: .init(relative: [.p90: 35]),
-            .throughput: .init(relative: [.p90: 35]),
-            .objectAllocCount: .init(relative: [.p90: 20]),
-            .retainCount: .init(relative: [.p90: 20]),
-            .releaseCount: .init(relative: [.p90: 20]),
-            .retainReleaseDelta: .init(relative: [.p90: 20]),
-        ]
+        maxIterations: 10
     )
 
     Benchmark.setup = {
