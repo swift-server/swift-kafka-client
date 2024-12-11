@@ -16,6 +16,7 @@ import Atomics
 @_spi(Internal) import Kafka
 import NIOCore
 import ServiceLifecycle
+import UnixSignals
 import XCTest
 
 import struct Foundation.UUID
