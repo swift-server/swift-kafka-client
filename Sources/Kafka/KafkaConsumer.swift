@@ -140,7 +140,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumer
 
-/// A ``KafkaConsumer `` can be used to consume messages from a Kafka cluster.
+/// A ``KafkaConsumer`` can be used to consume messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     /// The configuration object of the consumer client.
     private let configuration: KafkaConsumerConfiguration
