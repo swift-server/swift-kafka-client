@@ -1,16 +1,16 @@
-name: swift-kafka-client-22.04-5.10
+name: swift-kafka-client-22.04-6.0
 services:
   runtime-setup:
-    image: swift-kafka-client:22.04-5.10
+    image: swift-kafka-client:22.04-6.0
     build:
       args:
-        base_image: "swift:5.10-jammy"
+        base_image: "swift:6.0-jammy"
 
   build:
-    image: swift-kafka-client:22.04-5.10
+    image: swift-kafka-client:22.04-6.0
 
   test:
-    image: swift-kafka-client:22.04-5.10
+    image: swift-kafka-client:22.04-6.0
     environment:
       - WARN_AS_ERROR_ARG=-Xswiftc -warnings-as-errors
       - IMPORT_CHECK_ARG=--explicit-target-dependency-import-check error
@@ -18,9 +18,9 @@ services:
       # - SANITIZER_ARG=--sanitize=thread # TSan broken still
 
   update-benchmark-baseline:
-    image: swift-kafka-client:22.04-5.10
+    image: swift-kafka-client:22.04-6.0
     environment:
-      - SWIFT_VERSION=5.10
+      - SWIFT_VERSION=6.0
 
   shell:
-    image: swift-kafka-client:22.04-5.10
+    image: swift-kafka-client:22.04-6.0
