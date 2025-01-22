@@ -72,7 +72,7 @@ public struct KafkaProducerConfiguration {
         public var messageLimit: MessageLimit = .maximumLimit(100_000)
 
         /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions.
-        /// This property has higher priority than ``KafkaConfiguration/QueueOptions/messageLimit``.
+        /// This property has higher priority than ``KafkaProducerConfiguration/QueueConfiguration/MessageLimit-swift.struct``.
         /// Default: `1_048_576 * 1024`
         public var maximumMessageBytes: Int = 1_048_576 * 1024
 

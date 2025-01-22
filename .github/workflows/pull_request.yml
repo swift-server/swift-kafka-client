@@ -9,9 +9,8 @@ jobs:
     name: Soundness
     uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
     with:
+      linux_pre_build_command: "apt-get update -y -q && apt-get install -y -q libsasl2-dev"
       license_header_check_project_name: "swift-kafka-client"
-      api_breakage_check_enabled: false  # requires libsasl2-dev
-      docs_check_enabled: false  # requires libsasl2-dev
 
   unit-tests:
     name: Unit tests
@@ -20,7 +19,7 @@ jobs:
       linux_5_9_arguments_override: "--explicit-target-dependency-import-check error"
       linux_5_10_arguments_override: "--explicit-target-dependency-import-check error"
       linux_6_0_arguments_override: "--explicit-target-dependency-import-check error"
-      linux_nightly_6_0_arguments_override: "--explicit-target-dependency-import-check error"
+      linux_nightly_6_1_arguments_override: "--explicit-target-dependency-import-check error"
       linux_nightly_main_arguments_override: "--explicit-target-dependency-import-check error"
 
   cxx-interop:
@@ -32,8 +31,5 @@ jobs:
       matrix_linux_5_9_enabled: true
       matrix_linux_5_10_enabled: true
       matrix_linux_6_0_enabled: true
-      matrix_linux_nightly_6_0_enabled: true
+      matrix_linux_nightly_6_1_enabled: true
       matrix_linux_nightly_main_enabled: true
-      matrix_windows_6_0_enabled: false
-      matrix_windows_nightly_6_0_enabled: false
-      matrix_windows_nightly_main_enabled: false

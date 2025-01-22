@@ -108,7 +108,6 @@ public final class KafkaProducer: Service, Sendable {
     /// - Parameters:
     ///     - configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
     ///     - logger: A logger.
-    /// - Returns: The newly created ``KafkaProducer``.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public convenience init(
         configuration: KafkaProducerConfiguration,
