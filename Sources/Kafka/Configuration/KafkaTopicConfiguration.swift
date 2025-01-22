@@ -98,7 +98,7 @@ public struct KafkaTopicConfiguration {
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
     }
 
-    /// Partitioner. See ``KafkaConfiguration/Partitioner`` for more information.
+    /// Partitioner. See ``KafkaTopicConfiguration/Partitioner-swift.struct`` for more information.
     /// Default: `.consistentRandom`
     public var partitioner: Partitioner = .consistentRandom
 

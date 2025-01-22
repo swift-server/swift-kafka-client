@@ -56,7 +56,7 @@ public struct KafkaConsumerConfiguration {
         /// The consumer joins a consumer group identified by a group ID and consumes from multiple topics.
         ///
         /// - Parameters:
-        ///     - id: The ID of the consumer group to join.
+        ///     - groupID: The ID of the consumer group to join.
         ///     - topics: An array of topic names to consume from.
         public static func group(id groupID: String, topics: [String]) -> ConsumptionStrategy {
             .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
@@ -64,7 +64,7 @@ public struct KafkaConsumerConfiguration {
     }
 
     /// The strategy used for consuming messages.
-    /// See ``KafkaConsumerConfiguration/ConsumptionStrategy-swift.struct-swift.struct`` for more information.
+    /// See ``KafkaConsumerConfiguration/ConsumptionStrategy-swift.struct`` for more information.
     public var consumptionStrategy: ConsumptionStrategy
 
     // MARK: - Consumer-specific Config Properties
@@ -144,7 +144,7 @@ public struct KafkaConsumerConfiguration {
         public static let error = AutoOffsetReset(description: "error")
     }
 
-    /// Action to take when there is no initial offset in the offset store or the desired offset is out of range. See ``KafkaConfiguration/AutoOffsetReset`` for more information.
+    /// Action to take when there is no initial offset in the offset store or the desired offset is out of range. See ``KafkaConsumerConfiguration/AutoOffsetReset-swift.struct`` for more information.
     /// Default: `.largest`
     public var autoOffsetReset: AutoOffsetReset = .largest
 

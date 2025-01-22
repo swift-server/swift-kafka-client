@@ -134,7 +134,7 @@ extension KafkaConfiguration {
             ///
             /// - Parameters:
             ///     - privateKey: The client's private key (PEM) used for authentication.
-            ///     - certificate: The client's public key (PEM) used for authentication.
+            ///     - certificates: The client's public key (PEM) used for authentication and potentially multiple intermediate certificates.
             public static func keyPair(
                 privateKey: PrivateKey,
                 certificates: LeafAndIntermediates

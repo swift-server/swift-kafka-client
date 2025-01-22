@@ -140,7 +140,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumer
 
-/// A ``KafkaConsumer `` can be used to consume messages from a Kafka cluster.
+/// Can be used to consume messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     /// The configuration object of the consumer client.
     private let configuration: KafkaConsumerConfiguration
@@ -192,7 +192,6 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - configuration: The ``KafkaConsumerConfiguration`` for configuring the ``KafkaConsumer``.
     ///     - logger: A logger.
-    /// - Returns: The newly created ``KafkaConsumer``.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public convenience init(
         configuration: KafkaConsumerConfiguration,
