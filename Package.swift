@@ -99,12 +99,12 @@ let package = Package(
             ]
         ),
         .systemLibrary(
-             name: "COpenSSL",
-             pkgConfig: "openssl",
-             providers: [
-                 .brew(["libressl"]),
-                 .apt(["libssl-dev"]),
-             ]
+            name: "COpenSSL",
+            pkgConfig: "openssl",
+            providers: [
+                .brew(["libressl"]),
+                .apt(["libssl-dev"]),
+            ]
          ),
         .testTarget(
             name: "KafkaTests",
@@ -127,7 +127,7 @@ for target in package.targets {
         settings.append(.enableExperimentalFeature("StrictConcurrency=complete"))
         target.swiftSettings = settings
     case .macro, .plugin, .system, .binary:
-        break // These targets do not support settings
+        break  // These targets do not support settings
     @unknown default:
         fatalError("Update to handle new target type \(target.type)")
     }
