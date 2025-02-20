@@ -90,7 +90,7 @@ jobs:
           COMMAND_OVERRIDE_NIGHTLY_6_1: "swift test ${{ inputs.linux_nightly_6_1_arguments_override }}"
           COMMAND_OVERRIDE_NIGHTLY_MAIN: "swift test ${{ inputs.linux_nightly_main_arguments_override }}"
         run: |
-          apt-get -qq update && apt-get -qq -y install curl && apt-get -y install libsasl2-dev
+          apt-get -qq update && apt-get -qq -y install curl && apt-get -y install libsasl2-dev libssl-dev
           curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/check-matrix-job.sh | bash
     container:
       image: ${{ matrix.swift.image }}

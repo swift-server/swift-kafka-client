@@ -237,8 +237,12 @@ config.securityProtocol = .saslTLS(
 
 ## librdkafka
 
-The Package depends on [the librdkafka library](https://github.com/confluentinc/librdkafka), which is included as a git submodule.
+The Package depends on [the `librdkafka` library](https://github.com/confluentinc/librdkafka), which is included as a git submodule.
 It has source files that are excluded in `Package.swift`.
+
+### Dependencies
+
+`librdkafka` depends on `openssl`, meaning that `libssl-dev` must be present at build time.
 
 ## Development Setup
 
