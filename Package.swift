@@ -105,7 +105,7 @@ let package = Package(
                 .brew(["libressl"]),
                 .apt(["libssl-dev"]),
             ]
-         ),
+        ),
         .testTarget(
             name: "KafkaTests",
             dependencies: [
