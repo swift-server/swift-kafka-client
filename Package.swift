@@ -18,11 +18,13 @@ import PackageDescription
 let rdkafkaExclude = [
     "./librdkafka/src/CMakeLists.txt",
     "./librdkafka/src/Makefile",
+    "./librdkafka/src/README.lz4.md",
     "./librdkafka/src/generate_proto.sh",
     "./librdkafka/src/librdkafka_cgrp_synch.png",
-    "./librdkafka/src/statistics_schema.json",
+    "./librdkafka/src/opentelemetry/metrics.options",
     "./librdkafka/src/rdkafka_sasl_win32.c",
     "./librdkafka/src/rdwin32.h",
+    "./librdkafka/src/statistics_schema.json",
     "./librdkafka/src/win32_config.h",
     // Remove dependency on cURL. Disabling `ENABLE_CURL` and `WITH_CURL` does
     // not appear to prevent processing of the below files, so we have to exclude
@@ -52,7 +54,6 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.55.0"),
-        .package(url: "https://github.com/apple/swift-nio-ssl", from: "2.25.0"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.1.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-metrics", from: "2.4.1"),
@@ -64,7 +65,7 @@ let package = Package(
         .target(
             name: "Crdkafka",
             dependencies: [
-                .product(name: "NIOSSL", package: "swift-nio-ssl"),
+                "COpenSSL",
                 .product(name: "libzstd", package: "zstd"),
             ],
             exclude: rdkafkaExclude,
@@ -73,7 +74,6 @@ let package = Package(
             cSettings: [
                 // dummy folder, because config.h is included as "../config.h" in librdkafka
                 .headerSearchPath("./custom/config/dummy"),
-                .headerSearchPath("./custom/include"),
                 .headerSearchPath("./librdkafka/src"),
                 .define("_GNU_SOURCE", to: "1"),  // Fix build error for Swift 5.9 onwards
             ],
@@ -98,6 +98,14 @@ let package = Package(
                 "Kafka"
             ]
         ),
+        .systemLibrary(
+            name: "COpenSSL",
+            pkgConfig: "openssl",
+            providers: [
+                .brew(["libressl"]),
+                .apt(["libssl-dev"]),
+            ]
+        ),
         .testTarget(
             name: "KafkaTests",
             dependencies: [
@@ -113,14 +121,21 @@ let package = Package(
 )
 
 for target in package.targets {
-    var settings = target.swiftSettings ?? []
-    settings.append(.enableExperimentalFeature("StrictConcurrency=complete"))
-    target.swiftSettings = settings
+    switch target.type {
+    case .regular, .test, .executable:
+        var settings = target.swiftSettings ?? []
+        settings.append(.enableExperimentalFeature("StrictConcurrency=complete"))
+        target.swiftSettings = settings
+    case .macro, .plugin, .system, .binary:
+        break  // These targets do not support settings
+    @unknown default:
+        fatalError("Update to handle new target type \(target.type)")
+    }
 }
 
 // ---    STANDARD CROSS-REPO SETTINGS DO NOT EDIT   --- //
 for target in package.targets {
-    if target.type != .plugin {
+    if target.type != .plugin && target.type != .system {
         var settings = target.swiftSettings ?? []
         // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md
         settings.append(.enableUpcomingFeature("MemberImportVisibility"))

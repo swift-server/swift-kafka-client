@@ -9,7 +9,7 @@ jobs:
     name: Soundness
     uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
     with:
-      linux_pre_build_command: "apt-get update -y -q && apt-get install -y -q libsasl2-dev"
+      linux_pre_build_command: "apt-get update -y -q && apt-get install -y -q libsasl2-dev libssl-dev"
       license_header_check_project_name: "swift-kafka-client"
 
   unit-tests:
@@ -36,7 +36,7 @@ jobs:
         run: echo "cxx-interop-matrix=$(curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/generate_matrix.sh | bash)" >> "$GITHUB_OUTPUT"
         env:
           MATRIX_LINUX_COMMAND: "curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/check-cxx-interop-compatibility.sh | bash"
-          MATRIX_LINUX_SETUP_COMMAND: "apt-get update -y -q && apt-get install -y -q curl jq libsasl2-dev"
+          MATRIX_LINUX_SETUP_COMMAND: "apt-get update -y -q && apt-get install -y -q curl jq libsasl2-dev libssl-dev"
 
   cxx-interop:
     name: Cxx interop
