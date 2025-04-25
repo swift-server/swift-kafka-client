@@ -102,7 +102,7 @@ let package = Package(
             name: "COpenSSL",
             pkgConfig: "openssl",
             providers: [
-                .brew(["libressl"]),
+                .brew(["openssl@3"]),
                 .apt(["libssl-dev"]),
             ]
         ),

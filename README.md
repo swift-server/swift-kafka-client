@@ -243,6 +243,7 @@ It has source files that are excluded in `Package.swift`.
 ### Dependencies
 
 `librdkafka` depends on `openssl`, meaning that `libssl-dev` must be present at build time.
+`openssl@3` can be installed on macOS, among others, through `brew`.
 
 ## Development Setup
 
