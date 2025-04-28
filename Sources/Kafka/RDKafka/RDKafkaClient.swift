@@ -90,7 +90,7 @@ public final class RDKafkaClient: Sendable {
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
         // KafkaConsumer is manually storing read offsets
         if type == .consumer {
-            try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
+            //try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.auto.offset.store", value: "false")
             try RDKafkaConfig.set(configPointer: rdConfig, key: "enable.partition.eof", value: "true")
             if let rebalanceCallBackStorage {
                 let rebalanceCb = Unmanaged.passUnretained(rebalanceCallBackStorage)
