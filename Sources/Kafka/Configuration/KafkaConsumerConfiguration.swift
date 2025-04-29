@@ -162,6 +162,10 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.largest`
     public var autoOffsetReset: AutoOffsetReset = .largest
 
+    /// Automatically store offset of last message provided to application. The offset store is an in-memory store of the next offset to (auto-)commit for each partition.
+    /// Use rdkafka default value (true) if not set
+    public var enableAutoOffsetStore: Bool? = nil
+
     /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
     /// The broker must also be configured with ``KafkaConsumerConfiguration/isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
     /// Default: `false`
@@ -272,6 +276,9 @@ extension KafkaConsumerConfiguration {
         resultDict["max.poll.interval.ms"] = String(maximumPollInterval.inMilliseconds)
         resultDict["enable.auto.commit"] = String(isAutoCommitEnabled)
         resultDict["auto.offset.reset"] = autoOffsetReset.description
+        if let enableAutoOffsetStore {
+            resultDict["enable.auto.offset.store"] = enableAutoOffsetStore.description
+        }
         resultDict["allow.auto.create.topics"] = String(isAutoCreateTopicsEnabled)
 
         resultDict["client.id"] = identifier
