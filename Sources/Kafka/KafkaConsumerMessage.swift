@@ -22,7 +22,7 @@ public struct KafkaConsumerMessage {
         case buffer(ByteBuffer)
         case eof
     }
-    
+
     internal var _value: MessageContent
     
     /// The topic that the message was received from.
@@ -54,6 +54,13 @@ public struct KafkaConsumerMessage {
             return true
         }
     }
+
+    public enum Timestamp: Sendable, Hashable, Equatable {
+        case createTime(Int64)
+        case logAppendTime(Int64)
+    }
+
+    public var timestamp: Timestamp?
 
     /// Initialize ``KafkaConsumerMessage`` as EOF from `rd_kafka_topic_partition_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
@@ -112,6 +119,16 @@ public struct KafkaConsumerMessage {
             }
             
             self._value = .buffer(ByteBuffer(bytes: valueBufferPointer))
+
+            var timestampType = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE
+            let timestamp = rd_kafka_message_timestamp(messagePointer, &timestampType)
+            if timestamp != -1 {
+                if timestampType == RD_KAFKA_TIMESTAMP_CREATE_TIME {
+                    self.timestamp = .createTime(timestamp)
+                } else if timestampType == RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME {
+                    self.timestamp = .logAppendTime(timestamp)
+                }
+            }
         } else {
             self._value = .eof
             self.key = .init()
