@@ -14,6 +14,8 @@
 
 import Crdkafka
 import NIOCore
+import struct Foundation.Date
+import typealias Foundation.TimeInterval
 
 /// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage {
@@ -56,11 +58,12 @@ public struct KafkaConsumerMessage {
     }
 
     public enum Timestamp: Sendable, Hashable, Equatable {
-        case createTime(Int64)
-        case logAppendTime(Int64)
+        case createTime(Date)
+        case logAppendTime(Date)
     }
 
-    public var timestamp: Timestamp?
+    /// The timestamp of the Kafka message (see `rd_kafka_message_timestamp()`), if available.
+    public let timestamp: Timestamp?
 
     /// Initialize ``KafkaConsumerMessage`` as EOF from `rd_kafka_topic_partition_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
@@ -105,6 +108,8 @@ public struct KafkaConsumerMessage {
 
         self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
 
+        var timestamp: Timestamp? = nil
+
         if rdKafkaMessage.err != RD_KAFKA_RESP_ERR__PARTITION_EOF {
             self.headers = try Self.getHeaders(for: messagePointer)
             
@@ -117,16 +122,16 @@ public struct KafkaConsumerMessage {
             } else {
                 self.key = nil
             }
-            
+
             self._value = .buffer(ByteBuffer(bytes: valueBufferPointer))
 
             var timestampType = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE
-            let timestamp = rd_kafka_message_timestamp(messagePointer, &timestampType)
-            if timestamp != -1 {
+            let kafkaTimestamp = rd_kafka_message_timestamp(messagePointer, &timestampType)
+            if kafkaTimestamp != -1 {
                 if timestampType == RD_KAFKA_TIMESTAMP_CREATE_TIME {
-                    self.timestamp = .createTime(timestamp)
+                    timestamp = .createTime(.init(timeIntervalSince1970: TimeInterval(kafkaTimestamp)/1000.0))
                 } else if timestampType == RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME {
-                    self.timestamp = .logAppendTime(timestamp)
+                    timestamp = .logAppendTime(.init(timeIntervalSince1970: TimeInterval(kafkaTimestamp)/1000.0))
                 }
             }
         } else {
@@ -136,6 +141,7 @@ public struct KafkaConsumerMessage {
         }
 
         self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
+        self.timestamp = timestamp
     }
 }
 
