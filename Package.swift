@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version:5.10
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the swift-kafka-client open source project
@@ -102,7 +102,7 @@ let package = Package(
             name: "COpenSSL",
             pkgConfig: "openssl",
             providers: [
-                .brew(["libressl"]),
+                .brew(["openssl@3"]),
                 .apt(["libssl-dev"]),
             ]
         ),
