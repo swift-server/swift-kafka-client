@@ -191,7 +191,7 @@ public struct KafkaConsumerConfiguration {
     /// The maximum amount of time the server will block before answering the fetch request
     /// there isn’t sufficient data to immediately satisfy the requirement given by fetch.min.bytes.
     /// Default: `.milliseconds(500)`
-    public var maximumFetchWaitTime: Duration  = .milliseconds(500) {
+    public var maximumFetchWaitTime: Duration = .milliseconds(500) {
         didSet {
             if maximumFetchWaitTime != .zero {
                 precondition(
