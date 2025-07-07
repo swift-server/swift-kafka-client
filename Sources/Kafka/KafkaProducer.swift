@@ -341,7 +341,7 @@ public final class KafkaProducer: Service, Sendable {
             return KafkaProducerMessageID(rawValue: newMessageID)
         }
     }
-    
+
     @discardableResult
     public func flush(timeout: Duration) async -> Bool {
         do {

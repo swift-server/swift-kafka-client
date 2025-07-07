@@ -170,7 +170,7 @@ public struct KafkaProducerConfiguration {
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
-    
+
     public var compression: String?
 
     public init(

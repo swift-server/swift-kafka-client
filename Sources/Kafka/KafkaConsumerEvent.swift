@@ -14,15 +14,15 @@
 
 public struct KafkaTopicList {
     let list: RDKafkaTopicPartitionList
-    
+
     init(from: RDKafkaTopicPartitionList) {
         self.list = from
     }
-    
+
     public init(size: Int32 = 1) {
         self.list = RDKafkaTopicPartitionList(size: size)
     }
-    
+
     public func append(topic: TopicPartition) {
         self.list.setOffset(topic: topic.topic, partition: topic.partition, offset: topic.offset)
     }
@@ -32,7 +32,7 @@ public struct TopicPartition {
     public let topic: String
     public let partition: KafkaPartition
     public let offset: KafkaOffset
-    
+
     public init(_ topic: String, _ partition: KafkaPartition, _ offset: KafkaOffset) {
         self.topic = topic
         self.partition = partition
@@ -56,11 +56,11 @@ extension KafkaTopicList : Sequence {
     public struct TopicPartitionIterator : IteratorProtocol {
         private let list: RDKafkaTopicPartitionList
         private var idx = 0
-        
+
         init(list: RDKafkaTopicPartitionList) {
             self.list = list
         }
-        
+
         mutating public func next() -> TopicPartition? {
             guard let topic = list.getByIdx(idx: idx) else {
                 return nil
@@ -69,7 +69,7 @@ extension KafkaTopicList : Sequence {
             return topic
         }
     }
-    
+
     public func makeIterator() -> TopicPartitionIterator {
         TopicPartitionIterator(list: self.list)
     }
@@ -79,7 +79,7 @@ public enum KafkaRebalanceProtocol: Sendable, Hashable {
     case cooperative
     case eager
     case none
-    
+
     static func convert(from proto: String) -> KafkaRebalanceProtocol{
         switch proto {
         case "COOPERATIVE": return .cooperative
@@ -100,15 +100,20 @@ public enum RebalanceAction : Sendable, Hashable {
 public enum KafkaConsumerEvent: Sendable, Hashable {
     /// Rebalance from librdkafka
     case rebalance(RebalanceAction)
+
     /// Error from librdkafka
     case error(KafkaError)
+
+    /// Consumer health status.
+    case healthStatus(KafkaConsumerHealthStatus)
+
     /// - Important: Always provide a `default` case when switiching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 
     internal init(_ event: RDKafkaClient.KafkaEvent) {
         switch event {
-        case .statistics:
-            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
+        case .statistics(let statistics):
+            self = .healthStatus(statistics.consumerHealthStatus)
         case .rebalance(let action):
             self = .rebalance(action)
         case .error(let error):

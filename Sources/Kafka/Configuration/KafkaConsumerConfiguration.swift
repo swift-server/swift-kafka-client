@@ -21,9 +21,9 @@ public struct KafkaConsumerConfiguration {
     /// Effectively controls the rate at which incoming events and messages are consumed.
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
-    
+
     public var listenForRebalance: Bool = false
-    
+
     public var enablePartitionEof: Bool = false
 
     /// A struct representing the different Kafka message consumption strategies.
@@ -248,13 +248,15 @@ public struct KafkaConsumerConfiguration {
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
     public var isolationLevel: String?
-    
+
     public var groupInstanceId: String?
-    
+
     public var compression: String?
-    
+
     public var rebalanceStrategy: String?
-    
+
+    public var healthStatusInterval: Duration?
+
     public init(
         consumptionStrategy: ConsumptionStrategy,
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
@@ -323,26 +325,36 @@ extension KafkaConsumerConfiguration {
         resultDict["reconnect.backoff.ms"] = String(reconnect.backoff.rawValue)
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
         resultDict["queued.max.messages.kbytes"] = String(8 * 1024) // XX MB per partition // TODO: remove
-        
+
         if let isolationLevel {
             resultDict["isolation.level"] = isolationLevel
         }
-        
+
         if let groupInstanceId {
             resultDict["group.instance.id"] = groupInstanceId
         }
-        
+
         if let compression {
             resultDict["compression.codec"] = compression
         }
-        
+
         if let rebalanceStrategy {
             resultDict["partition.assignment.strategy"] = rebalanceStrategy
         }
 
-        if self.metrics.enabled,
-           let updateInterval = self.metrics.updateInterval {
-            resultDict["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
+        var statisticsInterval: Duration? {
+            if self.metrics.enabled,
+               let updateInterval = self.metrics.updateInterval {
+                if let healthStatusInterval {
+                    return min(updateInterval, healthStatusInterval)
+                }
+                return updateInterval
+            }
+            return healthStatusInterval
+        }
+
+        if let statisticsInterval {
+            resultDict["statistics.interval.ms"] = String(statisticsInterval.inMilliseconds)
         }
 
         // Merge with SecurityProtocol configuration dictionary

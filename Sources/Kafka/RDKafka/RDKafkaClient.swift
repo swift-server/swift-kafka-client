@@ -37,7 +37,7 @@ public final class RDKafkaClient: Sendable {
 
     /// `librdkafka`'s `rd_kafka_queue_t` that events are received on.
     private let queue: OpaquePointer
-    
+
     private let rebalanceCallBackStorage: RebalanceCallbackStorage?
 
     /// Queue for blocking calls outside of cooperative thread pool
@@ -70,12 +70,12 @@ public final class RDKafkaClient: Sendable {
     typealias RebalanceCallback = @Sendable (KafkaEvent) -> ()
     final class RebalanceCallbackStorage: Sendable {
         let rebalanceCallback: RebalanceCallback
-        
+
         init(rebalanceCallback: @escaping RebalanceCallback) {
             self.rebalanceCallback = rebalanceCallback
         }
     }
-    
+
     /// Factory method creating a new instance of a ``RDKafkaClient``.
     static func makeClient(
         type: ClientType,
@@ -353,10 +353,9 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
     func eventPoll(events: inout [KafkaEvent], maxEvents: Int = 100) -> Bool /* should sleep */ {
-//        var events = [KafkaEvent]()
         events.removeAll(keepingCapacity: true)
         events.reserveCapacity(maxEvents)
-        
+
         var shouldSleep = true
 
         for _ in 0..<maxEvents {
@@ -456,10 +455,9 @@ public final class RDKafkaClient: Sendable {
         guard let partitions = rd_kafka_event_topic_partition_list(event) else {
             fatalError("Must never happen") // TODO: remove
         }
-        
-        
+
         let code = rd_kafka_event_error(event)
-        
+
         let protoStringDef = String(cString: rd_kafka_rebalance_protocol(kafkaHandle))
         let rebalanceProtocol = KafkaRebalanceProtocol.convert(from: protoStringDef)
         let list = KafkaTopicList(from: .init(from: partitions))
@@ -479,8 +477,8 @@ public final class RDKafkaClient: Sendable {
         let jsonStr = String(cString: rd_kafka_event_stats(event))
         do {
             if let jsonData = jsonStr.data(using: .utf8) {
-                let json = try JSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
-                return .statistics(json)
+                let statistics = try JSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
+                return .statistics(statistics)
             }
         } catch {
             assertionFailure("Error occurred when decoding JSON statistics: \(error) when decoding \(jsonStr)")
@@ -536,7 +534,7 @@ public final class RDKafkaClient: Sendable {
         guard let opaquePointer = rd_kafka_event_opaque(event) else {
             fatalError("Could not resolve reference to catpured Swift callback instance")
         }
-        
+
         /*
          let opaquePointer = rd_kafka_event_opaque(event)
          guard let opaquePointer else {
@@ -595,7 +593,7 @@ public final class RDKafkaClient: Sendable {
             throw KafkaError.rdKafkaError(wrapping: code)
         }
     }
-    
+
     /// Atomic incremental unassignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func incrementalUnassign(topicPartitionList: RDKafkaTopicPartitionList) async throws {
@@ -609,7 +607,7 @@ public final class RDKafkaClient: Sendable {
             throw KafkaError.rdKafkaError(wrapping: code)
         }
     }
-    
+
     /// Seek for partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func seek(topicPartitionList: RDKafkaTopicPartitionList, timeout: Duration) async throws {
@@ -622,7 +620,7 @@ public final class RDKafkaClient: Sendable {
             timeout == .zero
             ? doSeek() // async when timeout is zero
             : await performBlockingCall(queue: gcdQueue, body: doSeek)
-        
+
         defer { rd_kafka_error_destroy(error) }
         let code = rd_kafka_error_code(error)
         if code != RD_KAFKA_RESP_ERR_NO_ERROR {
@@ -640,7 +638,7 @@ public final class RDKafkaClient: Sendable {
             }
         }
     }
-    
+
     // TODO: remove?
     func doOrThrow(_ body: () -> rd_kafka_resp_err_t, isFatal: Bool = false, file: String = #fileID, line: UInt = #line) throws {
         let result = body()
@@ -801,7 +799,7 @@ public final class RDKafkaClient: Sendable {
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) async throws -> T) async rethrows -> T {
         return try await body(self.kafkaHandle)
     }
-    
+
     func metadata() async throws -> KafkaMetadata {
         let queue = DispatchQueue(label: "com.swift-server.swift-kafka.metadata")
         return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<KafkaMetadata, Error>) in
@@ -976,11 +974,11 @@ public final class RDKafkaClient: Sendable {
                 rd_kafka_topic_partition_list_destroy(partitions)
             }
             rd_kafka_position($0, partitions)
-            
+
             guard let partitions else {
                 fatalError("TODO")
             }
-            
+
             var str = String()
             for idx in 0..<Int(partitions.pointee.cnt) {
                 let elem = partitions.pointee.elems[idx]

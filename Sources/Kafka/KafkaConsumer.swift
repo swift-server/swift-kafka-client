@@ -62,7 +62,7 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
 /// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
-    
+
     let stateMachine: LockedMachine
     let pollInterval: Duration
     let enablePartitionEof: Bool
@@ -74,10 +74,10 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         private let stateMachine: MachineHolder
         let pollInterval: Duration
         let enablePartitionEof: Bool
-        
+
         weak var cachedClient: RDKafkaClient?
         var messagesCount: Int = 0
-        
+
         private final class MachineHolder: Sendable { // only for deinit
             let stateMachine: LockedMachine
             init(stateMachine: LockedMachine) {
@@ -88,7 +88,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                 self.stateMachine.withLockedValue { $0.finishMessageConsumption() }
             }
         }
-        
+
         init(stateMachine: LockedMachine, pollInterval: Duration, enablePartitionEof: Bool) {
             self.stateMachine = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
@@ -146,6 +146,32 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     }
 }
 
+// MARK: - KafkaConsumerHealthStauts
+
+/// Represents the operational health status of a Kafka consumer client.
+///
+/// This enum provides insight into the consumer's ability to connect to Kafka brokers
+/// and retrieve messages, along with performance metrics when available.
+public enum KafkaConsumerHealthStatus: Hashable, Sendable {
+    /// The consumer is operational and can successfully communicate with Kafka brokers.
+    ///
+    /// - Parameter lag: The current consumer lag in number of messages.
+    ///   - `nil` indicates that lag measurement is not yet available (e.g., during initial connection)
+    ///   - `0` means the consumer is caught up with the latest messages
+    ///   - Positive values indicate the number of messages the consumer is behind
+    case healthy(lag: Int?)
+
+    /// The consumer cannot establish or maintain connection to the required Kafka brokers.
+    ///
+    /// This state indicates that the consumer has lost connectivity to brokers that host
+    /// the topics it's subscribed to. This can occur due to:
+    /// - Network connectivity issues
+    /// - Broker failures or maintenance
+    /// - Authentication/authorization problems
+    /// - Topic deletion or configuration changes
+    case stale
+}
+
 // MARK: - KafkaConsumer
 
 /// A ``KafkaConsumer `` can be used to consume messages from a Kafka cluster.
@@ -162,7 +188,7 @@ public final class KafkaConsumer: Sendable, Service {
     private let logger: Logger
     /// State of the `KafkaConsumer`.
     private let stateMachine: NIOLockedValueBox<StateMachine>
-    
+
     /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
 
@@ -264,7 +290,7 @@ public final class KafkaConsumer: Sendable, Service {
         if configuration.isAutoCommitEnabled == false {
             subscribedEvents.append(.offsetCommit)
         }
-        if configuration.metrics.enabled {
+        if configuration.metrics.enabled || configuration.healthStatusInterval != nil {
             subscribedEvents.append(.statistics)
         }
 //        NOTE: since now consumer is being polled with rd_kafka_consumer_poll,
@@ -272,15 +298,15 @@ public final class KafkaConsumer: Sendable, Service {
 //        if configuration.listenForRebalance {
 //            subscribedEvents.append(.rebalance)
 //        }
-        
+
         // we assign events once, so it is always thread safe -> @unchecked Sendable
         // but before start of consumer
         final class EventsInFutureWrapper: @unchecked Sendable {
             weak var consumer: KafkaConsumer? = nil
         }
-        
+
         let wrapper = EventsInFutureWrapper()
-        
+
         // as kafka_consumer_poll is used, we MUST define rebalance cb instead of listening to events
         let rebalanceCallBackStorage: RDKafkaClient.RebalanceCallbackStorage?
         if configuration.listenForRebalance {
@@ -309,7 +335,7 @@ public final class KafkaConsumer: Sendable, Service {
         )
 
         let stateMachine = NIOLockedValueBox(StateMachine())
-        
+
         // Note:
         // It's crucial to initialize the `sourceAndSequence` variable AFTER `client`.
         // This order is important to prevent the accidental triggering of `KafkaConsumerCloseOnTerminate.didTerminate()`.
@@ -321,7 +347,7 @@ public final class KafkaConsumer: Sendable, Service {
             finishOnDeinit: true,
             delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
         )
-        
+
         let consumer = try KafkaConsumer(
             client: client,
             stateMachine: stateMachine,
@@ -380,7 +406,7 @@ public final class KafkaConsumer: Sendable, Service {
             throw KafkaError.connectionClosed(reason: "Consumer deinitialized before setup")
         }
     }
-    
+
     /// Subscribe to the given list of `topics`.
     /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
     /// - Parameter topics: An array of topic names to subscribe to.
@@ -396,8 +422,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
         try client.subscribe(topicPartitionList: subscription)
     }
-        
-    
+
     public func assign(_ list: KafkaTopicList?) async throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
         switch action {
@@ -407,7 +432,7 @@ public final class KafkaConsumer: Sendable, Service {
             throw KafkaError.client(reason: err)
         }
     }
-    
+
     public func incrementalAssign(_ list: KafkaTopicList) async throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
         switch action {
@@ -417,7 +442,7 @@ public final class KafkaConsumer: Sendable, Service {
             throw KafkaError.client(reason: err)
         }
     }
-    
+
     public func incrementalUnassign(_ list: KafkaTopicList) async throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
         switch action {
@@ -427,7 +452,7 @@ public final class KafkaConsumer: Sendable, Service {
             throw KafkaError.client(reason: err)
         }
     }
-    
+
     // TODO: add docc: timeout = 0 -> async (no errors reported)
     public func seek(_ list: KafkaTopicList, timeout: Duration) async throws {
         let action = self.stateMachine.withLockedValue { $0.seekOrRebalance() }
@@ -438,7 +463,7 @@ public final class KafkaConsumer: Sendable, Service {
             throw KafkaError.client(reason: err)
         }
     }
-    
+
     public func metadata() async throws -> KafkaMetadata {
         try await client().metadata()
     }
@@ -479,6 +504,9 @@ public final class KafkaConsumer: Sendable, Service {
                     switch event {
                     case .statistics(let statistics):
                         self.configuration.metrics.update(with: statistics)
+                        if self.configuration.healthStatusInterval != nil, let eventSource {
+                            _ = eventSource.yield(.init(event))
+                        }
                     case .rebalance(let rebalance):
                         self.logger.info("rebalance received \(rebalance), source nil: \(eventSource == nil)")
                         if let eventSource {
@@ -824,7 +852,7 @@ extension KafkaConsumer {
                 return nil
             }
         }
-        
+
         enum RebalanceAction {
             /// Rebalance is still possible
             ///
@@ -836,7 +864,7 @@ extension KafkaConsumer {
             case denied(error: String)
         }
 
-        
+
         func seekOrRebalance() -> RebalanceAction {
             switch state {
             case .uninitialized:
@@ -865,7 +893,7 @@ extension KafkaConsumer {
                 break
             }
         }
-        
+
         func client() throws -> RDKafkaClient {
             switch self.state {
             case .uninitialized:
