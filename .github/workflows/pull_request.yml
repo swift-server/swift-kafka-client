@@ -45,3 +45,7 @@ jobs:
     with:
       name: "Cxx interop"
       matrix_string: '${{ needs.construct-cxx-matrix.outputs.cxx-interop-matrix }}'
+
+  static-sdk:
+    name: Static SDK
+    uses: apple/swift-nio/.github/workflows/static_sdk.yml@main
