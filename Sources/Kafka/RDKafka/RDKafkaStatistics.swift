@@ -115,7 +115,7 @@ extension RDKafkaStatistics {
             case down = "DOWN"
             case tryConnect = "TRY_CONNECT"
             case connect = "CONNECT"
-            case sslHandshake = "SSH_HANDSHAKE"
+            case sslHandshake = "SSL_HANDSHAKE"
             case authLegacy = "AUTH_LEGACY"
             case up = "UP"
             case update = "UPDATE"
@@ -125,12 +125,14 @@ extension RDKafkaStatistics {
             case reauth = "REAUTH"
 
             /// Returns true if the broker state indicates the Kafka protocol layer is operational
-            var isOperational: Bool {
+            var isOperational: Bool? {
                 switch self {
                 case .up, .update, .apiVersionQuery, .authHandshake, .authRequest, .reauth:
                     true
-                default:
+                case .down:
                     false
+                default: // consider state as transient
+                    nil
                 }
             }
         }
@@ -143,7 +145,7 @@ extension RDKafkaStatistics {
             case state
         }
 
-        var isOperational: Bool { state.isOperational }
+        var isOperational: Bool? { state.isOperational }
     }
 }
 
@@ -152,7 +154,7 @@ extension RDKafkaStatistics {
         if let brokers {
             // Require all brokers to be operational
             for broker in brokers.values where broker.nodeIdentifier != -1 {
-                if !broker.isOperational {
+                if broker.isOperational == false {
                     return .stale
                 }
             }
