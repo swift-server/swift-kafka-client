@@ -475,10 +475,10 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
     private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent? {
         let jsonStr = String(cString: rd_kafka_event_stats(event))
-        logger.debug("Kafka statistics: \(jsonStr)")
         do {
             if let jsonData = jsonStr.data(using: .utf8) {
                 let statistics = try JSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
+                logger.trace("decoded librdkafka statistics: \(statistics)")
                 return .statistics(statistics)
             }
         } catch {
