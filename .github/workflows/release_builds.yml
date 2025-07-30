@@ -106,12 +106,3 @@ jobs:
           curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/check-matrix-job.sh | bash
     container:
       image: ${{ matrix.swift.image }}
-    services:
-      zookeeper:
-        image: ubuntu/zookeeper
-      kafka:
-        image: ubuntu/kafka
-        env:
-          ZOOKEEPER_HOST: zookeeper
-    env:
-      KAFKA_HOST: kafka
