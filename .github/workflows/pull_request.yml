@@ -45,3 +45,7 @@ jobs:
     with:
       name: "Cxx interop"
       matrix_string: '${{ needs.construct-cxx-matrix.outputs.cxx-interop-matrix }}'
+
+  release-builds:
+    name: Release builds
+    uses: ./.github/workflows/release_builds.yml
