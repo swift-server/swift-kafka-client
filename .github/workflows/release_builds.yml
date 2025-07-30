@@ -53,7 +53,7 @@ on:
         default: ""
 
 jobs:
-  release-builds
+  release-builds:
     name: Release builds (${{ matrix.swift.swift_version }})
     runs-on: ubuntu-latest
     strategy:
