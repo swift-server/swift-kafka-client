@@ -17,6 +17,12 @@ import NIOCore
 import struct Foundation.Date
 import typealias Foundation.TimeInterval
 
+extension FixedWidthInteger {
+    func roundUpToMultipleOf(_ multiple: Self) -> Self {
+        ((self + multiple - 1) / multiple) * multiple
+    }
+}
+
 /// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage {
     /// Internal enum for EOF, required to allow empty message
@@ -79,6 +85,8 @@ public struct KafkaConsumerMessage {
 //        self.headers = [KafkaHeader]()
 //    }
     
+    private static let bufferAlignment: Int = MemoryLayout<UInt64>.size
+
     /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
@@ -111,19 +119,67 @@ public struct KafkaConsumerMessage {
         var timestamp: Timestamp? = nil
 
         if rdKafkaMessage.err != RD_KAFKA_RESP_ERR__PARTITION_EOF {
-            self.headers = try Self.getHeaders(for: messagePointer)
-            
-            if let keyPointer = rdKafkaMessage.key {
-                let keyBufferPointer = UnsafeRawBufferPointer(
-                    start: keyPointer,
-                    count: rdKafkaMessage.key_len
-                )
-                self.key = .init(bytes: keyBufferPointer)
+
+            var bufferSize = 0
+            var headersCount = 0
+            try Self.forEachHeader(inMessage: messagePointer) { _, value in
+                headersCount += 1
+                bufferSize += Int(value.count).roundUpToMultipleOf(Self.bufferAlignment)
+            }
+            bufferSize += Int(rdKafkaMessage.key_len).roundUpToMultipleOf(Self.bufferAlignment)
+            bufferSize += Int(rdKafkaMessage.len)
+
+            var buffer = ByteBufferAllocator().buffer(capacity: bufferSize)
+
+            try Self.forEachHeader(inMessage: messagePointer) { _, value in
+                if value.count > 0 {
+                    buffer.writeBytes(value)
+                    let alignment = Int(value.count).roundUpToMultipleOf(Self.bufferAlignment) - value.count
+                    buffer.moveWriterIndex(forwardBy: alignment)
+                }
+            }
+
+            if rdKafkaMessage.key_len > 0 {
+                let keyBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.key, count: rdKafkaMessage.key_len)
+                buffer.writeBytes(keyBufferPointer)
+                let alignment = Int(rdKafkaMessage.key_len).roundUpToMultipleOf(Self.bufferAlignment) - rdKafkaMessage.key_len
+                buffer.moveWriterIndex(forwardBy: alignment)
+            }
+
+            buffer.writeBytes(valueBufferPointer)
+
+            var headers = [KafkaHeader]()
+            headers.reserveCapacity(headersCount)
+            try Self.forEachHeader(inMessage: messagePointer) { key, value in
+                let valueBuffer: ByteBuffer? = {
+                    if value.count > 0 {
+                        buffer.moveWriterIndex(to: buffer.readerIndex + value.count)
+                        let ret = buffer.slice()
+                        let newIndex = buffer.readerIndex + Int(value.count).roundUpToMultipleOf(Self.bufferAlignment)
+                        buffer.moveWriterIndex(to: newIndex)
+                        buffer.moveReaderIndex(to: newIndex)
+                        return ret
+                    } else {
+                        return nil
+                    }
+                }()
+                let header = KafkaHeader(key: String(cString: key), value: valueBuffer)
+                headers.append(header)
+            }
+            self.headers = headers
+
+            if rdKafkaMessage.key_len > 0 {
+                buffer.moveWriterIndex(to: buffer.readerIndex + rdKafkaMessage.key_len)
+                self.key = buffer.slice()
+                let newIndex = buffer.readerIndex + Int(rdKafkaMessage.key_len).roundUpToMultipleOf(Self.bufferAlignment)
+                buffer.moveWriterIndex(to: newIndex)
+                buffer.moveReaderIndex(to: newIndex)
             } else {
                 self.key = nil
             }
 
-            self._value = .buffer(ByteBuffer(bytes: valueBufferPointer))
+            buffer.moveWriterIndex(to: buffer.readerIndex + valueBufferPointer.count)
+            self._value = .buffer(buffer)
 
             var timestampType = RD_KAFKA_TIMESTAMP_NOT_AVAILABLE
             let kafkaTimestamp = rd_kafka_message_timestamp(messagePointer, &timestampType)
@@ -156,21 +212,22 @@ extension KafkaConsumerMessage: Sendable {}
 // MARK: - Helpers
 
 extension KafkaConsumerMessage {
-    /// Extract ``KafkaHeader``s from a `rd_kafka_message_t` pointer.
+    /// Iterates over ``KafkaHeader``s from a `rd_kafka_message_t` pointer
+    /// applying the `body` function for each header.
     ///
     /// - Parameters:
-    ///    - for: Pointer to the `rd_kafka_message_t` object to extract the headers from.
-    private static func getHeaders(
-        for messagePointer: UnsafePointer<rd_kafka_message_t>
-    ) throws -> [KafkaHeader] {
-        var result: [KafkaHeader] = []
+    ///    - inMessage: Pointer to the `rd_kafka_message_t` object to extract the headers from.
+    ///    - body: Function to be called for each header.
+    static func forEachHeader(
+        inMessage messagePointer: UnsafePointer<rd_kafka_message_t>,
+        _ body: (UnsafePointer<CChar>, UnsafeRawBufferPointer) -> Void
+    ) throws {
         var headers: OpaquePointer?
-
         var readStatus = rd_kafka_message_headers(messagePointer, &headers)
 
         if readStatus == RD_KAFKA_RESP_ERR__NOENT {
             // No Header Entries
-            return result
+            return
         }
 
         guard readStatus == RD_KAFKA_RESP_ERR_NO_ERROR else {
@@ -178,56 +235,41 @@ extension KafkaConsumerMessage {
         }
 
         guard let headers else {
-            return result
+            return
         }
 
-        let headerCount = rd_kafka_header_cnt(headers)
-        result.reserveCapacity(headerCount)
+        let count = rd_kafka_header_cnt(headers)
+        var index = 0
 
-        var headerIndex = 0
-
-        while readStatus != RD_KAFKA_RESP_ERR__NOENT && headerIndex < headerCount {
-            var headerKeyPointer: UnsafePointer<CChar>?
-            var headerValuePointer: UnsafeRawPointer?
-            var headerValueSize = 0
+        while readStatus != RD_KAFKA_RESP_ERR__NOENT && (index < count) {
+            var keyPointer: UnsafePointer<CChar>?
+            var valuePointer: UnsafeRawPointer?
+            var valueSize = 0
 
             readStatus = rd_kafka_header_get_all(
                 headers,
-                headerIndex,
-                &headerKeyPointer,
-                &headerValuePointer,
-                &headerValueSize
+                index,
+                &keyPointer,
+                &valuePointer,
+                &valueSize
             )
 
             if readStatus == RD_KAFKA_RESP_ERR__NOENT {
                 // No Header Entries
-                return result
+                return
             }
 
-            guard readStatus == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            if readStatus != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: readStatus)
             }
 
-            guard let headerKeyPointer else {
+            guard let keyPointer else {
                 fatalError("Found null pointer when reading KafkaConsumerMessage header key")
             }
-            let headerKey = String(cString: headerKeyPointer)
 
-            var headerValue: ByteBuffer?
-            if let headerValuePointer, headerValueSize > 0 {
-                let headerValueBufferPointer = UnsafeRawBufferPointer(
-                    start: headerValuePointer,
-                    count: headerValueSize
-                )
-                headerValue = ByteBuffer(bytes: headerValueBufferPointer)
-            }
+            body(keyPointer, UnsafeRawBufferPointer(start: valuePointer, count: valueSize))
 
-            let newHeader = KafkaHeader(key: headerKey, value: headerValue)
-            result.append(newHeader)
-
-            headerIndex += 1
+            index += 1
         }
-
-        return result
     }
 }
