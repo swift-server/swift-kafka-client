@@ -212,7 +212,7 @@ extension KafkaConsumerMessage: Sendable {}
 // MARK: - Helpers
 
 extension KafkaConsumerMessage {
-    /// Iterates ``KafkaHeader``s from a `rd_kafka_message_t` pointer
+    /// Iterates over ``KafkaHeader``s from a `rd_kafka_message_t` pointer
     /// applying the `body` function for each header.
     ///
     /// - Parameters:
