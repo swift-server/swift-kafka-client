@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the swift-kafka-client open source project
@@ -31,7 +31,7 @@ let rdkafkaExclude = [
 let package = Package(
     name: "swift-kafka-client",
     platforms: [
-        .macOS(.v14),
+        .macOS(.v15),
         .iOS(.v17),
         .watchOS(.v9),
         .tvOS(.v16),
