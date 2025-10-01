@@ -108,5 +108,6 @@ let package = Package(
             name: "IntegrationTests",
             dependencies: ["Kafka"]
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )
