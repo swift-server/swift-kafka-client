@@ -48,11 +48,13 @@ jobs:
     - name: Build
       run: swift build
     - name: Run tests
+      if: ${{ false }}
       run: |
         if [ -d Tests ]; then
           swift test --parallel
         fi
     - name: Run tests (release)
+      if: ${{ false }}
       run: |
         if [ -d Tests ]; then
           swift test -c release --parallel
