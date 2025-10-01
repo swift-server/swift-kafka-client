@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26]
+        os: [macos-latest]
 
     runs-on: ${{ matrix.os }}
 #    env:
@@ -33,6 +33,8 @@ jobs:
         brew install jemalloc
 
     - uses: actions/checkout@v4
+      with:
+        submodules: 'true'
 
     - name: Start consul
       uses: ./.github/actions/consul-start
