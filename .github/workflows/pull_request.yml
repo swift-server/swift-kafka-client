@@ -1,0 +1,52 @@
+name: PR
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+jobs:
+  soundness:
+    name: Soundness
+    uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
+    with:
+      linux_pre_build_command: "apt-get update -y -q && apt-get install -y -q libsasl2-dev libssl-dev"
+      license_header_check_project_name: "swift-kafka-client"
+
+  unit-tests:
+    name: Unit tests
+    uses: ./.github/workflows/unit_tests.yml
+    with:
+      linux_5_10_arguments_override: "--explicit-target-dependency-import-check error"
+      linux_6_0_arguments_override: "--explicit-target-dependency-import-check error"
+      linux_6_1_arguments_override: "--explicit-target-dependency-import-check error"
+      linux_6_2_arguments_override: "--explicit-target-dependency-import-check error"
+      linux_nightly_next_arguments_override: "--explicit-target-dependency-import-check error"
+      linux_nightly_main_arguments_override: "--explicit-target-dependency-import-check error"
+
+  construct-cxx-matrix:
+    name: Construct Cxx interop matrix
+    runs-on: ubuntu-latest
+    outputs:
+      cxx-interop-matrix: '${{ steps.generate-matrix.outputs.cxx-interop-matrix }}'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: generate-matrix
+        run: echo "cxx-interop-matrix=$(curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/generate_matrix.sh | bash)" >> "$GITHUB_OUTPUT"
+        env:
+          MATRIX_LINUX_COMMAND: "curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/check-cxx-interop-compatibility.sh | bash"
+          MATRIX_LINUX_SETUP_COMMAND: "apt-get update -y -q && apt-get install -y -q curl jq libsasl2-dev libssl-dev"
+
+  cxx-interop:
+    name: Cxx interop
+    needs: construct-cxx-matrix
+    uses: apple/swift-nio/.github/workflows/swift_test_matrix.yml@main
+    with:
+      name: "Cxx interop"
+      matrix_string: '${{ needs.construct-cxx-matrix.outputs.cxx-interop-matrix }}'
+
+  release-builds:
+    name: Release builds
+    uses: ./.github/workflows/release_builds.yml

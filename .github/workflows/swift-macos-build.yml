@@ -1,4 +1,4 @@
-name: Swift macOS build
+name: macOS build
 
 on:
   workflow_dispatch:
@@ -13,13 +13,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-13]
-        swift: ["5.9"]
+        os: [macos-latest]
 
     runs-on: ${{ matrix.os }}
+#    env:
+#      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
 
     steps:
-    - uses: fwal/setup-swift@v1
+    - uses: swift-actions/setup-swift@v2
+      if: ${{ false }}
       with:
         swift-version: ${{ matrix.swift }}
 
@@ -30,13 +32,17 @@ jobs:
         echo BENCHMARK_DISABLE_JEMALLOC=true >> $GITHUB_ENV
         brew install jemalloc
 
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: 'true'
 
     - name: Start consul
       uses: ./.github/actions/consul-start
 
+    - name: GH auth
+      run: |
+        echo "machine api.github.com login ${{ secrets.GITHUB_TOKEN }} password x-oauth-basic" > $HOME/.netrc
+        cat ~/.netrc
     - name: Swift version
       run: swift --version
     - name: Build
