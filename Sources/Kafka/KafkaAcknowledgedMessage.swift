@@ -21,6 +21,8 @@ public struct KafkaAcknowledgedMessage {
     public var topic: String
     /// The partition that the message was sent to.
     public var partition: KafkaPartition
+    /// The headers of the message.
+    public var headers: [KafkaHeader]
     /// The key of the message.
     public var key: ByteBuffer?
     /// The body of the message.
@@ -33,9 +35,6 @@ public struct KafkaAcknowledgedMessage {
     internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 
-        let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
-        self.value = ByteBuffer(bytes: valueBufferPointer)
-
         guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
             throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
         }
@@ -47,15 +46,7 @@ public struct KafkaAcknowledgedMessage {
 
         self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
 
-        if let keyPointer = rdKafkaMessage.key {
-            let keyBufferPointer = UnsafeRawBufferPointer(
-                start: keyPointer,
-                count: rdKafkaMessage.key_len
-            )
-            self.key = .init(bytes: keyBufferPointer)
-        } else {
-            self.key = nil
-        }
+        (self.key, self.value, self.headers) = try KafkaConsumerMessage.extractContent(fromMessage: messagePointer)
 
         self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
     }
