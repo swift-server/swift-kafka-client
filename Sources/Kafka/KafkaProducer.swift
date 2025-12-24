@@ -261,6 +261,7 @@ public final class KafkaProducer: Service, Sendable {
     private func _run() async throws {
         var pollInterval = self.configuration.pollInterval
         var events = [RDKafkaClient.KafkaEvent]()
+        let clock = ContinuousClock()
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
@@ -288,7 +289,7 @@ public final class KafkaProducer: Service, Sendable {
                 }
                 if shouldSleep {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
-                    try await Task.sleep(for: pollInterval)
+                    try await clock.sleep(until: clock.now.advanced(by: pollInterval))
                 } else {
                     pollInterval = max(pollInterval / 3, .microseconds(1))
                     await Task.yield()

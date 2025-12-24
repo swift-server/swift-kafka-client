@@ -494,6 +494,7 @@ public final class KafkaConsumer: Sendable, Service {
         var pollInterval = configuration.pollInterval
         var events = [RDKafkaClient.KafkaEvent]()
         events.reserveCapacity(100)
+        let clock = ContinuousClock()
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextEventPollLoopAction() }
             switch nextAction {
@@ -526,7 +527,7 @@ public final class KafkaConsumer: Sendable, Service {
                 }
                 if shouldSleep {
                     pollInterval = min(self.configuration.pollInterval, pollInterval * 2)
-                    try await Task.sleep(for: pollInterval)
+                    try await clock.sleep(until: clock.now.advanced(by: pollInterval))
                 } else {
                     pollInterval = max(pollInterval / 3, .microseconds(1))
                     await Task.yield()
