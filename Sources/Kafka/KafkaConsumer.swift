@@ -110,8 +110,11 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                     if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
                         // Wait on a separate thread for the next message.
                         // The call below will block for `pollInterval`.
-                        return try await withTaskExecutorPreference(queue) {
-                            try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds))
+                        if let message = try await withTaskExecutorPreference(
+                            queue,
+                            operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
+                        ) {
+                            return message
                         }
                     } else {
                         // No messages. Sleep a little.
