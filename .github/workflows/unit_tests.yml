@@ -87,7 +87,7 @@ jobs:
           - image: "swift:6.2-jammy"
             swift_version: "6.2"
             enabled: ${{ inputs.linux_6_2_enabled }}
-          - image: "swiftlang/swift:nightly-6.2-jammy"
+          - image: "swiftlang/swift:nightly-6.3-jammy"
             swift_version: "nightly-next"
             enabled: ${{ inputs.linux_nightly_next_enabled }}
           - image: "swiftlang/swift:nightly-main-jammy"
