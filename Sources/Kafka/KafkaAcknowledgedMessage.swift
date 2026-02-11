@@ -42,15 +42,9 @@ public struct KafkaAcknowledgedMessage {
             throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
         }
 
-        #if swift(<6.0)
-        guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
-            fatalError("Received topic name that is non-valid UTF-8")
-        }
-        #else
         guard let topic = String(validatingCString: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
             fatalError("Received topic name that is non-valid UTF-8")
         }
-        #endif
 
         self.topic = topic
 
