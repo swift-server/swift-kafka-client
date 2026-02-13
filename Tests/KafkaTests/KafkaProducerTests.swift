@@ -336,7 +336,8 @@ struct KafkaProducerTests {
         (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
         _ = events
 
-        weak var producerCopy = producer
+        weak var producerCopy: KafkaProducer?
+        producerCopy = producer
 
         await withThrowingTaskGroup(of: Void.self) { group in
             // Initialize serviceGroup here so it gets dereferenced when this closure is complete
