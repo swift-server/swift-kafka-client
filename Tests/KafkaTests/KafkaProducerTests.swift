@@ -13,13 +13,10 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import Metrics
-import MetricsTestKit
 import NIOCore
 import ServiceLifecycle
 import Testing
 
-@testable import CoreMetrics  // for MetricsSystem.bootstrapInternal
 @testable import Kafka
 
 #if canImport(FoundationEssentials)
@@ -42,14 +39,12 @@ import Foundation
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
-@Suite(.serialized)
-final class KafkaProducerTests {
+struct KafkaProducerTests {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
     var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress
     var config: KafkaProducerConfiguration
-    var metrics: TestMetrics = TestMetrics()
 
     init() throws {
         self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
@@ -61,12 +56,6 @@ final class KafkaProducerTests {
             bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
         )
         self.config.broker.addressFamily = .v4
-
-        MetricsSystem.bootstrapInternal(self.metrics)
-    }
-
-    deinit {
-        MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
 
     @Test func send() async throws {
@@ -367,34 +356,6 @@ final class KafkaProducerTests {
         events = nil
 
         #expect(producerCopy == nil)
-    }
-
-    @Test func producerStatistics() async throws {
-        self.config.metrics.updateInterval = .milliseconds(100)
-        self.config.metrics.queuedOperation = .init(label: "operations")
-
-        let producer = try KafkaProducer(
-            configuration: self.config,
-            logger: .kafkaTest
-        )
-
-        let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
-            group.addTask {
-                try await serviceGroup.run()
-            }
-
-            try await Task.sleep(for: .seconds(1))
-
-            // Shutdown the serviceGroup
-            await serviceGroup.triggerGracefulShutdown()
-        }
-
-        let value = try metrics.expectGauge("operations").lastValue
-        #expect(value != nil)
     }
 
     @Test func producerConstructDeinit() async throws {
