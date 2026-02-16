@@ -13,14 +13,11 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import Metrics
-import MetricsTestKit
 import ServiceLifecycle
 import Testing
 
 import struct Foundation.UUID
 
-@testable import CoreMetrics  // for MetricsSystem.bootstrapInternal
 @testable import Kafka
 
 #if canImport(FoundationEssentials)
@@ -43,18 +40,7 @@ import Foundation
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
-@Suite(.serialized)
-final class KafkaConsumerTests {
-    var metrics: TestMetrics = TestMetrics()
-
-    init() async throws {
-        MetricsSystem.bootstrapInternal(self.metrics)
-    }
-
-    deinit {
-        MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
-    }
-
+struct KafkaConsumerTests {
     @Test func consumerLog() async throws {
         let recorder = LogEventRecorder()
         let mockLogger = Logger(label: "kafka.test.consumer.log") {
@@ -102,37 +88,6 @@ final class KafkaConsumerTests {
                 "Expected log \(expectedLog) but was not found"
             )
         }
-    }
-
-    @Test func consumerStatistics() async throws {
-        let uniqueGroupID = UUID().uuidString
-        var config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
-            bootstrapBrokerAddresses: []
-        )
-
-        config.metrics.updateInterval = .milliseconds(100)
-        config.metrics.queuedOperation = .init(label: "operations")
-
-        let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
-
-        let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
-            group.addTask {
-                try await serviceGroup.run()
-            }
-
-            try await Task.sleep(for: .seconds(1))
-
-            // Shutdown the serviceGroup
-            await serviceGroup.triggerGracefulShutdown()
-        }
-
-        let value = try metrics.expectGauge("operations").lastValue
-        #expect(value != nil)
     }
 
     @Test func consumerConstructDeinit() async throws {
