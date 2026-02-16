@@ -17,10 +17,16 @@ import Metrics
 import MetricsTestKit
 import NIOCore
 import ServiceLifecycle
-import XCTest
+import Testing
 
 @testable import CoreMetrics  // for MetricsSystem.bootstrapInternal
 @testable import Kafka
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 // For testing locally on Mac, do the following:
 //
@@ -36,15 +42,16 @@ import XCTest
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
-final class KafkaProducerTests: XCTestCase {
+@Suite(.serialized)
+final class KafkaProducerTests {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
-    var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress!
-    var config: KafkaProducerConfiguration!
-    var metrics: TestMetrics! = TestMetrics()
+    var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress
+    var config: KafkaProducerConfiguration
+    var metrics: TestMetrics = TestMetrics()
 
-    override func setUpWithError() throws {
+    init() throws {
         self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
             host: self.kafkaHost,
             port: self.kafkaPort
@@ -58,15 +65,11 @@ final class KafkaProducerTests: XCTestCase {
         MetricsSystem.bootstrapInternal(self.metrics)
     }
 
-    override func tearDownWithError() throws {
-        self.bootstrapBrokerAddress = nil
-        self.config = nil
-
-        self.metrics = nil
+    deinit {
         MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
 
-    func testSend() async throws {
+    @Test func send() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
             configuration: self.config,
             logger: .kafkaTest
@@ -109,25 +112,25 @@ final class KafkaProducerTests: XCTestCase {
                 }
             }
 
-            let receivedDeliveryReport = receivedDeliveryReports.first!
-            XCTAssertEqual(messageID, receivedDeliveryReport.id)
+            let receivedDeliveryReport = try #require(receivedDeliveryReports.first)
+            #expect(messageID == receivedDeliveryReport.id)
 
             guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
-                XCTFail()
+                Issue.record()
                 return
             }
 
-            XCTAssertEqual(expectedTopic, receivedMessage.topic)
-            XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
-            XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
-            XCTAssertEqual(headers, receivedMessage.headers)
+            #expect(expectedTopic == receivedMessage.topic)
+            #expect(ByteBuffer(string: message.key!) == receivedMessage.key)
+            #expect(ByteBuffer(string: message.value) == receivedMessage.value)
+            #expect(headers == receivedMessage.headers)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
     }
 
-    func testSendEmptyMessage() async throws {
+    @Test func sendEmptyMessage() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
             configuration: self.config,
             logger: .kafkaTest
@@ -167,23 +170,23 @@ final class KafkaProducerTests: XCTestCase {
                 }
             }
 
-            let receivedDeliveryReport = receivedDeliveryReports.first!
-            XCTAssertEqual(messageID, receivedDeliveryReport.id)
+            let receivedDeliveryReport = try #require(receivedDeliveryReports.first)
+            #expect(messageID == receivedDeliveryReport.id)
 
             guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
-                XCTFail()
+                Issue.record()
                 return
             }
 
-            XCTAssertEqual(expectedTopic, receivedMessage.topic)
-            XCTAssertEqual(message.value, receivedMessage.value)
+            #expect(expectedTopic == receivedMessage.topic)
+            #expect(message.value == receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
     }
 
-    func testSendTwoTopics() async throws {
+    @Test func sendTwoTopics() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
             configuration: self.config,
             logger: .kafkaTest
@@ -231,7 +234,7 @@ final class KafkaProducerTests: XCTestCase {
                 }
             }
 
-            XCTAssertEqual(Set(receivedDeliveryReports.map(\.id)), messageIDs)
+            #expect(Set(receivedDeliveryReports.map(\.id)) == messageIDs)
 
             let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
                 guard case .acknowledged(let receivedMessage) = $0.status else {
@@ -240,20 +243,20 @@ final class KafkaProducerTests: XCTestCase {
                 return receivedMessage
             }
 
-            XCTAssertEqual(2, acknowledgedMessages.count)
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message1.key!) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message2.key!) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message1.value) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message2.value) }))
+            #expect(acknowledgedMessages.count == 2)
+            #expect(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
+            #expect(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message1.key!) }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message2.key!) }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message1.value) }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message2.value) }))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
     }
 
-    func testProducerLog() async throws {
+    @Test func producerLog() async throws {
         let recorder = LogEventRecorder()
         let mockLogger = Logger(label: "kafka.test.producer.log") {
             _ in MockLogHandler(recorder: recorder)
@@ -281,20 +284,20 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         let recordedEvents = recorder.recordedEvents
-        XCTAssertEqual(1, recordedEvents.count)
+        #expect(recordedEvents.count == 1)
 
         let expectedMessage =
             "[thrd:app]: No `bootstrap.servers` configured: client will not be able to connect to Kafka cluster"
         let expectedLevel = Logger.Level.notice
         let expectedSource = "CONFWARN"
 
-        let receivedEvent = try XCTUnwrap(recordedEvents.first, "Expected log event, but found none")
-        XCTAssertEqual(expectedMessage, receivedEvent.message.description)
-        XCTAssertEqual(expectedLevel, receivedEvent.level)
-        XCTAssertEqual(expectedSource, receivedEvent.source)
+        let receivedEvent = try #require(recordedEvents.first, "Expected log event, but found none")
+        #expect(expectedMessage == receivedEvent.message.description)
+        #expect(expectedLevel == receivedEvent.level)
+        #expect(expectedSource == receivedEvent.source)
     }
 
-    func testSendFailsAfterTerminatingAcknowledgementSequence() async throws {
+    @Test func sendFailsAfterTerminatingAcknowledgementSequence() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
             configuration: self.config,
             logger: .kafkaTest
@@ -329,9 +332,8 @@ final class KafkaProducerTests: XCTestCase {
 
             // Sending a new message should fail after the events sequence
             // has been terminated
-            XCTAssertThrowsError(try producer.send(message2)) { error in
-                let error = error as! KafkaError
-                XCTAssertEqual(KafkaError.ErrorCode.shutdown, error.code)
+            #expect(throws: KafkaError.connectionClosed(reason: "reason")) {
+                try producer.send(message2)
             }
 
             // Shutdown the serviceGroup
@@ -339,7 +341,7 @@ final class KafkaProducerTests: XCTestCase {
         }
     }
 
-    func testNoMemoryLeakAfterShutdown() async throws {
+    @Test func noMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
         var events: KafkaProducerEvents?
         (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
@@ -364,10 +366,10 @@ final class KafkaProducerTests: XCTestCase {
         // Make sure to terminate the AsyncSequence
         events = nil
 
-        XCTAssertNil(producerCopy)
+        #expect(producerCopy == nil)
     }
 
-    func testProducerStatistics() async throws {
+    @Test func producerStatistics() async throws {
         self.config.metrics.updateInterval = .milliseconds(100)
         self.config.metrics.queuedOperation = .init(label: "operations")
 
@@ -392,10 +394,10 @@ final class KafkaProducerTests: XCTestCase {
         }
 
         let value = try metrics.expectGauge("operations").lastValue
-        XCTAssertNotNil(value)
+        #expect(value != nil)
     }
 
-    func testProducerConstructDeinit() async throws {
+    @Test func producerConstructDeinit() async throws {
         let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
 
         // deinit called before run
@@ -405,7 +407,7 @@ final class KafkaProducerTests: XCTestCase {
         _ = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest)
     }
 
-    func testProducerEventsReadCancelledBeforeRun() async throws {
+    @Test func producerEventsReadCancelledBeforeRun() async throws {
         let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
 
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest)
@@ -416,7 +418,7 @@ final class KafkaProducerTests: XCTestCase {
         // explicitly run and cancel message consuming task before serviceGroup.run()
         let producerEventsTask = Task {
             for try await event in events {
-                XCTFail("Unexpected record \(event))")
+                Issue.record("Unexpected record \(event))")
             }
         }
 
