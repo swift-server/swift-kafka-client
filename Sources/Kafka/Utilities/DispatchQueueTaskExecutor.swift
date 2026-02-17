@@ -12,7 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if swift(>=6.0)
 import Dispatch
 
 final class DispatchQueueTaskExecutor: TaskExecutor {
@@ -36,4 +35,3 @@ final class DispatchQueueTaskExecutor: TaskExecutor {
         UnownedTaskExecutor(ordinary: self)
     }
 }
-#endif
