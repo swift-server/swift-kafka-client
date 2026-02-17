@@ -6,22 +6,6 @@ permissions:
 on:
   workflow_call:
     inputs:
-      linux_5_9_enabled:
-        type: boolean
-        description: "Boolean to enable the Linux 5.9 Swift version matrix job. Defaults to false."
-        default: false
-      linux_5_9_arguments_override:
-        type: string
-        description: "The arguments passed to swift build in the Linux 5.9 Swift version matrix job."
-        default: ""
-      linux_5_10_enabled:
-        type: boolean
-        description: "Boolean to enable the Linux 5.10 Swift version matrix job. Defaults to true."
-        default: true
-      linux_5_10_arguments_override:
-        type: string
-        description: "The arguments passed to swift build in the Linux 5.10 Swift version matrix job."
-        default: ""
       linux_6_0_enabled:
         type: boolean
         description: "Boolean to enable the Linux 6.0 Swift version matrix job. Defaults to true."
@@ -72,12 +56,6 @@ jobs:
       matrix:
         # We are specifying only the major and minor of the docker images to automatically pick up the latest patch release
         swift:
-          - image: "swift:5.9-jammy"
-            swift_version: "5.9"
-            enabled: ${{ inputs.linux_5_9_enabled }}
-          - image: "swift:5.10-jammy"
-            swift_version: "5.10"
-            enabled: ${{ inputs.linux_5_10_enabled }}
           - image: "swift:6.0-jammy"
             swift_version: "6.0"
             enabled: ${{ inputs.linux_6_0_enabled }}
@@ -109,8 +87,6 @@ jobs:
         env:
           SWIFT_VERSION: ${{ matrix.swift.swift_version }}
           COMMAND: "swift build -c release"
-          COMMAND_OVERRIDE_5_9: "swift build -c release ${{ inputs.linux_5_9_arguments_override }}"
-          COMMAND_OVERRIDE_5_10: "swift build -c release ${{ inputs.linux_5_10_arguments_override }}"
           COMMAND_OVERRIDE_6_0: "swift build -c release ${{ inputs.linux_6_0_arguments_override }}"
           COMMAND_OVERRIDE_6_1: "swift build -c release ${{ inputs.linux_6_1_arguments_override }}"
           COMMAND_OVERRIDE_6_2: "swift build -c release ${{ inputs.linux_6_2_arguments_override }}"
