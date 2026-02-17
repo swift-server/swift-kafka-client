@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -72,9 +73,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
-        #if swift(>=6.0)
         private let queue: DispatchQueueTaskExecutor
-        #endif
 
         private final class MachineHolder: Sendable {  // only for deinit
             let stateMachine: LockedMachine
@@ -91,11 +90,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         init(stateMachine: LockedMachine, pollInterval: Duration) {
             self.stateMachineHolder = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
-            #if swift(>=6.0)
             self.queue = DispatchQueueTaskExecutor(
                 DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer")
             )
-            #endif
         }
 
         public func next() async throws -> Element? {
@@ -110,16 +107,19 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                         return message
                     }
 
-                    #if swift(>=6.0)
-                    // Wait on a separate thread for the next message.
-                    // The call below will block for `pollInterval`.
-                    return try await withTaskExecutorPreference(queue) {
-                        try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds))
+                    if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
+                        // Wait on a separate thread for the next message.
+                        // The call below will block for `pollInterval`.
+                        if let message = try await withTaskExecutorPreference(
+                            queue,
+                            operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
+                        ) {
+                            return message
+                        }
+                    } else {
+                        // No messages. Sleep a little.
+                        try await Task.sleep(for: self.pollInterval)
                     }
-                    #else
-                    // No messages. Sleep a little.
-                    try await Task.sleep(for: self.pollInterval)
-                    #endif
                 case .suspendPollLoop:
                     try await Task.sleep(for: self.pollInterval)  // not started yet
                 case .terminatePollLoop:
