@@ -64,11 +64,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         events: [],
         logger: .kafkaTest
     )
-    let testTopic = try client._createUniqueTopic(partitions: partitions, timeout: 10 * 1000)
+    let testTopic = try await client._createUniqueTopic(partitions: partitions)
 
     try await body(testTopic)
 
-    try client._deleteTopic(testTopic, timeout: 10 * 1000)
+    try await client._deleteTopic(testTopic)
 }
 
 struct KafkaIntegrationTests {
