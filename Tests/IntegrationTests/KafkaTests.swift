@@ -87,11 +87,7 @@ struct KafkaIntegrationTests {
 
     @Test func produceAndConsumeWithConsumerGroup() async throws {
         try await withTestTopic { testTopic in
-            let testMessages = Self.createTestMessages(topic: testTopic, count: 10)
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                configuration: self.producerConfig,
-                logger: .kafkaTest
-            )
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
             var consumerConfig = KafkaConsumerConfiguration(
                 consumptionStrategy: .group(id: UUID().uuidString, topics: [testTopic]),
@@ -106,7 +102,7 @@ struct KafkaIntegrationTests {
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
-                services: [producer, consumer],
+                services: [consumer],
                 logger: .kafkaTest
             )
             let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -115,15 +111,6 @@ struct KafkaIntegrationTests {
                 // Run Task
                 group.addTask {
                     try await serviceGroup.run()
-                }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: events,
-                        messages: testMessages
-                    )
                 }
 
                 // Consumer Task
@@ -146,8 +133,7 @@ struct KafkaIntegrationTests {
                     }
                 }
 
-                // Wait for Producer Task and Consumer Task to complete
-                try await group.next()
+                // Wait for Consumer Task to complete
                 try await group.next()
                 // Shutdown the serviceGroup
                 await serviceGroup.triggerGracefulShutdown()
@@ -157,11 +143,7 @@ struct KafkaIntegrationTests {
 
     @Test func produceAndConsumeWithAssignedTopicPartition() async throws {
         try await withTestTopic { testTopic in
-            let testMessages = Self.createTestMessages(topic: testTopic, count: 10)
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                configuration: self.producerConfig,
-                logger: .kafkaTest
-            )
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
             var consumerConfig = KafkaConsumerConfiguration(
                 consumptionStrategy: .partition(
@@ -180,7 +162,7 @@ struct KafkaIntegrationTests {
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
-                services: [producer, consumer],
+                services: [consumer],
                 logger: .kafkaTest
             )
             let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -189,15 +171,6 @@ struct KafkaIntegrationTests {
                 // Run Task
                 group.addTask {
                     try await serviceGroup.run()
-                }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: events,
-                        messages: testMessages
-                    )
                 }
 
                 // Consumer Task
@@ -220,8 +193,7 @@ struct KafkaIntegrationTests {
                     }
                 }
 
-                // Wait for Producer Task and Consumer Task to complete
-                try await group.next()
+                // Wait for Consumer Task to complete
                 try await group.next()
                 // Shutdown the serviceGroup
                 await serviceGroup.triggerGracefulShutdown()
@@ -231,11 +203,7 @@ struct KafkaIntegrationTests {
 
     @Test func produceAndConsumeWithScheduleCommit() async throws {
         try await withTestTopic { testTopic in
-            let testMessages = Self.createTestMessages(topic: testTopic, count: 10)
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                configuration: self.producerConfig,
-                logger: .kafkaTest
-            )
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
             var consumerConfig = KafkaConsumerConfiguration(
                 consumptionStrategy: .group(id: UUID().uuidString, topics: [testTopic]),
@@ -251,7 +219,7 @@ struct KafkaIntegrationTests {
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
-                services: [producer, consumer],
+                services: [consumer],
                 logger: .kafkaTest
             )
             let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -260,15 +228,6 @@ struct KafkaIntegrationTests {
                 // Consumer Run Task
                 group.addTask {
                     try await serviceGroup.run()
-                }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: events,
-                        messages: testMessages
-                    )
                 }
 
                 // Consumer Task
@@ -286,8 +245,7 @@ struct KafkaIntegrationTests {
                     #expect(testMessages.count == consumedMessages.count)
                 }
 
-                // Wait for Producer Task and Consumer Task to complete
-                try await group.next()
+                // Wait for Consumer Task to complete
                 try await group.next()
                 // Shutdown the serviceGroup
                 await serviceGroup.triggerGracefulShutdown()
@@ -297,11 +255,7 @@ struct KafkaIntegrationTests {
 
     @Test func produceAndConsumeWithCommit() async throws {
         try await withTestTopic { testTopic in
-            let testMessages = Self.createTestMessages(topic: testTopic, count: 10)
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                configuration: self.producerConfig,
-                logger: .kafkaTest
-            )
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
             var consumerConfig = KafkaConsumerConfiguration(
                 consumptionStrategy: .group(id: UUID().uuidString, topics: [testTopic]),
@@ -317,7 +271,7 @@ struct KafkaIntegrationTests {
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
-                services: [producer, consumer],
+                services: [consumer],
                 logger: .kafkaTest
             )
             let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -326,15 +280,6 @@ struct KafkaIntegrationTests {
                 // Consumer Run Task
                 group.addTask {
                     try await serviceGroup.run()
-                }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: events,
-                        messages: testMessages
-                    )
                 }
 
                 // Consumer Task
@@ -352,8 +297,7 @@ struct KafkaIntegrationTests {
                     #expect(testMessages.count == consumedMessages.count)
                 }
 
-                // Wait for Producer Task and Consumer Task to complete
-                try await group.next()
+                // Wait for Consumer Task to complete
                 try await group.next()
                 // Shutdown the serviceGroup
                 await serviceGroup.triggerGracefulShutdown()
@@ -371,11 +315,7 @@ struct KafkaIntegrationTests {
                 ],
                 count: 10
             )
-
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                configuration: self.producerConfig,
-                logger: .kafkaTest
-            )
+            try await self.produceMessages(messages: testMessages)
 
             var consumerConfig = KafkaConsumerConfiguration(
                 consumptionStrategy: .group(
@@ -394,7 +334,7 @@ struct KafkaIntegrationTests {
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
-                services: [producer, consumer],
+                services: [consumer],
                 logger: .kafkaTest
             )
             let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -403,15 +343,6 @@ struct KafkaIntegrationTests {
                 // Run Task
                 group.addTask {
                     try await serviceGroup.run()
-                }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: events,
-                        messages: testMessages
-                    )
                 }
 
                 // Consumer Task
@@ -436,8 +367,7 @@ struct KafkaIntegrationTests {
                     }
                 }
 
-                // Wait for Producer Task and Consumer Task to complete
-                try await group.next()
+                // Wait for Consumer Task to complete
                 try await group.next()
                 // Shutdown the serviceGroup
                 await serviceGroup.triggerGracefulShutdown()
@@ -447,11 +377,7 @@ struct KafkaIntegrationTests {
 
     @Test func noNewConsumerMessagesAfterGracefulShutdown() async throws {
         try await withTestTopic { testTopic in
-            let testMessages = Self.createTestMessages(topic: testTopic, count: 2)
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                configuration: self.producerConfig,
-                logger: .kafkaTest
-            )
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 2)
 
             var consumerConfig = KafkaConsumerConfiguration(
                 consumptionStrategy: .group(
@@ -468,7 +394,7 @@ struct KafkaIntegrationTests {
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
-                services: [producer, consumer],
+                services: [consumer],
                 logger: .kafkaTest
             )
             let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -478,18 +404,6 @@ struct KafkaIntegrationTests {
                 group.addTask {
                     try await serviceGroup.run()
                 }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: events,
-                        messages: testMessages
-                    )
-                }
-
-                // Wait for Producer Task to complete
-                try await group.next()
 
                 // Verify that we receive the first message
                 let consumerIterator = consumer.messages.makeAsyncIterator()
@@ -516,12 +430,8 @@ struct KafkaIntegrationTests {
 
     @Test func committedOffsetsAreCorrect() async throws {
         try await withTestTopic { testTopic in
-            let testMessages = Self.createTestMessages(topic: testTopic, count: 10)
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
             let firstConsumerOffset = testMessages.count / 2
-            let (producer, acks) = try KafkaProducer.makeProducerWithEvents(
-                configuration: self.producerConfig,
-                logger: .kafkaTest
-            )
 
             // Important: both consumer must have the same group.id
             let uniqueGroupID = UUID().uuidString
@@ -544,7 +454,7 @@ struct KafkaIntegrationTests {
             )
 
             let serviceGroupConfiguration1 = ServiceGroupConfiguration(
-                services: [producer, consumer1],
+                services: [consumer1],
                 logger: .kafkaTest
             )
             let serviceGroup1 = ServiceGroup(configuration: serviceGroupConfiguration1)
@@ -553,15 +463,6 @@ struct KafkaIntegrationTests {
                 // Run Task
                 group.addTask {
                     try await serviceGroup1.run()
-                }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: acks,
-                        messages: testMessages
-                    )
                 }
 
                 // First Consumer Task
@@ -585,8 +486,7 @@ struct KafkaIntegrationTests {
                     }
                 }
 
-                // Wait for Producer Task and Consumer Task to complete
-                try await group.next()
+                // Wait for Consumer Task to complete
                 try await group.next()
                 // Wait for a couple of more run loop iterations.
                 // We do this to process the remaining 5 messages.
@@ -664,42 +564,7 @@ struct KafkaIntegrationTests {
     @Test func duplicatedMessagesOnRebalance() async throws {
         try await withTestTopic(partitions: 12) { testTopic in
             let numOfMessages: UInt = 1000
-            let testMessages = Self.createTestMessages(topic: testTopic, count: numOfMessages)
-            let (producer, acks) = try KafkaProducer.makeProducerWithEvents(
-                configuration: producerConfig,
-                logger: .kafkaTest
-            )
-
-            let producerServiceGroupConfiguration = ServiceGroupConfiguration(
-                services: [producer],
-                gracefulShutdownSignals: [.sigterm, .sigint],
-                logger: .kafkaTest
-            )
-            let producerServiceGroup = ServiceGroup(configuration: producerServiceGroupConfiguration)
-
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                // Run Task
-                group.addTask {
-                    try await producerServiceGroup.run()
-                }
-
-                // Producer Task
-                group.addTask {
-                    try await Self.sendAndAcknowledgeMessages(
-                        producer: producer,
-                        events: acks,
-                        messages: testMessages,
-                        skipConsistencyCheck: true
-                    )
-                }
-
-                // Wait for Producer Task to complete
-                try await group.next()
-                // Shutdown the serviceGroup
-                await producerServiceGroup.triggerGracefulShutdown()
-            }
-
-            // MARK: Consumer
+            let _ = try await self.produceMessages(topic: testTopic, count: numOfMessages)
 
             let uniqueGroupID = UUID().uuidString
 
@@ -812,6 +677,47 @@ struct KafkaIntegrationTests {
     }
 
     // MARK: - Helpers
+
+    func produceMessages(topic: String, count: UInt) async throws -> [KafkaProducerMessage<String, String>] {
+        let testMessages = Self.createTestMessages(topic: topic, count: count)
+        try await self.produceMessages(messages: testMessages)
+        return testMessages
+    }
+
+    func produceMessages(
+        messages: [KafkaProducerMessage<String, String>]
+    ) async throws {
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            configuration: self.producerConfig,
+            logger: .kafkaTest
+        )
+        let serviceGroupConfiguration = ServiceGroupConfiguration(
+            services: [producer],
+            gracefulShutdownSignals: [.sigterm, .sigint],
+            logger: .kafkaTest
+        )
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: messages
+                )
+            }
+            // Wait for Producer Task to complete
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
 
     private static func createTestMessages(
         topic: String,
