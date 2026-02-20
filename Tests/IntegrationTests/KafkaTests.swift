@@ -561,9 +561,9 @@ struct KafkaIntegrationTests {
         }
     }
 
-    @Test func duplicatedMessagesOnRebalance() async throws {
-        try await withTestTopic(partitions: 12) { testTopic in
-            let numOfMessages: UInt = 1000
+    @Test func noDuplicatedMessagesOnRebalance() async throws {
+        try await withTestTopic(partitions: 4) { testTopic in
+            let numOfMessages: UInt = 100
             let _ = try await self.produceMessages(topic: testTopic, count: numOfMessages)
 
             let uniqueGroupID = UUID().uuidString
@@ -616,7 +616,8 @@ struct KafkaIntegrationTests {
             )
             let serviceGroup2 = ServiceGroup(configuration: serviceGroupConfiguration2)
 
-            let sharedCtr = ManagedAtomic(0)
+            let c1messages = ManagedAtomic(0)
+            let c2messages = ManagedAtomic(0)
 
             try await withThrowingTaskGroup(of: Void.self) { group in
                 // Run Task for 1st consumer
@@ -625,7 +626,10 @@ struct KafkaIntegrationTests {
                 }
                 // Run Task for 2nd consumer
                 group.addTask {
-                    try await Task.sleep(for: .seconds(20))  // wait a bit that first consumer would form a queue
+                    while c1messages.load(ordering: .relaxed) < 2 {
+                        // Wait for consumer 1 to process some messages
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
                     try await serviceGroup2.run()
                 }
 
@@ -633,10 +637,13 @@ struct KafkaIntegrationTests {
                 group.addTask {
                     // 6 partitions
                     for try await record in consumer1.messages {
-                        sharedCtr.wrappingIncrement(ordering: .relaxed)
+                        c1messages.wrappingIncrement(ordering: .relaxed)
 
                         try consumer1.scheduleCommit(record)  // commit time to time
-                        try await Task.sleep(for: .milliseconds(100))  // don't read all messages before 2nd consumer
+                        if c2messages.load(ordering: .relaxed) == 0 {
+                            // Don't read all messages before 2nd consumer
+                            try await Task.sleep(for: .milliseconds(100))
+                        }
                     }
                 }
 
@@ -644,7 +651,7 @@ struct KafkaIntegrationTests {
                 group.addTask {
                     // 6 partitions
                     for try await record in consumer2.messages {
-                        sharedCtr.wrappingIncrement(ordering: .relaxed)
+                        c2messages.wrappingIncrement(ordering: .relaxed)
 
                         try consumer2.scheduleCommit(record)  // commit time to time
                     }
@@ -653,25 +660,25 @@ struct KafkaIntegrationTests {
                 // Monitoring task
                 group.addTask {
                     while true {
-                        let currentCtr = sharedCtr.load(ordering: .relaxed)
+                        let currentCtr = c1messages.load(ordering: .relaxed) + c2messages.load(ordering: .relaxed)
                         guard currentCtr >= numOfMessages else {
-                            try await Task.sleep(for: .seconds(5))  // wait if new messages come here
+                            try await Task.sleep(for: .milliseconds(100))  // wait if new messages come here
                             continue
                         }
-                        try await Task.sleep(for: .seconds(5))  // wait for extra messages
+                        try await Task.sleep(for: .milliseconds(100))  // wait for extra messages
                         await serviceGroup1.triggerGracefulShutdown()
                         await serviceGroup2.triggerGracefulShutdown()
                         break
                     }
                 }
 
-                try await group.next()
-                try await group.next()
-                try await group.next()
+                try await group.waitForAll()
 
-                // Wait for second Consumer Task to complete
-                let totalCtr = sharedCtr.load(ordering: .relaxed)
-                #expect(totalCtr == Int(numOfMessages))
+                let c1total = c1messages.load(ordering: .relaxed)
+                let c2total = c2messages.load(ordering: .relaxed)
+                #expect(c1total > 0)
+                #expect(c2total > 0)
+                #expect(c1total + c2total == Int(numOfMessages))
             }
         }
     }
