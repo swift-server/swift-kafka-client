@@ -14,6 +14,7 @@
 import NIOCore
 
 import struct Foundation.Date
+import struct Foundation.UUID
 
 @_spi(Internal)
 public enum _TestMessagesError: Error {
@@ -32,7 +33,7 @@ public func _createTestMessages(
         KafkaProducerMessage(
             topic: topic,
             headers: headers,
-            key: "key",
+            key: UUID().uuidString,
             value: "Hello, World! \($0) - \(Date().description)"
         )
     }
