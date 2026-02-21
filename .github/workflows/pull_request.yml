@@ -10,7 +10,7 @@ on:
 jobs:
   soundness:
     name: Soundness
-    uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
+    uses: swiftlang/github-workflows/.github/workflows/soundness.yml@0.0.7
     with:
       linux_pre_build_command: "apt-get update -y -q && apt-get install -y -q libsasl2-dev libssl-dev"
       license_header_check_project_name: "swift-kafka-client"
