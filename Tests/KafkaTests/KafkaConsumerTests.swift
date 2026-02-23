@@ -40,7 +40,7 @@ import Foundation
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
-struct KafkaConsumerTests {
+@Suite struct KafkaConsumerTests {
     @Test func consumerLog() async throws {
         let recorder = LogEventRecorder()
         let mockLogger = Logger(label: "kafka.test.consumer.log") {

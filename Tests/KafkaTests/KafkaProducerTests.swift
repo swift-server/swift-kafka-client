@@ -39,7 +39,7 @@ import Foundation
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
-struct KafkaProducerTests {
+@Suite struct KafkaProducerTests {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!

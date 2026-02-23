@@ -71,7 +71,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     try await client._deleteTopic(testTopic)
 }
 
-struct KafkaIntegrationTests {
+@Suite struct KafkaIntegrationTests {
     var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress
     var producerConfig: KafkaProducerConfiguration
 
