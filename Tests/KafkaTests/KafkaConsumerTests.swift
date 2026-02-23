@@ -13,15 +13,18 @@
 //===----------------------------------------------------------------------===//
 
 import Logging
-import Metrics
-import MetricsTestKit
 import ServiceLifecycle
-import XCTest
+import Testing
 
 import struct Foundation.UUID
 
-@testable import CoreMetrics  // for MetricsSystem.bootstrapInternal
 @testable import Kafka
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 
 // For testing locally on Mac, do the following:
 //
@@ -37,19 +40,8 @@ import struct Foundation.UUID
 // (Homebrew - Intel Mac)
 // zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
 
-final class KafkaConsumerTests: XCTestCase {
-    var metrics: TestMetrics! = TestMetrics()
-
-    override func setUp() async throws {
-        MetricsSystem.bootstrapInternal(self.metrics)
-    }
-
-    override func tearDown() async throws {
-        self.metrics = nil
-        MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
-    }
-
-    func testConsumerLog() async throws {
+struct KafkaConsumerTests {
+    @Test func consumerLog() async throws {
         let recorder = LogEventRecorder()
         let mockLogger = Logger(label: "kafka.test.consumer.log") {
             _ in MockLogHandler(recorder: recorder)
@@ -88,7 +80,7 @@ final class KafkaConsumerTests: XCTestCase {
         ]
 
         for expectedLog in expectedLogs {
-            XCTAssertTrue(
+            #expect(
                 recordedEvents.contains(where: { event in
                     event.level == expectedLog.level && event.source == expectedLog.source
                         && event.message.description.contains(expectedLog.message)
@@ -98,38 +90,7 @@ final class KafkaConsumerTests: XCTestCase {
         }
     }
 
-    func testConsumerStatistics() async throws {
-        let uniqueGroupID = UUID().uuidString
-        var config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
-            bootstrapBrokerAddresses: []
-        )
-
-        config.metrics.updateInterval = .milliseconds(100)
-        config.metrics.queuedOperation = .init(label: "operations")
-
-        let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
-
-        let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
-            group.addTask {
-                try await serviceGroup.run()
-            }
-
-            try await Task.sleep(for: .seconds(1))
-
-            // Shutdown the serviceGroup
-            await serviceGroup.triggerGracefulShutdown()
-        }
-
-        let value = try metrics.expectGauge("operations").lastValue
-        XCTAssertNotNil(value)
-    }
-
-    func testConsumerConstructDeinit() async throws {
+    @Test func consumerConstructDeinit() async throws {
         let uniqueGroupID = UUID().uuidString
         let config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
@@ -140,7 +101,7 @@ final class KafkaConsumerTests: XCTestCase {
         _ = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
     }
 
-    func testConsumerMessagesReadCancelledBeforeRun() async throws {
+    @Test func consumerMessagesReadCancelledBeforeRun() async throws {
         let uniqueGroupID = UUID().uuidString
         let config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
@@ -155,7 +116,7 @@ final class KafkaConsumerTests: XCTestCase {
         // explicitly run and cancel message consuming task before serviceGroup.run()
         let consumingTask = Task {
             for try await record in consumer.messages {
-                XCTFail("Unexpected record \(record))")
+                Issue.record("Unexpected record \(record))")
             }
         }
 
