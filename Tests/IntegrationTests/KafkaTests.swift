@@ -47,21 +47,13 @@ private let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"
 private let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
 
 func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async throws -> Void) async throws {
-    let bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
-        host: kafkaHost,
-        port: kafkaPort
-    )
+    var basicConfig = KafkaConsumerConfig()
+    basicConfig.groupId = UUID().uuidString
+    basicConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+    basicConfig.brokerAddressFamily = .v4
 
-    var basicConfig = KafkaConsumerConfiguration(
-        consumptionStrategy: .group(id: UUID().uuidString, topics: []),
-        bootstrapBrokerAddresses: [bootstrapBrokerAddress]
-    )
-    basicConfig.broker.addressFamily = .v4
-
-    let client = try RDKafkaClient.makeClient(
-        type: .consumer,
-        configDictionary: basicConfig.dictionary,
-        events: [],
+    let client = try RDKafkaClient.makeClientForTopics(
+        config: basicConfig,
         logger: .kafkaTest
     )
     let testTopic = try await client._createUniqueTopic(partitions: partitions)
@@ -89,15 +81,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         try await withTestTopic { testTopic in
             let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
-            var consumerConfig = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(id: UUID().uuidString, topics: [testTopic]),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-            )
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
-            consumerConfig.broker.addressFamily = .v4
+            consumerConfig.brokerAddressFamily = .v4
 
             let consumer = try KafkaConsumer(
-                configuration: consumerConfig,
+                config: consumerConfig,
                 logger: .kafkaTest
             )
 
@@ -145,19 +136,18 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         try await withTestTopic { testTopic in
             let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
-            var consumerConfig = KafkaConsumerConfiguration(
-                consumptionStrategy: .partition(
-                    KafkaPartition(rawValue: 0),
-                    topic: testTopic,
-                    offset: KafkaOffset(rawValue: 0)
-                ),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .partition(
+                KafkaPartition(rawValue: 0),
+                topic: testTopic,
+                offset: KafkaOffset(rawValue: 0)
             )
+            consumerConfig.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
-            consumerConfig.broker.addressFamily = .v4
+            consumerConfig.brokerAddressFamily = .v4
 
             let consumer = try KafkaConsumer(
-                configuration: consumerConfig,
+                config: consumerConfig,
                 logger: .kafkaTest
             )
 
@@ -205,16 +195,15 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         try await withTestTopic { testTopic in
             let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
-            var consumerConfig = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(id: UUID().uuidString, topics: [testTopic]),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-            )
-            consumerConfig.isAutoCommitEnabled = false
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
+            consumerConfig.enableAutoCommit = false
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
-            consumerConfig.broker.addressFamily = .v4
+            consumerConfig.brokerAddressFamily = .v4
 
             let consumer = try KafkaConsumer(
-                configuration: consumerConfig,
+                config: consumerConfig,
                 logger: .kafkaTest
             )
 
@@ -257,16 +246,15 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         try await withTestTopic { testTopic in
             let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
 
-            var consumerConfig = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(id: UUID().uuidString, topics: [testTopic]),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-            )
-            consumerConfig.isAutoCommitEnabled = false
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
+            consumerConfig.enableAutoCommit = false
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
-            consumerConfig.broker.addressFamily = .v4
+            consumerConfig.brokerAddressFamily = .v4
 
             let consumer = try KafkaConsumer(
-                configuration: consumerConfig,
+                config: consumerConfig,
                 logger: .kafkaTest
             )
 
@@ -317,19 +305,18 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             )
             try await self.produceMessages(messages: testMessages)
 
-            var consumerConfig = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(
-                    id: "produce-and-consume-with-message-headers-group-id",
-                    topics: [testTopic]
-                ),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: "produce-and-consume-with-message-headers-group-id",
+                topics: [testTopic]
             )
-            consumerConfig.isAutoCommitEnabled = false
+            consumerConfig.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
+            consumerConfig.enableAutoCommit = false
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
-            consumerConfig.broker.addressFamily = .v4
+            consumerConfig.brokerAddressFamily = .v4
 
             let consumer = try KafkaConsumer(
-                configuration: consumerConfig,
+                config: consumerConfig,
                 logger: .kafkaTest
             )
 
@@ -379,17 +366,16 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         try await withTestTopic { testTopic in
             let testMessages = try await self.produceMessages(topic: testTopic, count: 2)
 
-            var consumerConfig = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(
-                    id: UUID().uuidString,
-                    topics: [testTopic]
-                ),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: UUID().uuidString,
+                topics: [testTopic]
             )
+            consumerConfig.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
             consumerConfig.autoOffsetReset = .beginning  // Read topic from beginning
 
             let consumer = try KafkaConsumer(
-                configuration: consumerConfig,
+                config: consumerConfig,
                 logger: .kafkaTest
             )
 
@@ -438,18 +424,17 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
             // MARK: First Consumer
 
-            var consumer1Config = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(
-                    id: uniqueGroupID,
-                    topics: [testTopic]
-                ),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            var consumer1Config = KafkaConsumerConfig()
+            consumer1Config.consumptionStrategy = .group(
+                id: uniqueGroupID,
+                topics: [testTopic]
             )
+            consumer1Config.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
             consumer1Config.autoOffsetReset = .beginning  // Read topic from beginning
-            consumer1Config.broker.addressFamily = .v4
+            consumer1Config.brokerAddressFamily = .v4
 
             let consumer1 = try KafkaConsumer(
-                configuration: consumer1Config,
+                config: consumer1Config,
                 logger: .kafkaTest
             )
 
@@ -502,18 +487,17 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             // This means our second consumer should be able to read the second
             // half of messages without any problems.
 
-            var consumer2Config = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(
-                    id: uniqueGroupID,
-                    topics: [testTopic]
-                ),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+            var consumer2Config = KafkaConsumerConfig()
+            consumer2Config.consumptionStrategy = .group(
+                id: uniqueGroupID,
+                topics: [testTopic]
             )
-            consumer2Config.autoOffsetReset = .largest
-            consumer2Config.broker.addressFamily = .v4
+            consumer2Config.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
+            consumer2Config.autoOffsetReset = .latest
+            consumer2Config.brokerAddressFamily = .v4
 
             let consumer2 = try KafkaConsumer(
-                configuration: consumer2Config,
+                config: consumer2Config,
                 logger: .kafkaTest
             )
 
@@ -568,37 +552,35 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
             let uniqueGroupID = UUID().uuidString
 
-            var consumer1Config = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(
-                    id: uniqueGroupID,
-                    topics: [testTopic]
-                ),
-                bootstrapBrokerAddresses: [bootstrapBrokerAddress]
+            var consumer1Config = KafkaConsumerConfig()
+            consumer1Config.consumptionStrategy = .group(
+                id: uniqueGroupID,
+                topics: [testTopic]
             )
+            consumer1Config.bootstrapServers = ["\(bootstrapBrokerAddress)"]
             consumer1Config.autoOffsetReset = .beginning
-            consumer1Config.broker.addressFamily = .v4
+            consumer1Config.brokerAddressFamily = .v4
             consumer1Config.pollInterval = .milliseconds(1)
-            consumer1Config.isAutoCommitEnabled = false
+            consumer1Config.enableAutoCommit = false
 
             let consumer1 = try KafkaConsumer(
-                configuration: consumer1Config,
+                config: consumer1Config,
                 logger: .kafkaTest
             )
 
-            var consumer2Config = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(
-                    id: uniqueGroupID,
-                    topics: [testTopic]
-                ),
-                bootstrapBrokerAddresses: [bootstrapBrokerAddress]
+            var consumer2Config = KafkaConsumerConfig()
+            consumer2Config.consumptionStrategy = .group(
+                id: uniqueGroupID,
+                topics: [testTopic]
             )
+            consumer2Config.bootstrapServers = ["\(bootstrapBrokerAddress)"]
             consumer2Config.autoOffsetReset = .beginning
-            consumer2Config.broker.addressFamily = .v4
+            consumer2Config.brokerAddressFamily = .v4
             consumer2Config.pollInterval = .milliseconds(1)
-            consumer2Config.isAutoCommitEnabled = false
+            consumer2Config.enableAutoCommit = false
 
             let consumer2 = try KafkaConsumer(
-                configuration: consumer2Config,
+                config: consumer2Config,
                 logger: .kafkaTest
             )
 

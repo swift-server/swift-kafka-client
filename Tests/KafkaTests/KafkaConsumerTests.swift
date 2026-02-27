@@ -49,14 +49,14 @@ import Foundation
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
         let uniqueGroupID = UUID().uuidString
-        var config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
-            bootstrapBrokerAddresses: []
+        var config = KafkaConsumerConfig()
+        config.consumptionStrategy = .group(
+            id: uniqueGroupID,
+            topics: ["this-topic-does-not-exist"]
         )
-        config.securityProtocol = .plaintext
-        config.debugOptions = [.all]
+        config.debug = [.all]
 
-        let consumer = try KafkaConsumer(configuration: config, logger: mockLogger)
+        let consumer = try KafkaConsumer(config: config, logger: mockLogger)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -92,23 +92,26 @@ import Foundation
 
     @Test func consumerConstructDeinit() async throws {
         let uniqueGroupID = UUID().uuidString
-        let config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
-            bootstrapBrokerAddresses: []
+        var config = KafkaConsumerConfig()
+        config.groupId = uniqueGroupID
+        config.consumptionStrategy = .group(
+            id: uniqueGroupID,
+            topics: ["this-topic-does-not-exist"]
         )
 
-        _ = try KafkaConsumer(configuration: config, logger: .kafkaTest)  // deinit called before run
-        _ = try KafkaConsumer.makeConsumerWithEvents(configuration: config, logger: .kafkaTest)
+        _ = try KafkaConsumer(config: config, logger: .kafkaTest)  // deinit called before run
+        _ = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: .kafkaTest)
     }
 
     @Test func consumerMessagesReadCancelledBeforeRun() async throws {
         let uniqueGroupID = UUID().uuidString
-        let config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
-            bootstrapBrokerAddresses: []
+        var config = KafkaConsumerConfig()
+        config.consumptionStrategy = .group(
+            id: uniqueGroupID,
+            topics: ["this-topic-does-not-exist"]
         )
 
-        let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
