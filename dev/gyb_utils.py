@@ -91,6 +91,8 @@ class _ConfigLine:
         return f"{swift_name[0].upper()}{swift_name[1:]}"
 
     def _get_swift_name(self, name: str) -> str:
+        if name == "topic.blacklist":  # ignore-unacceptable-language
+            return "topicIgnorelist"
         initial, *rest = name.split(".")
         return initial + "".join(n.capitalize() for n in rest)
 
@@ -113,6 +115,9 @@ class _ConfigLine:
             return value
 
     def _split_description(self, description: str):
+        description = description.replace(
+            "blacklist", "ignore list"  # ignore-unacceptable-language
+        )
         # Drop <br>Type: ...
         description = description.split(" <br>")[0]
 

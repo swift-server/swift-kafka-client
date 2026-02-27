@@ -66,7 +66,7 @@ public struct KafkaConsumerConfig: Sendable {
         % elif rdconf["swiftType"] == "[enum]":
         config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.map(\.rawValue).joined(separator: ",")
         % elif rdconf["swiftType"] == "[String]":
-        config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.joined(separator: ",")
+        config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.joined(separator: ",")${" // ignore-unacceptable-language" if rdconf["name"] == "topic.blacklist" else ""}
         % else:
         config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.description
         % end
@@ -111,7 +111,7 @@ public struct KafkaConsumerConfig: Sendable {
         % elif rdconf["swiftType"] == "Bool":
         self.${rdconf["swiftName"]} = Bool(configDict["${rdconf["name"]}"] ?? "")
         % elif rdconf["swiftType"] == "[String]":
-        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",")
+        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",")${" // ignore-unacceptable-language" if rdconf["name"] == "topic.blacklist" else ""}
         % elif rdconf["swiftType"] == "enum":
         self.${rdconf["swiftName"]} = .init(rawValue: configDict["${rdconf["name"]}"] ?? "")
         % elif rdconf["swiftType"] == "[enum]":
