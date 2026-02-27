@@ -229,6 +229,7 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
+    @available(*, deprecated, message: "Use KafkaConsumerConfig instead")
     public init(
         consumptionStrategy: ConsumptionStrategy,
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
@@ -307,6 +308,22 @@ extension KafkaConsumerConfiguration {
         }
 
         return resultDict
+    }
+}
+
+// MARK: - KafkaConsumerConfiguration + KafkaConsumerConfig Conversion
+
+extension KafkaConsumerConfiguration {
+    /// Convert this configuration to a ``KafkaConsumerConfig``.
+    internal var asKafkaConsumerConfig: KafkaConsumerConfig {
+        var config = KafkaConsumerConfig(self.dictionary)
+
+        // Non-rdkafka properties
+        config.pollInterval = self.pollInterval
+        config.consumptionStrategy = self.consumptionStrategy
+        config.metrics = self.metrics
+
+        return config
     }
 }
 
