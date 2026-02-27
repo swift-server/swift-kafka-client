@@ -142,10 +142,10 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Default: 30000
     public var topicMetadataPropagationMaxMs: Int?
-    /// Topic blacklist, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist.
+    /// Topic ignore list, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist.
     ///
     /// Importance: low
-    public var topicBlacklist: [String]?
+    public var topicIgnorelist: [String]?
     /// A comma-separated list of debug contexts to enable.
     /// Detailed Producer debugging: broker,topic,msg.
     /// Consumer: consumer,cgrp,topic,fetch.
@@ -846,7 +846,7 @@ public struct KafkaConsumerConfig: Sendable {
         config["topic.metadata.refresh.fast.interval.ms"] = self.topicMetadataRefreshFastIntervalMs?.description
         config["topic.metadata.refresh.sparse"] = self.topicMetadataRefreshSparse?.description
         config["topic.metadata.propagation.max.ms"] = self.topicMetadataPropagationMaxMs?.description
-        config["topic.blacklist"] = self.topicBlacklist?.joined(separator: ",")
+        config["topic.blacklist"] = self.topicIgnorelist?.joined(separator: ",")  // ignore-unacceptable-language
         config["debug"] = self.debug?.map(\.rawValue).joined(separator: ",")
         config["socket.timeout.ms"] = self.socketTimeoutMs?.description
         config["socket.send.buffer.bytes"] = self.socketSendBufferBytes?.description
@@ -985,7 +985,7 @@ public struct KafkaConsumerConfig: Sendable {
         self.topicMetadataRefreshFastIntervalMs = Int(configDict["topic.metadata.refresh.fast.interval.ms"] ?? "")
         self.topicMetadataRefreshSparse = Bool(configDict["topic.metadata.refresh.sparse"] ?? "")
         self.topicMetadataPropagationMaxMs = Int(configDict["topic.metadata.propagation.max.ms"] ?? "")
-        self.topicBlacklist = configDict["topic.blacklist"]?.components(separatedBy: ",")
+        self.topicIgnorelist = configDict["topic.blacklist"]?.components(separatedBy: ",") // ignore-unacceptable-language
         self.debug = configDict["debug"]?.components(separatedBy: ",").map { KafkaConfig.Debug(rawValue: $0)! }
         self.socketTimeoutMs = Int(configDict["socket.timeout.ms"] ?? "")
         self.socketSendBufferBytes = Int(configDict["socket.send.buffer.bytes"] ?? "")
