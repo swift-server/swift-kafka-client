@@ -44,15 +44,15 @@ final class KafkaMetricsTests {
     }
     @Test func consumerStatistics() async throws {
         let uniqueGroupID = UUID().uuidString
-        var config = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(id: uniqueGroupID, topics: ["this-topic-does-not-exist"]),
-            bootstrapBrokerAddresses: []
+        var config = KafkaConsumerConfig()
+        config.consumptionStrategy = .group(
+            id: uniqueGroupID,
+            topics: ["this-topic-does-not-exist"]
         )
-
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
 
-        let consumer = try KafkaConsumer(configuration: config, logger: .kafkaTest)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
