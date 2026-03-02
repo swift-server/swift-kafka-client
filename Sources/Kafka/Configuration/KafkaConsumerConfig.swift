@@ -40,17 +40,23 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"client.id"`
+    ///
     /// Default: rdkafka
     public var clientId: String?
     /// Initial list of brokers as a CSV list of broker host or host:port.
     /// The application may also use `rd_kafka_brokers_add()` to add brokers during runtime.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"metadata.broker.list"`
     public var metadataBrokerList: [String]?
     /// Alias for `metadata.broker.list`: Initial list of brokers as a CSV list of broker host or host:port.
     /// The application may also use `rd_kafka_brokers_add()` to add brokers during runtime.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"bootstrap.servers"`
     public var bootstrapServers: [String]?
     /// Maximum Kafka protocol request message size.
     /// Due to differing framing overhead between protocol versions the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests, the broker will enforce the the topic's `max.message.bytes` limit (see Apache Kafka documentation).
@@ -59,12 +65,16 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1000 .. 1000000000
     ///
+    /// librdkafka property name: `"message.max.bytes"`
+    ///
     /// Default: 1000000
     public var messageMaxBytes: Int?
     /// Maximum size for message to be copied to buffer.
     /// Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"message.copy.max.bytes"`
     ///
     /// Default: 65535
     public var messageCopyMaxBytes: Int?
@@ -76,6 +86,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1000 .. 2147483647
     ///
+    /// librdkafka property name: `"receive.message.max.bytes"`
+    ///
     /// Default: 100000000
     public var receiveMessageMaxBytes: Int?
     /// Maximum number of in-flight requests per broker connection.
@@ -85,6 +97,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: low
     ///
     /// Value range: 1 .. 1000000
+    ///
+    /// librdkafka property name: `"max.in.flight.requests.per.connection"`
     ///
     /// Default: 1000000
     public var maxInFlightRequestsPerConnection: Int?
@@ -96,6 +110,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 1000000
     ///
+    /// librdkafka property name: `"max.in.flight"`
+    ///
     /// Default: 1000000
     public var maxInFlight: Int?
     /// Period of time in milliseconds at which topic and broker metadata is refreshed in order to proactively discover any new brokers, topics, partitions or partition leader changes.
@@ -106,6 +122,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: -1 .. 3600000
     ///
+    /// librdkafka property name: `"topic.metadata.refresh.interval.ms"`
+    ///
     /// Default: 300000
     public var topicMetadataRefreshIntervalMs: Int?
     /// Metadata cache max age.
@@ -114,6 +132,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: low
     ///
     /// Value range: 1 .. 86400000
+    ///
+    /// librdkafka property name: `"metadata.max.age.ms"`
     ///
     /// Default: 900000
     public var metadataMaxAgeMs: Int?
@@ -125,11 +145,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 60000
     ///
+    /// librdkafka property name: `"topic.metadata.refresh.fast.interval.ms"`
+    ///
     /// Default: 100
     public var topicMetadataRefreshFastIntervalMs: Int?
     /// Sparse metadata requests (consumes less network bandwidth).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"topic.metadata.refresh.sparse"`
     ///
     /// Default: True
     public var topicMetadataRefreshSparse: Bool?
@@ -140,11 +164,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"topic.metadata.propagation.max.ms"`
+    ///
     /// Default: 30000
     public var topicMetadataPropagationMaxMs: Int?
     /// Topic ignore list, a comma-separated list of regular expressions for matching topic names that should be ignored in broker metadata information as if the topics did not exist.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"topic.blacklist"` // ignore-unacceptable-language
     public var topicIgnorelist: [String]?
     /// A comma-separated list of debug contexts to enable.
     /// Detailed Producer debugging: broker,topic,msg.
@@ -153,6 +181,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: medium
     ///
     /// Values: `"generic"`, `"broker"`, `"topic"`, `"metadata"`, `"feature"`, `"queue"`, `"msg"`, `"protocol"`, `"cgrp"`, `"security"`, `"fetch"`, `"interceptor"`, `"plugin"`, `"consumer"`, `"admin"`, `"eos"`, `"mock"`, `"assignor"`, `"conf"`, `"telemetry"`, `"all"`
+    ///
+    /// librdkafka property name: `"debug"`
     public var debug: [KafkaConfig.Debug]?
     /// Default timeout for network requests.
     /// Producer: ProduceRequests will use the lesser value of `socket.timeout.ms` and remaining `message.timeout.ms` for the first message in the batch.
@@ -163,27 +193,37 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 10 .. 300000
     ///
+    /// librdkafka property name: `"socket.timeout.ms"`
+    ///
     /// Default: 60000
     public var socketTimeoutMs: Int?
     /// Broker socket send buffer size.
     /// System default is used if 0.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"socket.send.buffer.bytes"`
     public var socketSendBufferBytes: Int?
     /// Broker socket receive buffer size.
     /// System default is used if 0.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"socket.receive.buffer.bytes"`
     public var socketReceiveBufferBytes: Int?
     /// Enable TCP keep-alives (SO_KEEPALIVE) on broker sockets.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"socket.keepalive.enable"`
     ///
     /// Default: True
     public var socketKeepaliveEnable: Bool?
     /// Disable the Nagle algorithm (TCP_NODELAY) on broker sockets.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"socket.nagle.disable"`
     ///
     /// Default: True
     public var socketNagleDisable: Bool?
@@ -194,11 +234,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"socket.max.fails"`
+    ///
     /// Default: 1
     public var socketMaxFails: Int?
     /// How long to cache the broker address resolving results (milliseconds).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"broker.address.ttl"`
     ///
     /// Default: 1000
     public var brokerAddressTtl: Int?
@@ -207,6 +251,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: low
     ///
     /// Values: `"any"`, `"v4"`, `"v6"`
+    ///
+    /// librdkafka property name: `"broker.address.family"`
     ///
     /// Default: any
     public var brokerAddressFamily: KafkaConfig.BrokerAddressFamily?
@@ -217,6 +263,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1000 .. 2147483647
     ///
+    /// librdkafka property name: `"socket.connection.setup.timeout.ms"`
+    ///
     /// Default: 30000
     public var socketConnectionSetupTimeoutMs: Int?
     /// Close broker connections after the specified time of inactivity.
@@ -224,6 +272,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// If this property is left at its default value some heuristics are performed to determine a suitable default value, this is currently limited to identifying brokers on Azure (see librdkafka issue #3109 for more info).
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"connections.max.idle.ms"`
     public var connectionsMaxIdleMs: Int?
     /// The initial time to wait before reconnecting to a broker after the connection has been closed.
     /// The time is increased exponentially until `reconnect.backoff.max.ms` is reached.
@@ -232,11 +282,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: medium
     ///
+    /// librdkafka property name: `"reconnect.backoff.ms"`
+    ///
     /// Default: 100
     public var reconnectBackoffMs: Int?
     /// The maximum time to wait before reconnecting to a broker after the connection has been closed.
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"reconnect.backoff.max.ms"`
     ///
     /// Default: 10000
     public var reconnectBackoffMaxMs: Int?
@@ -246,14 +300,20 @@ public struct KafkaConsumerConfig: Sendable {
     /// A value of 0 disables statistics.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"statistics.interval.ms"`
     public var statisticsIntervalMs: Int?
     /// See `rd_kafka_conf_set_events()`.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"enabled_events"`
     public var enabled_events: Int?
     /// Logging level (syslog(3) levels).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"log_level"`
     ///
     /// Default: 6
     public var log_level: Int?
@@ -262,11 +322,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"log.queue"`
+    ///
     /// Default: True
     public var logQueue: Bool?
     /// Print internal thread name in log messages (useful for debugging librdkafka internals).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"log.thread.name"`
     ///
     /// Default: True
     public var logThreadName: Bool?
@@ -275,12 +339,16 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"enable.random.seed"`
+    ///
     /// Default: True
     public var enableRandomSeed: Bool?
     /// Log broker disconnects.
     /// It might be useful to turn this off when interacting with 0.9 brokers with an aggressive `connections.max.idle.ms` value.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"log.connection.close"`
     ///
     /// Default: True
     public var logConnectionClose: Bool?
@@ -290,6 +358,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// The application should mask this signal as an internal signal handler is installed.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"internal.termination.signal"`
     public var internalTerminationSignal: Int?
     /// Request broker's supported API versions to adjust functionality to available protocol features.
     /// If set to false, or the ApiVersionRequest fails, the fallback version `broker.version.fallback` will be used.
@@ -297,6 +367,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// If the request is not supported by (an older) broker the `broker.version.fallback` fallback is used.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"api.version.request"`
     ///
     /// Default: True
     public var apiVersionRequest: Bool?
@@ -306,12 +378,16 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 300000
     ///
+    /// librdkafka property name: `"api.version.request.timeout.ms"`
+    ///
     /// Default: 10000
     public var apiVersionRequestTimeoutMs: Int?
     /// Dictates how long the `broker.version.fallback` fallback is used in the case the ApiVersionRequest fails.
     /// **NOTE**: The ApiVersionRequest is only issued when a new connection to the broker is made (such as after an upgrade).
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"api.version.fallback.ms"`
     public var apiVersionFallbackMs: Int?
     /// Older broker versions (before 0.10.0) provide no way for a client to query for supported protocol features (ApiVersionRequest, see `api.version.request`) making it impossible for the client to know what features it may use.
     /// As a workaround a user may set this property to the expected broker version and the client will automatically adjust its feature set accordingly if the ApiVersionRequest fails (or is disabled).
@@ -320,6 +396,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Any other value >= 0.10, such as 0.10.2.1, enables ApiVersionRequests.
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"broker.version.fallback"`
     ///
     /// Default: 0.10.0
     public var brokerVersionFallback: String?
@@ -331,6 +409,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"allow.auto.create.topics"`
+    ///
     /// Default: True
     public var allowAutoCreateTopics: Bool?
     /// Protocol used to communicate with brokers.
@@ -339,44 +419,62 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: `"plaintext"`, `"ssl"`, `"sasl_plaintext"`, `"sasl_ssl"`
     ///
+    /// librdkafka property name: `"security.protocol"`
+    ///
     /// Default: plaintext
     public var securityProtocol: KafkaConfig.SecurityProtocol?
     /// A cipher suite is a named combination of authentication, encryption, MAC and key exchange algorithm used to negotiate the security settings for a network connection using TLS or SSL network protocol.
     /// See manual page for `ciphers(1)` and `SSL_CTX_set_cipher_list(3).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.cipher.suites"`
     public var sslCipherSuites: String?
     /// The supported-curves extension in the TLS ClientHello message specifies the curves (standard/named, or 'explicit' GF(2^k) or GF(p)) the client is willing to have the server use.
     /// See manual page for `SSL_CTX_set1_curves_list(3)`.
     /// OpenSSL >= 1.0.2 required.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.curves.list"`
     public var sslCurvesList: String?
     /// The client uses the TLS ClientHello signature_algorithms extension to indicate to the server which signature/hash algorithm pairs may be used in digital signatures.
     /// See manual page for `SSL_CTX_set1_sigalgs_list(3)`.
     /// OpenSSL >= 1.0.2 required.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.sigalgs.list"`
     public var sslSigalgsList: String?
     /// Path to client's private key (PEM) used for authentication.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.key.location"`
     public var sslKeyLocation: String?
     /// Private key passphrase (for use with `ssl.key.location` and `set_ssl_cert()`).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.key.password"`
     public var sslKeyPassword: String?
     /// Client's private key string (PEM format) used for authentication.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.key.pem"`
     public var sslKeyPem: String?
     /// Path to client's public key (PEM) used for authentication.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.certificate.location"`
     public var sslCertificateLocation: String?
     /// Client's public key string (PEM format) used for authentication.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.certificate.pem"`
     public var sslCertificatePem: String?
     /// File or directory path to CA certificate(s) for verifying the broker's key.
     /// Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store.
@@ -387,10 +485,14 @@ public struct KafkaConsumerConfig: Sendable {
     /// If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see `OPENSSLDIR` in `openssl version -a`).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.ca.location"`
     public var sslCaLocation: String?
     /// CA certificate string (PEM format) for verifying the broker's key.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.ca.pem"`
     public var sslCaPem: String?
     /// Comma-separated list of Windows Certificate stores to load CA certificates from.
     /// Certificates will be loaded in the same order as stores are specified.
@@ -399,28 +501,40 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"ssl.ca.certificate.stores"`
+    ///
     /// Default: Root
     public var sslCaCertificateStores: String?
     /// Path to CRL for verifying broker's certificate validity.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.crl.location"`
     public var sslCrlLocation: String?
     /// Path to client's keystore (PKCS#12) used for authentication.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.keystore.location"`
     public var sslKeystoreLocation: String?
     /// Client's keystore (PKCS#12) password.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.keystore.password"`
     public var sslKeystorePassword: String?
     /// Comma-separated list of OpenSSL 3.0.x implementation providers.
     /// E.g., "default,legacy".
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.providers"`
     public var sslProviders: String?
     /// OpenSSL engine id is the name used for loading engine.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"ssl.engine.id"`
     ///
     /// Default: dynamic
     public var sslEngineId: String?
@@ -428,6 +542,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// This verification can be extended by the application by implementing a certificate_verify_cb.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"enable.ssl.certificate.verification"`
     ///
     /// Default: True
     public var enableSslCertificateVerification: Bool?
@@ -440,6 +556,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: `"none"`, `"https"`
     ///
+    /// librdkafka property name: `"ssl.endpoint.identification.algorithm"`
+    ///
     /// Default: https
     public var sslEndpointIdentificationAlgorithm: KafkaConfig.SslEndpointIdentificationAlgorithm?
     /// SASL mechanism to use for authentication.
@@ -447,6 +565,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// **NOTE**: Despite the name only one mechanism must be configured.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"sasl.mechanisms"`
     ///
     /// Default: GSSAPI
     public var saslMechanisms: String?
@@ -456,11 +576,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: high
     ///
+    /// librdkafka property name: `"sasl.mechanism"`
+    ///
     /// Default: GSSAPI
     public var saslMechanism: String?
     /// Kerberos principal name that Kafka runs as, not including /hostname@REALM.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.kerberos.service.name"`
     ///
     /// Default: kafka
     public var saslKerberosServiceName: String?
@@ -468,6 +592,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// (Not supported on Windows, will use the logon user's principal).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.kerberos.principal"`
     ///
     /// Default: kafkaclient
     public var saslKerberosPrincipal: String?
@@ -477,6 +603,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: low
     ///
+    /// librdkafka property name: `"sasl.kerberos.kinit.cmd"`
+    ///
     /// Default: kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} \|\| kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}
     public var saslKerberosKinitCmd: String?
     /// Path to Kerberos keytab file.
@@ -484,11 +612,15 @@ public struct KafkaConsumerConfig: Sendable {
     /// -t "%{sasl.kerberos.keytab}"`.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.kerberos.keytab"`
     public var saslKerberosKeytab: String?
     /// Minimum time in milliseconds between key refresh attempts.
     /// Disable automatic key refresh by setting this property to 0.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.kerberos.min.time.before.relogin"`
     ///
     /// Default: 60000
     public var saslKerberosMinTimeBeforeRelogin: Int?
@@ -496,11 +628,15 @@ public struct KafkaConsumerConfig: Sendable {
     /// mechanisms.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"sasl.username"`
     public var saslUsername: String?
     /// SASL password for use with the PLAIN and SASL-SCRAM-.
     /// mechanism.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"sasl.password"`
     public var saslPassword: String?
     /// SASL/OAUTHBEARER configuration.
     /// The format is implementation-dependent and must be parsed accordingly.
@@ -512,11 +648,15 @@ public struct KafkaConsumerConfig: Sendable {
     /// For example: `principal=admin extension_traceId=123`.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.config"`
     public var saslOauthbearerConfig: String?
     /// Enable the builtin unsecure JWT OAUTHBEARER token handler if no oauthbearer_refresh_cb has been set.
     /// This builtin handler should only be used for development or testing, and not in production.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"enable.sasl.oauthbearer.unsecure.jwt"`
     ///
     /// Default: True
     public var enableSaslOauthbearerUnsecureJwt: Bool?
@@ -527,6 +667,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: `"default"`, `"oidc"`
     ///
+    /// librdkafka property name: `"sasl.oauthbearer.method"`
+    ///
     /// Default: default
     public var saslOauthbearerMethod: KafkaConfig.SaslOauthbearerMethod?
     /// Public identifier for the application.
@@ -534,39 +676,53 @@ public struct KafkaConsumerConfig: Sendable {
     /// Only used when `sasl.oauthbearer.method` is set to "oidc".
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.client.id"`
     public var saslOauthbearerClientId: String?
     /// Client secret only known to the application and the authorization server.
     /// This should be a sufficiently random string that is not guessable.
     /// Only used when `sasl.oauthbearer.method` is set to "oidc".
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.client.secret"`
     public var saslOauthbearerClientSecret: String?
     /// Client use this to specify the scope of the access request to the broker.
     /// Only used when `sasl.oauthbearer.method` is set to "oidc".
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.scope"`
     public var saslOauthbearerScope: String?
     /// Allow additional information to be provided to the broker.
     /// Comma-separated list of key=value pairs.
     /// E.g., "supportFeatureX=true,organizationId=sales-emea".Only used when `sasl.oauthbearer.method` is set to "oidc".
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.extensions"`
     public var saslOauthbearerExtensions: String?
     /// OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token.
     /// Only used when `sasl.oauthbearer.method` is set to "oidc".
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.token.endpoint.url"`
     public var saslOauthbearerTokenEndpointUrl: String?
     /// List of plugin libraries to load (; separated).
     /// The library search path is platform dependent (see dlopen(3) for Unix and LoadLibrary() for Windows).
     /// If no filename extension is specified the platform-specific extension (such as .dll or .so) will be appended automatically.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"plugin.library.paths"`
     public var pluginLibraryPaths: String?
     /// Client group id string.
     /// All clients sharing the same group.id belong to the same group.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"group.id"`
     public var groupId: String?
     /// Enable static group membership.
     /// Static group members are able to leave and rejoin a group within the configured `session.timeout.ms` without prompting a group rebalance.
@@ -575,6 +731,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Requires broker version >= 2.3.0.
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"group.instance.id"`
     public var groupInstanceId: String?
     /// The name of one or more partition assignment strategies.
     /// The elected group leader will use a strategy supported by all members of the group to assign partitions to group members.
@@ -583,6 +741,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Available strategies: range, roundrobin, cooperative-sticky.
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"partition.assignment.strategy"`
     ///
     /// Default: range,roundrobin
     public var partitionAssignmentStrategy: String?
@@ -596,6 +756,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 3600000
     ///
+    /// librdkafka property name: `"session.timeout.ms"`
+    ///
     /// Default: 45000
     public var sessionTimeoutMs: Int?
     /// Group session keepalive heartbeat interval.
@@ -604,12 +766,16 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 3600000
     ///
+    /// librdkafka property name: `"heartbeat.interval.ms"`
+    ///
     /// Default: 3000
     public var heartbeatIntervalMs: Int?
     /// Group protocol type for the `classic` group protocol.
     /// NOTE: Currently, the only supported group protocol type is `consumer`.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"group.protocol.type"`
     ///
     /// Default: consumer
     public var groupProtocolType: String?
@@ -622,6 +788,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: `"classic"`, `"consumer"`
     ///
+    /// librdkafka property name: `"group.protocol"`
+    ///
     /// Default: classic
     public var groupProtocol: KafkaConfig.GroupProtocol?
     /// Server side assignor to use.
@@ -630,6 +798,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Default is null.
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"group.remote.assignor"`
     public var groupRemoteAssignor: String?
     /// How often to query for the current client group coordinator.
     /// If the currently assigned coordinator is down the configured query interval will be divided by ten to more quickly recover in case of coordinator reassignment.
@@ -637,6 +807,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: low
     ///
     /// Value range: 1 .. 3600000
+    ///
+    /// librdkafka property name: `"coordinator.query.interval.ms"`
     ///
     /// Default: 600000
     public var coordinatorQueryIntervalMs: Int?
@@ -651,6 +823,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 86400000
     ///
+    /// librdkafka property name: `"max.poll.interval.ms"`
+    ///
     /// Default: 300000
     public var maxPollIntervalMs: Int?
     /// Automatically and periodically commit offsets in the background.
@@ -658,6 +832,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// To circumvent this behaviour set specific start offsets per partition in the call to assign().
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"enable.auto.commit"`
     ///
     /// Default: True
     public var enableAutoCommit: Bool?
@@ -667,12 +843,16 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: medium
     ///
+    /// librdkafka property name: `"auto.commit.interval.ms"`
+    ///
     /// Default: 5000
     public var autoCommitIntervalMs: Int?
     /// Automatically store offset of last message provided to application.
     /// The offset store is an in-memory store of the next offset to (auto-)commit for each partition.
     ///
     /// Importance: high
+    ///
+    /// librdkafka property name: `"enable.auto.offset.store"`
     ///
     /// Default: True
     public var enableAutoOffsetStore: Bool?
@@ -681,6 +861,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: medium
     ///
     /// Value range: 1 .. 10000000
+    ///
+    /// librdkafka property name: `"queued.min.messages"`
     ///
     /// Default: 100000
     public var queuedMinMessages: Int?
@@ -694,11 +876,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 2097151
     ///
+    /// librdkafka property name: `"queued.max.messages.kbytes"`
+    ///
     /// Default: 65536
     public var queuedMaxMessagesKbytes: Int?
     /// Maximum time the broker may wait to fill the Fetch response with fetch.min.bytes of messages.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"fetch.wait.max.ms"`
     ///
     /// Default: 500
     public var fetchWaitMaxMs: Int?
@@ -707,6 +893,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Low values may increase CPU utilization.
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"fetch.queue.backoff.ms"`
     ///
     /// Default: 1000
     public var fetchQueueBackoffMs: Int?
@@ -717,6 +905,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 1000000000
     ///
+    /// librdkafka property name: `"fetch.message.max.bytes"`
+    ///
     /// Default: 1048576
     public var fetchMessageMaxBytes: Int?
     /// Alias for `fetch.message.max.bytes`: Initial maximum number of bytes per topic+partition to request when fetching messages from the broker.
@@ -725,6 +915,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: medium
     ///
     /// Value range: 1 .. 1000000000
+    ///
+    /// librdkafka property name: `"max.partition.fetch.bytes"`
     ///
     /// Default: 1048576
     public var maxPartitionFetchBytes: Int?
@@ -735,6 +927,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: medium
     ///
+    /// librdkafka property name: `"fetch.max.bytes"`
+    ///
     /// Default: 52428800
     public var fetchMaxBytes: Int?
     /// Minimum number of bytes the broker responds with.
@@ -744,11 +938,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Value range: 1 .. 100000000
     ///
+    /// librdkafka property name: `"fetch.min.bytes"`
+    ///
     /// Default: 1
     public var fetchMinBytes: Int?
     /// How long to postpone the next fetch request for a topic+partition in case of a fetch error.
     ///
     /// Importance: medium
+    ///
+    /// librdkafka property name: `"fetch.error.backoff.ms"`
     ///
     /// Default: 500
     public var fetchErrorBackoffMs: Int?
@@ -759,11 +957,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: `"read_uncommitted"`, `"read_committed"`
     ///
+    /// librdkafka property name: `"isolation.level"`
+    ///
     /// Default: read_committed
     public var isolationLevel: KafkaConfig.IsolationLevel?
     /// Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"enable.partition.eof"`
     ///
     /// Default: True
     public var enablePartitionEof: Bool?
@@ -772,6 +974,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Importance: medium
     ///
+    /// librdkafka property name: `"check.crcs"`
+    ///
     /// Default: True
     public var checkCrcs: Bool?
     /// A rack identifier for this client.
@@ -779,12 +983,16 @@ public struct KafkaConsumerConfig: Sendable {
     /// It corresponds with the broker config `broker.rack`.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"client.rack"`
     public var clientRack: String?
     /// The backoff time in milliseconds before retrying a protocol request, this is the first backoff time, and will be backed off exponentially until number of retries is exhausted, and it's capped by retry.backoff.max.ms.
     ///
     /// Importance: medium
     ///
     /// Value range: 1 .. 300000
+    ///
+    /// librdkafka property name: `"retry.backoff.ms"`
     ///
     /// Default: 100
     public var retryBackoffMs: Int?
@@ -793,6 +1001,8 @@ public struct KafkaConsumerConfig: Sendable {
     /// Importance: medium
     ///
     /// Value range: 1 .. 300000
+    ///
+    /// librdkafka property name: `"retry.backoff.max.ms"`
     ///
     /// Default: 1000
     public var retryBackoffMaxMs: Int?
@@ -807,11 +1017,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: `"use_all_dns_ips"`, `"resolve_canonical_bootstrap_servers_only"`
     ///
+    /// librdkafka property name: `"client.dns.lookup"`
+    ///
     /// Default: use_all_dns_ips
     public var clientDnsLookup: KafkaConfig.ClientDnsLookup?
     /// Whether to enable pushing of client metrics to the cluster, if the cluster has a client metrics subscription which matches this client.
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"enable.metrics.push"`
     ///
     /// Default: True
     public var enableMetricsPush: Bool?
@@ -821,11 +1035,15 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: `"smallest"`, `"earliest"`, `"beginning"`, `"largest"`, `"latest"`, `"end"`, `"error"`
     ///
+    /// librdkafka property name: `"auto.offset.reset"`
+    ///
     /// Default: largest
     public var autoOffsetReset: KafkaConfig.AutoOffsetReset?
     /// Maximum number of messages to dispatch in one `rd_kafka_consume_callback*()` call (0 = unlimited).
     ///
     /// Importance: low
+    ///
+    /// librdkafka property name: `"consume.callback.max.messages"`
     public var consumeCallbackMaxMessages: Int?
 
     public init() {}

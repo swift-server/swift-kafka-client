@@ -48,6 +48,8 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Values: ${", ".join(f'`"{v}"`' for v in rdconf["values"])}
     % end
+    ///
+    /// librdkafka property name: `"${rdconf["name"]}"`${" // ignore-unacceptable-language" if rdconf["name"] == "topic.blacklist" else ""}
     % if rdconf["defaultValue"]:
     ///
     /// Default: ${rdconf["defaultValue"]}
