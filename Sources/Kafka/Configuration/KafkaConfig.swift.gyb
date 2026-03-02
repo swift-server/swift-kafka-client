@@ -23,9 +23,11 @@ public enum KafkaConfig {
     % for description_sentence in enum_type["description"]:
     /// ${description_sentence}
     % end
-    public enum ${enum_type["name"]}: String, Sendable {
+    public struct ${enum_type["name"]}: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
     % for value in enum_type["values"]:
-        case `${value}` = "${value}"
+        public static let `${value}` = ${enum_type["name"]}(description: "${value}")
     % end
     }
   % end

@@ -1065,7 +1065,7 @@ public struct KafkaConsumerConfig: Sendable {
         config["topic.metadata.refresh.sparse"] = self.topicMetadataRefreshSparse?.description
         config["topic.metadata.propagation.max.ms"] = self.topicMetadataPropagationMaxMs?.description
         config["topic.blacklist"] = self.topicIgnorelist?.joined(separator: ",")  // ignore-unacceptable-language
-        config["debug"] = self.debug?.map(\.rawValue).joined(separator: ",")
+        config["debug"] = self.debug?.map(\.description).joined(separator: ",")
         config["socket.timeout.ms"] = self.socketTimeoutMs?.description
         config["socket.send.buffer.bytes"] = self.socketSendBufferBytes?.description
         config["socket.receive.buffer.bytes"] = self.socketReceiveBufferBytes?.description
@@ -1073,7 +1073,7 @@ public struct KafkaConsumerConfig: Sendable {
         config["socket.nagle.disable"] = self.socketNagleDisable?.description
         config["socket.max.fails"] = self.socketMaxFails?.description
         config["broker.address.ttl"] = self.brokerAddressTtl?.description
-        config["broker.address.family"] = self.brokerAddressFamily?.rawValue
+        config["broker.address.family"] = self.brokerAddressFamily?.description
         config["socket.connection.setup.timeout.ms"] = self.socketConnectionSetupTimeoutMs?.description
         config["connections.max.idle.ms"] = self.connectionsMaxIdleMs?.description
         config["reconnect.backoff.ms"] = self.reconnectBackoffMs?.description
@@ -1091,7 +1091,7 @@ public struct KafkaConsumerConfig: Sendable {
         config["api.version.fallback.ms"] = self.apiVersionFallbackMs?.description
         config["broker.version.fallback"] = self.brokerVersionFallback?.description
         config["allow.auto.create.topics"] = self.allowAutoCreateTopics?.description
-        config["security.protocol"] = self.securityProtocol?.rawValue
+        config["security.protocol"] = self.securityProtocol?.description
         config["ssl.cipher.suites"] = self.sslCipherSuites?.description
         config["ssl.curves.list"] = self.sslCurvesList?.description
         config["ssl.sigalgs.list"] = self.sslSigalgsList?.description
@@ -1109,7 +1109,7 @@ public struct KafkaConsumerConfig: Sendable {
         config["ssl.providers"] = self.sslProviders?.description
         config["ssl.engine.id"] = self.sslEngineId?.description
         config["enable.ssl.certificate.verification"] = self.enableSslCertificateVerification?.description
-        config["ssl.endpoint.identification.algorithm"] = self.sslEndpointIdentificationAlgorithm?.rawValue
+        config["ssl.endpoint.identification.algorithm"] = self.sslEndpointIdentificationAlgorithm?.description
         config["sasl.mechanisms"] = self.saslMechanisms?.description
         config["sasl.mechanism"] = self.saslMechanism?.description
         config["sasl.kerberos.service.name"] = self.saslKerberosServiceName?.description
@@ -1121,7 +1121,7 @@ public struct KafkaConsumerConfig: Sendable {
         config["sasl.password"] = self.saslPassword?.description
         config["sasl.oauthbearer.config"] = self.saslOauthbearerConfig?.description
         config["enable.sasl.oauthbearer.unsecure.jwt"] = self.enableSaslOauthbearerUnsecureJwt?.description
-        config["sasl.oauthbearer.method"] = self.saslOauthbearerMethod?.rawValue
+        config["sasl.oauthbearer.method"] = self.saslOauthbearerMethod?.description
         config["sasl.oauthbearer.client.id"] = self.saslOauthbearerClientId?.description
         config["sasl.oauthbearer.client.secret"] = self.saslOauthbearerClientSecret?.description
         config["sasl.oauthbearer.scope"] = self.saslOauthbearerScope?.description
@@ -1134,7 +1134,7 @@ public struct KafkaConsumerConfig: Sendable {
         config["session.timeout.ms"] = self.sessionTimeoutMs?.description
         config["heartbeat.interval.ms"] = self.heartbeatIntervalMs?.description
         config["group.protocol.type"] = self.groupProtocolType?.description
-        config["group.protocol"] = self.groupProtocol?.rawValue
+        config["group.protocol"] = self.groupProtocol?.description
         config["group.remote.assignor"] = self.groupRemoteAssignor?.description
         config["coordinator.query.interval.ms"] = self.coordinatorQueryIntervalMs?.description
         config["max.poll.interval.ms"] = self.maxPollIntervalMs?.description
@@ -1150,15 +1150,15 @@ public struct KafkaConsumerConfig: Sendable {
         config["fetch.max.bytes"] = self.fetchMaxBytes?.description
         config["fetch.min.bytes"] = self.fetchMinBytes?.description
         config["fetch.error.backoff.ms"] = self.fetchErrorBackoffMs?.description
-        config["isolation.level"] = self.isolationLevel?.rawValue
+        config["isolation.level"] = self.isolationLevel?.description
         config["enable.partition.eof"] = self.enablePartitionEof?.description
         config["check.crcs"] = self.checkCrcs?.description
         config["client.rack"] = self.clientRack?.description
         config["retry.backoff.ms"] = self.retryBackoffMs?.description
         config["retry.backoff.max.ms"] = self.retryBackoffMaxMs?.description
-        config["client.dns.lookup"] = self.clientDnsLookup?.rawValue
+        config["client.dns.lookup"] = self.clientDnsLookup?.description
         config["enable.metrics.push"] = self.enableMetricsPush?.description
-        config["auto.offset.reset"] = self.autoOffsetReset?.rawValue
+        config["auto.offset.reset"] = self.autoOffsetReset?.description
         config["consume.callback.max.messages"] = self.consumeCallbackMaxMessages?.description
 
         if config["group.id"] == nil, let consumptionStrategy = self.consumptionStrategy?._internal {
@@ -1204,7 +1204,7 @@ public struct KafkaConsumerConfig: Sendable {
         self.topicMetadataRefreshSparse = Bool(configDict["topic.metadata.refresh.sparse"] ?? "")
         self.topicMetadataPropagationMaxMs = Int(configDict["topic.metadata.propagation.max.ms"] ?? "")
         self.topicIgnorelist = configDict["topic.blacklist"]?.components(separatedBy: ",") // ignore-unacceptable-language
-        self.debug = configDict["debug"]?.components(separatedBy: ",").map { KafkaConfig.Debug(rawValue: $0)! }
+        self.debug = configDict["debug"]?.components(separatedBy: ",").map { KafkaConfig.Debug(description: $0) }
         self.socketTimeoutMs = Int(configDict["socket.timeout.ms"] ?? "")
         self.socketSendBufferBytes = Int(configDict["socket.send.buffer.bytes"] ?? "")
         self.socketReceiveBufferBytes = Int(configDict["socket.receive.buffer.bytes"] ?? "")
@@ -1212,7 +1212,7 @@ public struct KafkaConsumerConfig: Sendable {
         self.socketNagleDisable = Bool(configDict["socket.nagle.disable"] ?? "")
         self.socketMaxFails = Int(configDict["socket.max.fails"] ?? "")
         self.brokerAddressTtl = Int(configDict["broker.address.ttl"] ?? "")
-        self.brokerAddressFamily = .init(rawValue: configDict["broker.address.family"] ?? "")
+        self.brokerAddressFamily = configDict["broker.address.family"].map(KafkaConfig.BrokerAddressFamily.init)
         self.socketConnectionSetupTimeoutMs = Int(configDict["socket.connection.setup.timeout.ms"] ?? "")
         self.connectionsMaxIdleMs = Int(configDict["connections.max.idle.ms"] ?? "")
         self.reconnectBackoffMs = Int(configDict["reconnect.backoff.ms"] ?? "")
@@ -1230,7 +1230,7 @@ public struct KafkaConsumerConfig: Sendable {
         self.apiVersionFallbackMs = Int(configDict["api.version.fallback.ms"] ?? "")
         self.brokerVersionFallback = configDict["broker.version.fallback"]
         self.allowAutoCreateTopics = Bool(configDict["allow.auto.create.topics"] ?? "")
-        self.securityProtocol = .init(rawValue: configDict["security.protocol"] ?? "")
+        self.securityProtocol = configDict["security.protocol"].map(KafkaConfig.SecurityProtocol.init)
         self.sslCipherSuites = configDict["ssl.cipher.suites"]
         self.sslCurvesList = configDict["ssl.curves.list"]
         self.sslSigalgsList = configDict["ssl.sigalgs.list"]
@@ -1248,7 +1248,7 @@ public struct KafkaConsumerConfig: Sendable {
         self.sslProviders = configDict["ssl.providers"]
         self.sslEngineId = configDict["ssl.engine.id"]
         self.enableSslCertificateVerification = Bool(configDict["enable.ssl.certificate.verification"] ?? "")
-        self.sslEndpointIdentificationAlgorithm = .init(rawValue: configDict["ssl.endpoint.identification.algorithm"] ?? "")
+        self.sslEndpointIdentificationAlgorithm = configDict["ssl.endpoint.identification.algorithm"].map(KafkaConfig.SslEndpointIdentificationAlgorithm.init)
         self.saslMechanisms = configDict["sasl.mechanisms"]
         self.saslMechanism = configDict["sasl.mechanism"]
         self.saslKerberosServiceName = configDict["sasl.kerberos.service.name"]
@@ -1260,7 +1260,7 @@ public struct KafkaConsumerConfig: Sendable {
         self.saslPassword = configDict["sasl.password"]
         self.saslOauthbearerConfig = configDict["sasl.oauthbearer.config"]
         self.enableSaslOauthbearerUnsecureJwt = Bool(configDict["enable.sasl.oauthbearer.unsecure.jwt"] ?? "")
-        self.saslOauthbearerMethod = .init(rawValue: configDict["sasl.oauthbearer.method"] ?? "")
+        self.saslOauthbearerMethod = configDict["sasl.oauthbearer.method"].map(KafkaConfig.SaslOauthbearerMethod.init)
         self.saslOauthbearerClientId = configDict["sasl.oauthbearer.client.id"]
         self.saslOauthbearerClientSecret = configDict["sasl.oauthbearer.client.secret"]
         self.saslOauthbearerScope = configDict["sasl.oauthbearer.scope"]
@@ -1273,7 +1273,7 @@ public struct KafkaConsumerConfig: Sendable {
         self.sessionTimeoutMs = Int(configDict["session.timeout.ms"] ?? "")
         self.heartbeatIntervalMs = Int(configDict["heartbeat.interval.ms"] ?? "")
         self.groupProtocolType = configDict["group.protocol.type"]
-        self.groupProtocol = .init(rawValue: configDict["group.protocol"] ?? "")
+        self.groupProtocol = configDict["group.protocol"].map(KafkaConfig.GroupProtocol.init)
         self.groupRemoteAssignor = configDict["group.remote.assignor"]
         self.coordinatorQueryIntervalMs = Int(configDict["coordinator.query.interval.ms"] ?? "")
         self.maxPollIntervalMs = Int(configDict["max.poll.interval.ms"] ?? "")
@@ -1289,15 +1289,15 @@ public struct KafkaConsumerConfig: Sendable {
         self.fetchMaxBytes = Int(configDict["fetch.max.bytes"] ?? "")
         self.fetchMinBytes = Int(configDict["fetch.min.bytes"] ?? "")
         self.fetchErrorBackoffMs = Int(configDict["fetch.error.backoff.ms"] ?? "")
-        self.isolationLevel = .init(rawValue: configDict["isolation.level"] ?? "")
+        self.isolationLevel = configDict["isolation.level"].map(KafkaConfig.IsolationLevel.init)
         self.enablePartitionEof = Bool(configDict["enable.partition.eof"] ?? "")
         self.checkCrcs = Bool(configDict["check.crcs"] ?? "")
         self.clientRack = configDict["client.rack"]
         self.retryBackoffMs = Int(configDict["retry.backoff.ms"] ?? "")
         self.retryBackoffMaxMs = Int(configDict["retry.backoff.max.ms"] ?? "")
-        self.clientDnsLookup = .init(rawValue: configDict["client.dns.lookup"] ?? "")
+        self.clientDnsLookup = configDict["client.dns.lookup"].map(KafkaConfig.ClientDnsLookup.init)
         self.enableMetricsPush = Bool(configDict["enable.metrics.push"] ?? "")
-        self.autoOffsetReset = .init(rawValue: configDict["auto.offset.reset"] ?? "")
+        self.autoOffsetReset = configDict["auto.offset.reset"].map(KafkaConfig.AutoOffsetReset.init)
         self.consumeCallbackMaxMessages = Int(configDict["consume.callback.max.messages"] ?? "")
     }
 }

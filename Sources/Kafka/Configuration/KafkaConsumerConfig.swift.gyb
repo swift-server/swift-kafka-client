@@ -64,9 +64,9 @@ public struct KafkaConsumerConfig: Sendable {
 
       % for rdconf in consumer_librdkafka_configs:
         % if rdconf["swiftType"] == "enum":
-        config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.rawValue
+        config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.description
         % elif rdconf["swiftType"] == "[enum]":
-        config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.map(\.rawValue).joined(separator: ",")
+        config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.map(\.description).joined(separator: ",")
         % elif rdconf["swiftType"] == "[String]":
         config["${rdconf["name"]}"] = self.${rdconf["swiftName"]}?.joined(separator: ",")${" // ignore-unacceptable-language" if rdconf["name"] == "topic.blacklist" else ""}
         % else:
@@ -115,9 +115,9 @@ public struct KafkaConsumerConfig: Sendable {
         % elif rdconf["swiftType"] == "[String]":
         self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",")${" // ignore-unacceptable-language" if rdconf["name"] == "topic.blacklist" else ""}
         % elif rdconf["swiftType"] == "enum":
-        self.${rdconf["swiftName"]} = .init(rawValue: configDict["${rdconf["name"]}"] ?? "")
+        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"].map(KafkaConfig.${rdconf["swiftEnumName"]}.init)
         % elif rdconf["swiftType"] == "[enum]":
-        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",").map { ${f"KafkaConfig.{rdconf["swiftEnumName"]}"}(rawValue: $0)! }
+        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",").map { ${f"KafkaConfig.{rdconf["swiftEnumName"]}"}(description: $0) }
         % end
       % end
     }

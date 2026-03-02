@@ -24,87 +24,105 @@ public enum KafkaConfig {
     /// A comma-separated list of debug contexts to enable.
     /// Detailed Producer debugging: broker,topic,msg.
     /// Consumer: consumer,cgrp,topic,fetch.
-    public enum Debug: String, Sendable {
-        case `generic` = "generic"
-        case `broker` = "broker"
-        case `topic` = "topic"
-        case `metadata` = "metadata"
-        case `feature` = "feature"
-        case `queue` = "queue"
-        case `msg` = "msg"
-        case `protocol` = "protocol"
-        case `cgrp` = "cgrp"
-        case `security` = "security"
-        case `fetch` = "fetch"
-        case `interceptor` = "interceptor"
-        case `plugin` = "plugin"
-        case `consumer` = "consumer"
-        case `admin` = "admin"
-        case `eos` = "eos"
-        case `mock` = "mock"
-        case `assignor` = "assignor"
-        case `conf` = "conf"
-        case `telemetry` = "telemetry"
-        case `all` = "all"
+    public struct Debug: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `generic` = Debug(description: "generic")
+        public static let `broker` = Debug(description: "broker")
+        public static let `topic` = Debug(description: "topic")
+        public static let `metadata` = Debug(description: "metadata")
+        public static let `feature` = Debug(description: "feature")
+        public static let `queue` = Debug(description: "queue")
+        public static let `msg` = Debug(description: "msg")
+        public static let `protocol` = Debug(description: "protocol")
+        public static let `cgrp` = Debug(description: "cgrp")
+        public static let `security` = Debug(description: "security")
+        public static let `fetch` = Debug(description: "fetch")
+        public static let `interceptor` = Debug(description: "interceptor")
+        public static let `plugin` = Debug(description: "plugin")
+        public static let `consumer` = Debug(description: "consumer")
+        public static let `admin` = Debug(description: "admin")
+        public static let `eos` = Debug(description: "eos")
+        public static let `mock` = Debug(description: "mock")
+        public static let `assignor` = Debug(description: "assignor")
+        public static let `conf` = Debug(description: "conf")
+        public static let `telemetry` = Debug(description: "telemetry")
+        public static let `all` = Debug(description: "all")
     }
     /// Allowed broker IP address families: any, v4, v6.
-    public enum BrokerAddressFamily: String, Sendable {
-        case `any` = "any"
-        case `v4` = "v4"
-        case `v6` = "v6"
+    public struct BrokerAddressFamily: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `any` = BrokerAddressFamily(description: "any")
+        public static let `v4` = BrokerAddressFamily(description: "v4")
+        public static let `v6` = BrokerAddressFamily(description: "v6")
     }
     /// Protocol used to communicate with brokers.
-    public enum SecurityProtocol: String, Sendable {
-        case `plaintext` = "plaintext"
-        case `ssl` = "ssl"
-        case `sasl_plaintext` = "sasl_plaintext"
-        case `sasl_ssl` = "sasl_ssl"
+    public struct SecurityProtocol: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `plaintext` = SecurityProtocol(description: "plaintext")
+        public static let `ssl` = SecurityProtocol(description: "ssl")
+        public static let `sasl_plaintext` = SecurityProtocol(description: "sasl_plaintext")
+        public static let `sasl_ssl` = SecurityProtocol(description: "sasl_ssl")
     }
     /// Endpoint identification algorithm to validate broker hostname using broker certificate.
     /// https - Server (broker) hostname verification as specified in RFC2818.
     /// none - No endpoint verification.
     /// OpenSSL >= 1.0.2 required.
-    public enum SslEndpointIdentificationAlgorithm: String, Sendable {
-        case `none` = "none"
-        case `https` = "https"
+    public struct SslEndpointIdentificationAlgorithm: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `none` = SslEndpointIdentificationAlgorithm(description: "none")
+        public static let `https` = SslEndpointIdentificationAlgorithm(description: "https")
     }
     /// Set to "default" or "oidc" to control which login method to be used.
     /// If set to "oidc", the following properties must also be be specified: `sasl.oauthbearer.client.id`, `sasl.oauthbearer.client.secret`, and `sasl.oauthbearer.token.endpoint.url`.
-    public enum SaslOauthbearerMethod: String, Sendable {
-        case `default` = "default"
-        case `oidc` = "oidc"
+    public struct SaslOauthbearerMethod: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `default` = SaslOauthbearerMethod(description: "default")
+        public static let `oidc` = SaslOauthbearerMethod(description: "oidc")
     }
     /// Group protocol to use.
     /// Use `classic` for the original protocol and `consumer` for the new protocol introduced in KIP-848.
     /// Available protocols: classic or consumer.
     /// Default is `classic`, but will change to `consumer` in next releases.
-    public enum GroupProtocol: String, Sendable {
-        case `classic` = "classic"
-        case `consumer` = "consumer"
+    public struct GroupProtocol: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `classic` = GroupProtocol(description: "classic")
+        public static let `consumer` = GroupProtocol(description: "consumer")
     }
     /// Controls how to read messages written transactionally: `read_committed` - only return transactional messages which have been committed.
     /// `read_uncommitted` - return all messages, even transactional messages which have been aborted.
-    public enum IsolationLevel: String, Sendable {
-        case `read_uncommitted` = "read_uncommitted"
-        case `read_committed` = "read_committed"
+    public struct IsolationLevel: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `read_uncommitted` = IsolationLevel(description: "read_uncommitted")
+        public static let `read_committed` = IsolationLevel(description: "read_committed")
     }
     /// compression codec to use for compressing message sets.
     /// This is the default value for all topics, may be overridden by the topic configuration property `compression.codec`.
-    public enum CompressionCodec: String, Sendable {
-        case `none` = "none"
-        case `gzip` = "gzip"
-        case `snappy` = "snappy"
-        case `lz4` = "lz4"
-        case `zstd` = "zstd"
+    public struct CompressionCodec: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `none` = CompressionCodec(description: "none")
+        public static let `gzip` = CompressionCodec(description: "gzip")
+        public static let `snappy` = CompressionCodec(description: "snappy")
+        public static let `lz4` = CompressionCodec(description: "lz4")
+        public static let `zstd` = CompressionCodec(description: "zstd")
     }
     /// Alias for `compression.codec`: compression codec to use for compressing message sets.
     /// This is the default value for all topics, may be overridden by the topic configuration property `compression.codec`.
-    public enum CompressionType: String, Sendable {
-        case `none` = "none"
-        case `gzip` = "gzip"
-        case `snappy` = "snappy"
-        case `lz4` = "lz4"
-        case `zstd` = "zstd"
+    public struct CompressionType: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `none` = CompressionType(description: "none")
+        public static let `gzip` = CompressionType(description: "gzip")
+        public static let `snappy` = CompressionType(description: "snappy")
+        public static let `lz4` = CompressionType(description: "lz4")
+        public static let `zstd` = CompressionType(description: "zstd")
     }
     /// Controls how the client uses DNS lookups.
     /// By default, when the lookup returns multiple IP addresses for a hostname, they will all be attempted for connection before the connection is considered failed.
@@ -112,18 +130,24 @@ public enum KafkaConfig {
     /// If the value is set to `resolve_canonical_bootstrap_servers_only`, each entry will be resolved and expanded into a list of canonical names.
     /// **WARNING**: `resolve_canonical_bootstrap_servers_only` must only be used with `GSSAPI` (Kerberos) as `sasl.mechanism`, as it's the only purpose of this configuration value.
     /// **NOTE**: Default here is different from the Java client's default behavior, which connects only to the first IP address returned for a hostname.
-    public enum ClientDnsLookup: String, Sendable {
-        case `use_all_dns_ips` = "use_all_dns_ips"
-        case `resolve_canonical_bootstrap_servers_only` = "resolve_canonical_bootstrap_servers_only"
+    public struct ClientDnsLookup: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `use_all_dns_ips` = ClientDnsLookup(description: "use_all_dns_ips")
+        public static let `resolve_canonical_bootstrap_servers_only` = ClientDnsLookup(
+            description: "resolve_canonical_bootstrap_servers_only"
+        )
     }
     /// Action to take when there is no initial offset in offset store or the desired offset is out of range: 'smallest','earliest' - automatically reset the offset to the smallest offset, 'largest','latest' - automatically reset the offset to the largest offset, 'error' - trigger an error (ERR__AUTO_OFFSET_RESET) which is retrieved by consuming messages and checking 'message->err'.
-    public enum AutoOffsetReset: String, Sendable {
-        case `smallest` = "smallest"
-        case `earliest` = "earliest"
-        case `beginning` = "beginning"
-        case `largest` = "largest"
-        case `latest` = "latest"
-        case `end` = "end"
-        case `error` = "error"
+    public struct AutoOffsetReset: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `smallest` = AutoOffsetReset(description: "smallest")
+        public static let `earliest` = AutoOffsetReset(description: "earliest")
+        public static let `beginning` = AutoOffsetReset(description: "beginning")
+        public static let `largest` = AutoOffsetReset(description: "largest")
+        public static let `latest` = AutoOffsetReset(description: "latest")
+        public static let `end` = AutoOffsetReset(description: "end")
+        public static let `error` = AutoOffsetReset(description: "error")
     }
 }
