@@ -80,24 +80,24 @@ public final class KafkaProducer: Service, Sendable {
     private let stateMachine: NIOLockedValueBox<StateMachine>
 
     /// The configuration object of the producer client.
-    private let configuration: KafkaProducerConfiguration
+    private let config: KafkaProducerConfig
     /// Topic configuration that is used when a new topic has to be created by the producer.
     private let topicConfiguration: KafkaTopicConfiguration
 
     // Private initializer, use factory method or convenience init to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
     ///
-    /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.///
-    /// - Parameter configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.
+    /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
-        configuration: KafkaProducerConfiguration,
+        config: KafkaProducerConfig,
         topicConfiguration: KafkaTopicConfiguration
     ) {
         self.stateMachine = stateMachine
-        self.configuration = configuration
+        self.config = config
         self.topicConfiguration = topicConfiguration
     }
 
@@ -106,24 +106,24 @@ public final class KafkaProducer: Service, Sendable {
     /// This creates a producer without listening for events.
     ///
     /// - Parameters:
-    ///     - configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     ///     - logger: A logger.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public convenience init(
-        configuration: KafkaProducerConfiguration,
+        config: KafkaProducerConfig,
         logger: Logger
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         var subscribedEvents: [RDKafkaEvent] = [.log]  // No .deliveryReport here!
 
-        if configuration.metrics.enabled {
+        if config.metrics.enabled {
             subscribedEvents.append(.statistics)
         }
 
         let client = try RDKafkaClient.makeClient(
             type: .producer,
-            configDictionary: configuration.dictionary,
+            configDictionary: config.config,
             events: subscribedEvents,
             logger: logger
         )
@@ -137,8 +137,8 @@ public final class KafkaProducer: Service, Sendable {
 
         self.init(
             stateMachine: stateMachine,
-            configuration: configuration,
-            topicConfiguration: configuration.topicConfiguration
+            config: config,
+            topicConfiguration: config.topicConfiguration
         )
     }
 
@@ -150,34 +150,34 @@ public final class KafkaProducer: Service, Sendable {
     /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
     ///
     /// - Parameters:
-    ///     - configuration: The ``KafkaProducerConfiguration`` for configuring the ``KafkaProducer``.
+    ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     ///     - logger: A logger.
     /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaProducerEvents``
     /// `AsyncSequence` used for receiving message events.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public static func makeProducerWithEvents(
-        configuration: KafkaProducerConfiguration,
+        config: KafkaProducerConfig,
         logger: Logger
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
         // Listen to statistics events when statistics enabled
-        if configuration.metrics.enabled {
+        if config.metrics.enabled {
             subscribedEvents.append(.statistics)
         }
 
         let client = try RDKafkaClient.makeClient(
             type: .producer,
-            configDictionary: configuration.dictionary,
+            configDictionary: config.config,
             events: subscribedEvents,
             logger: logger
         )
 
         let producer = KafkaProducer(
             stateMachine: stateMachine,
-            configuration: configuration,
-            topicConfiguration: configuration.topicConfiguration
+            config: config,
+            topicConfiguration: config.topicConfiguration
         )
 
         // Note:
@@ -203,6 +203,28 @@ public final class KafkaProducer: Service, Sendable {
         return (producer, eventsSequence)
     }
 
+    @available(*, deprecated, message: "Use init(config:logger:) instead")
+    public convenience init(
+        configuration: KafkaProducerConfiguration,
+        logger: Logger
+    ) throws {
+        try self.init(
+            config: configuration.asKafkaProducerConfig,
+            logger: logger
+        )
+    }
+
+    @available(*, deprecated, message: "Use makeProducerWithEvents(config:logger:) instead")
+    public static func makeProducerWithEvents(
+        configuration: KafkaProducerConfiguration,
+        logger: Logger
+    ) throws -> (KafkaProducer, KafkaProducerEvents) {
+        try Self.makeProducerWithEvents(
+            config: configuration.asKafkaProducerConfig,
+            logger: logger
+        )
+    }
+
     /// Start the ``KafkaProducer``.
     ///
     /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
@@ -226,21 +248,21 @@ public final class KafkaProducer: Service, Sendable {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        self.configuration.metrics.update(with: statistics)
+                        self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
                         _ = source?.yield(.deliveryReports(reports))
                     }
                 }
-                try await Task.sleep(for: self.configuration.pollInterval)
+                try await Task.sleep(for: self.config.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
                 precondition(
-                    0...Int(Int32.max) ~= self.configuration.flushTimeoutMilliseconds,
+                    0...Int(Int32.max) ~= self.config.shutdownFlushTimeoutMs,
                     "Flush timeout outside of valid range \(0...Int32.max)"
                 )
                 defer {  // we should finish source indefinetely of exception in client.flush()
                     source?.finish()
                 }
-                try await client.flush(timeoutMilliseconds: Int32(self.configuration.flushTimeoutMilliseconds))
+                try await client.flush(timeoutMilliseconds: Int32(self.config.shutdownFlushTimeoutMs))
                 return
             case .terminatePollLoop:
                 return
