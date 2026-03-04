@@ -67,5 +67,45 @@ import Testing
         #expect(
             config.config == configuration.dictionary
         )
+        #expect(config.pollInterval == configuration.pollInterval)
+        #expect(config.metrics.enabled == configuration.metrics.enabled)
+        #expect(config.consumptionStrategy == configuration.consumptionStrategy)
+    }
+
+    @Test func producerConfig() async throws {
+        var config = KafkaProducerConfig()
+        config.bootstrapServers = ["a.example.com:9052", "b.example.com:9052"]
+        config.debug = [.consumer, .broker]
+        config.enableIdempotence = true
+        config.socketTimeoutMs = 5000
+        config.pollInterval = .milliseconds(100)
+
+        #expect(
+            config.config == [
+                "bootstrap.servers": "a.example.com:9052,b.example.com:9052",
+                "debug": "consumer,broker",
+                "enable.idempotence": "true",
+                "socket.timeout.ms": "5000",
+            ]
+        )
+    }
+
+    @available(*, deprecated, message: "Use KafkaProducerConfig instead")
+    @Test func testProducerConfigFromConfiguration() async throws {
+        var configuration = KafkaProducerConfiguration(
+            bootstrapBrokerAddresses: [.init(host: "example.com", port: 9052)]
+        )
+        configuration.isIdempotenceEnabled = true
+        configuration.debugOptions = [.broker, .metadata]
+
+        let config = configuration.asKafkaProducerConfig
+        var configDict = configuration.dictionary
+        // Fix Int and Double string representation mismatch
+        configDict["queue.buffering.max.ms"] = "5.0"
+
+        #expect(config.config == configDict)
+        #expect(config.pollInterval == configuration.pollInterval)
+        #expect(config.shutdownFlushTimeoutMs == configuration.flushTimeoutMilliseconds)
+        #expect(config.metrics.enabled == configuration.metrics.enabled)
     }
 }
