@@ -99,12 +99,10 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
     /// - Parameter newMessageID: ID that was assigned to the `message`.
-    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
     func produce<Key, Value>(
         message: KafkaProducerMessage<Key, Value>,
         newMessageID: UInt,
-        topicConfiguration: KafkaTopicConfiguration,
         topicHandles: RDKafkaTopicHandles
     ) throws {
         precondition(
@@ -115,8 +113,7 @@ public final class RDKafkaClient: Sendable {
         // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
         // Returns 0 on success, error code otherwise.
         let error = try topicHandles.withTopicHandlePointer(
-            topic: message.topic,
-            topicConfiguration: topicConfiguration
+            topic: message.topic
         ) { topicHandle in
             try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
                 if message.headers.isEmpty {

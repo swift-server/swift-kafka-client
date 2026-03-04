@@ -20,6 +20,7 @@ struct RDKafkaTopicConfig {
     /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used to initialize the `rd_kafka_topic_conf_t` object.
     /// - Returns: An `OpaquePointer` pointing to the newly created `rd_kafka_topic_conf_t` object in memory.
     /// - Throws: A ``KafkaError`` if setting a config value failed.
+    @available(*, deprecated, message: "Use KafkaProducerConfig topic configuration properties instead")
     static func createFrom(topicConfiguration: KafkaTopicConfiguration) throws -> OpaquePointer {
         let configPointer: OpaquePointer = rd_kafka_topic_conf_new()
         for (key, value) in topicConfiguration.dictionary {

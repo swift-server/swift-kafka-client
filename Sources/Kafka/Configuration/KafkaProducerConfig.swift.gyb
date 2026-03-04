@@ -34,12 +34,6 @@ public struct KafkaProducerConfig: Sendable {
     /// Default: `10000`
     public var shutdownFlushTimeoutMs: Int = 10000
 
-    /// If the ``isAutoCreateTopicsEnabled`` option is set to `true`,
-    /// the broker will automatically generate topics when producing data to non-existent topics.
-    /// The configuration specified in this ``KafkaTopicConfiguration`` will be applied to the newly created topic.
-    /// Default: See default values of ``KafkaTopicConfiguration``
-    public var topicConfiguration: KafkaTopicConfiguration = .init()
-
     /// Producer metrics configuration.
     public var metrics: KafkaConfiguration.ProducerMetrics = .init()
 

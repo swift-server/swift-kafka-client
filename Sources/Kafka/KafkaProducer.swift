@@ -67,8 +67,8 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 // MARK: - KafkaProducer
 
 /// Send messages to the Kafka cluster.
-/// - Note: When messages get published to a non-existent topic, a new topic is created using the ``KafkaTopicConfiguration``
-/// configuration object (only works if server has ``KafkaProducerConfiguration/isAutoCreateTopicsEnabled`` property set to `true`).
+/// - Note: When messages get published to a non-existent topic, a new topic is created using the default topic configuration
+///   (based on topic-level configuration properties set on `KafkaProducerConfig`).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
         KafkaProducerEvent,
@@ -81,8 +81,6 @@ public final class KafkaProducer: Service, Sendable {
 
     /// The configuration object of the producer client.
     private let config: KafkaProducerConfig
-    /// Topic configuration that is used when a new topic has to be created by the producer.
-    private let topicConfiguration: KafkaTopicConfiguration
 
     // Private initializer, use factory method or convenience init to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
@@ -93,12 +91,10 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
-        config: KafkaProducerConfig,
-        topicConfiguration: KafkaTopicConfiguration
+        config: KafkaProducerConfig
     ) {
         self.stateMachine = stateMachine
         self.config = config
-        self.topicConfiguration = topicConfiguration
     }
 
     /// Initialize a new ``KafkaProducer``.
@@ -137,8 +133,7 @@ public final class KafkaProducer: Service, Sendable {
 
         self.init(
             stateMachine: stateMachine,
-            config: config,
-            topicConfiguration: config.topicConfiguration
+            config: config
         )
     }
 
@@ -176,8 +171,7 @@ public final class KafkaProducer: Service, Sendable {
 
         let producer = KafkaProducer(
             stateMachine: stateMachine,
-            config: config,
-            topicConfiguration: config.topicConfiguration
+            config: config
         )
 
         // Note:
@@ -296,7 +290,6 @@ public final class KafkaProducer: Service, Sendable {
             try client.produce(
                 message: message,
                 newMessageID: newMessageID,
-                topicConfiguration: self.topicConfiguration,
                 topicHandles: topicHandles
             )
             return KafkaProducerMessageID(rawValue: newMessageID)
