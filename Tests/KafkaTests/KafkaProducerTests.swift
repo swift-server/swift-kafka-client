@@ -44,7 +44,7 @@ import Foundation
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
     let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
     var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress
-    var config: KafkaProducerConfiguration
+    var config: KafkaProducerConfig
 
     init() throws {
         self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
@@ -52,15 +52,14 @@ import Foundation
             port: self.kafkaPort
         )
 
-        self.config = KafkaProducerConfiguration(
-            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-        )
-        self.config.broker.addressFamily = .v4
+        self.config = KafkaProducerConfig()
+        self.config.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
+        self.config.brokerAddressFamily = .v4
     }
 
     @Test func send() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            configuration: self.config,
+            config: self.config,
             logger: .kafkaTest
         )
 
@@ -121,7 +120,7 @@ import Foundation
 
     @Test func sendEmptyMessage() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            configuration: self.config,
+            config: self.config,
             logger: .kafkaTest
         )
 
@@ -177,7 +176,7 @@ import Foundation
 
     @Test func sendTwoTopics() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            configuration: self.config,
+            config: self.config,
             logger: .kafkaTest
         )
 
@@ -252,9 +251,9 @@ import Foundation
         }
 
         // Set no bootstrap servers to trigger librdkafka configuration warning
-        let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+        let config = KafkaProducerConfig()
 
-        let producer = try KafkaProducer(configuration: config, logger: mockLogger)
+        let producer = try KafkaProducer(config: config, logger: mockLogger)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -288,7 +287,7 @@ import Foundation
 
     @Test func sendFailsAfterTerminatingAcknowledgementSequence() async throws {
         let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            configuration: self.config,
+            config: self.config,
             logger: .kafkaTest
         )
 
@@ -333,7 +332,7 @@ import Foundation
     @Test func noMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
         var events: KafkaProducerEvents?
-        (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
+        (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
         _ = events
 
         weak var producerCopy: KafkaProducer?
@@ -360,19 +359,19 @@ import Foundation
     }
 
     @Test func producerConstructDeinit() async throws {
-        let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+        let config = KafkaProducerConfig()
 
         // deinit called before run
-        _ = try KafkaProducer(configuration: config, logger: .kafkaTest)
+        _ = try KafkaProducer(config: config, logger: .kafkaTest)
 
         // deinit called before run
-        _ = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest)
+        _ = try KafkaProducer.makeProducerWithEvents(config: config, logger: .kafkaTest)
     }
 
     @Test func producerEventsReadCancelledBeforeRun() async throws {
-        let config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
+        let config = KafkaProducerConfig()
 
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: config, logger: .kafkaTest)
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)

@@ -39,36 +39,31 @@ internal final class RDKafkaTopicHandles: Sendable {
     /// Scoped accessor that enables safe access to the pointer of the topic's handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter topic: The name of the topic that is addressed.
-    /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
     /// - Parameter body: The closure will use the topic handle pointer.
     @discardableResult
     func withTopicHandlePointer<T>(
         topic: String,
-        topicConfiguration: KafkaTopicConfiguration,
         _ body: (OpaquePointer) throws -> T
     ) throws -> T {
-        let topicHandle = try self.createTopicHandleIfNeeded(topic: topic, topicConfiguration: topicConfiguration)
+        let topicHandle = try self.createTopicHandleIfNeeded(topic: topic)
         return try body(topicHandle)
     }
 
     /// Check `topicHandles` for a handle matching the topic name and create a new handle if needed.
     /// - Parameter topic: The name of the topic that is addressed.
     private func createTopicHandleIfNeeded(
-        topic: String,
-        topicConfiguration: KafkaTopicConfiguration
+        topic: String
     ) throws -> OpaquePointer {
         try self._internal.withLockedValue { dict in
             if let handle = dict[topic] {
                 return handle.pointer
             } else {
-                let rdTopicConf = try RDKafkaTopicConfig.createFrom(topicConfiguration: topicConfiguration)
                 let newHandle = self.client.withKafkaHandlePointer { kafkaHandle in
                     rd_kafka_topic_new(
                         kafkaHandle,
                         topic,
-                        rdTopicConf
+                        nil
                     )
-                    // rd_kafka_topic_new deallocates topic config object
                 }
 
                 guard let newHandle else {

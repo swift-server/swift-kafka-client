@@ -168,6 +168,7 @@ public struct KafkaProducerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
+    @available(*, deprecated, message: "Use KafkaProducerConfig instead")
     public init(
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]
     ) {
@@ -235,3 +236,19 @@ extension KafkaProducerConfiguration {
 // MARK: - KafkaProducerConfiguration + Sendable
 
 extension KafkaProducerConfiguration: Sendable {}
+
+// MARK: - KafkaProducerConfiguration + KafkaProducerConfig Conversion
+
+extension KafkaProducerConfiguration {
+    /// Convert this configuration to a ``KafkaProducerConfig``.
+    internal var asKafkaProducerConfig: KafkaProducerConfig {
+        var config = KafkaProducerConfig(self.dictionary)
+
+        // Non-rdkafka properties
+        config.pollInterval = self.pollInterval
+        config.shutdownFlushTimeoutMs = self.flushTimeoutMilliseconds
+        config.metrics = self.metrics
+
+        return config
+    }
+}

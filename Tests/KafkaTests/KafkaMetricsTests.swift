@@ -79,15 +79,14 @@ final class KafkaMetricsTests {
             port: self.kafkaPort
         )
 
-        var config = KafkaProducerConfiguration(
-            bootstrapBrokerAddresses: [bootstrapBrokerAddress]
-        )
-        config.broker.addressFamily = .v4
+        var config = KafkaProducerConfig()
+        config.bootstrapServers = ["\(bootstrapBrokerAddress)"]
+        config.brokerAddressFamily = .v4
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
 
         let producer = try KafkaProducer(
-            configuration: config,
+            config: config,
             logger: .kafkaTest
         )
 
