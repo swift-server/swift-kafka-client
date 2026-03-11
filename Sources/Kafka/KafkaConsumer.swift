@@ -202,7 +202,7 @@ public final class KafkaConsumer: Sendable, Service {
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
         }
-        if config.metrics.enabled {
+        if config.metricsEnabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -245,7 +245,7 @@ public final class KafkaConsumer: Sendable, Service {
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
         }
-        if config.metrics.enabled {
+        if config.metricsEnabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -378,7 +378,7 @@ public final class KafkaConsumer: Sendable, Service {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        self.config.metrics.update(with: statistics)
+                        self.config.metrics?.update(with: statistics)
                     default:
                         break
                     }
