@@ -247,8 +247,31 @@ It has source files that are excluded in `Package.swift`.
 
 ## Development Setup
 
-We provide a Docker environment for this package. This will automatically start a local Kafka server and run the package tests.
+### Running tests locally
 
-```bash
-docker-compose -f docker/docker-compose.yaml run test
+Integration tests require a running Kafka broker which can be started with Docker:
+
+```shell
+docker run -d -p 9092:9092 apache/kafka:3.9.1
+
+# After starting the container run the tests
+swift test
+```
+
+### Running tests in Docker
+
+We provide a Docker environment for this package. This will automatically start a local Kafka server and run the tests:
+
+```shell
+docker compose -f docker/docker-compose.yaml run client swift test
+```
+
+Alternatively you can use a `Makefile` target:
+```shell
+make docker-test
+```
+
+You can specify Swift compiler version using `SWIFT_VERSION` environment variable:
+```shell
+SWIFT_VERSION=6.2 make docker-test
 ```

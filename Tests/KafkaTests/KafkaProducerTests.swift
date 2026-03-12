@@ -25,20 +25,6 @@ import FoundationEssentials
 import Foundation
 #endif
 
-// For testing locally on Mac, do the following:
-//
-// 1. Install Kafka and Zookeeper using homebrew
-//
-// https://medium.com/@Ankitthakur/apache-kafka-installation-on-mac-using-homebrew-a367cdefd273
-//
-// 2. Start Zookeeper & Kafka Server
-//
-// (Homebrew - Apple Silicon)
-// zookeeper-server-start /opt/homebrew/etc/kafka/zookeeper.properties & kafka-server-start /opt/homebrew/etc/kafka/server.properties
-//
-// (Homebrew - Intel Mac)
-// zookeeper-server-start /usr/local/etc/kafka/zookeeper.properties & kafka-server-start /usr/local/etc/kafka/server.properties
-
 @Suite struct KafkaProducerTests {
     // Read environment variables to get information about the test Kafka server
     let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
