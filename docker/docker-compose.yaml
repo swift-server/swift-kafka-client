@@ -1,82 +1,46 @@
-# this file is not designed to be run directly
-# instead, use the docker-compose.<os>.<swift> files
-# eg docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.2204.57.yaml run test
-version: "3.9"
+name: swift-kafka-client
+
 services:
-
-  zookeeper:
-    image: ubuntu/zookeeper
-
   kafka:
-    image: ubuntu/kafka
-    depends_on:
-      - zookeeper
+    image: apache/kafka:3.9.1
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "kafka-broker-api-versions.sh",
+          "--bootstrap-server=localhost:9092",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
-      ZOOKEEPER_HOST: zookeeper
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
-  swift-kafka-client:
-    depends_on:
-      - kafka
+  client:
+    image: swift-kafka-client:${IMAGE_TAG:-local-${SWIFT_VERSION:-6.0}-${UBUNTU_VERSION:-jammy}-${IMAGE_PLATFORM:-amd64}}
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    environment:
-      KAFKA_HOST: kafka
-
-  runtime-setup:
-    image: swift-kafka-client:default
-    build:
-      context: .
-      dockerfile: Dockerfile
-
-  common: &common
-    image: swift-kafka-client:default
-    depends_on: [runtime-setup]
+      args:
+        ubuntu_version: "${UBUNTU_VERSION:-jammy}"
+        swift_version: "${SWIFT_VERSION:-6.0}"
+      platforms:
+        - linux/${IMAGE_PLATFORM:-amd64}
+    depends_on: [kafka]
     volumes:
-      - ~/.ssh:/root/.ssh
       - ..:/swift-kafka-client:z
     working_dir: /swift-kafka-client
-
-  soundness:
-    <<: *common
-    command: /bin/bash -xcl "swift -version && uname -a && ./scripts/soundness.sh"
-
-  build:
-    <<: *common
-    environment: []
-    command: /bin/bash -cl "swift build"
-
-  test:
-    <<: *common
-    depends_on: [kafka, runtime-setup]
-    environment:
-      SWIFT_VERSION: 5.7
-      KAFKA_HOST: kafka
-    command: >
-      /bin/bash -xcl "
-        swift build --build-tests $${SANITIZER_ARG-} && \
-        swift $${SWIFT_TEST_VERB-test} $${WARN_AS_ERROR_ARG-} $${SANITIZER_ARG-} $${IMPORT_CHECK_ARG-} $${STRICT_CONCURRENCY_ARG-}
-      "
-
-  benchmark:
-    <<: *common
-    depends_on: [kafka, runtime-setup]
     environment:
       KAFKA_HOST: kafka
-    command: >
-      /bin/bash -xcl "
-        cd Benchmarks && swift package --disable-sandbox benchmark
-      "
-
-  update-benchmark-baseline:
-    <<: *common
-    depends_on: [kafka, runtime-setup]
-    environment:
-      KAFKA_HOST: kafka
-    command: /bin/bash -xcl "cd Benchmarks && swift package --disable-sandbox --scratch-path .build/$${SWIFT_VERSION-}/ --allow-writing-to-package-directory benchmark --format metricP90AbsoluteThresholds --path Thresholds/$${SWIFT_VERSION-}/ --no-progress"
-
-  # util
-
-  shell:
-    <<: *common
-    entrypoint: /bin/bash
+      KAFKA_PORT: 9092
+    command: ["/bin/bash"]
