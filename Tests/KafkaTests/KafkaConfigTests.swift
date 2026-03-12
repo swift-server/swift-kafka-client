@@ -68,7 +68,6 @@ import Testing
             config.config == configuration.dictionary
         )
         #expect(config.pollInterval == configuration.pollInterval)
-        #expect(config.metrics.enabled == configuration.metrics.enabled)
         #expect(config.consumptionStrategy == configuration.consumptionStrategy)
     }
 
@@ -106,6 +105,5 @@ import Testing
         #expect(config.config == configDict)
         #expect(config.pollInterval == configuration.pollInterval)
         #expect(config.shutdownFlushTimeoutMs == configuration.flushTimeoutMilliseconds)
-        #expect(config.metrics.enabled == configuration.metrics.enabled)
     }
 }

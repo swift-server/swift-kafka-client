@@ -36,8 +36,14 @@ public struct KafkaProducerConfig: Sendable {
     /// Default: `10000`
     public var shutdownFlushTimeoutMs: Int = 10000
 
-    /// Producer metrics configuration.
-    public var metrics: KafkaConfiguration.ProducerMetrics = .init()
+    /// Metrics configuration. Set to a ``KafkaMetrics`` instance to enable
+    /// automatic publishing of librdkafka statistics as swift-metrics gauges.
+    /// Requires ``statisticsIntervalMs`` to be configured.
+    public var metrics: KafkaMetrics?
+
+    internal var metricsEnabled: Bool {
+        ((self.statisticsIntervalMs ?? 0) > 0) && (self.metrics != nil)
+    }
 
     // MARK: - Properties generated from librdkafka config list
 
@@ -1146,13 +1152,6 @@ public struct KafkaProducerConfig: Sendable {
         config["delivery.timeout.ms"] = self.deliveryTimeoutMs?.description
         config["partitioner"] = self.partitioner?.description
         config["compression.level"] = self.compressionLevel?.description
-
-        if config["statistics.interval.ms"] == nil,
-            metrics.enabled,
-            let updateInterval = metrics.updateInterval
-        {
-            config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
-        }
 
         return config
     }

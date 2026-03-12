@@ -31,8 +31,14 @@ public struct KafkaConsumerConfig: Sendable {
     /// The strategy used for consuming messages.
     public var consumptionStrategy: KafkaConsumerConfiguration.ConsumptionStrategy?
 
-    /// Consumer metrics configuration.
-    public var metrics: KafkaConfiguration.ConsumerMetrics = .init()
+    /// Metrics configuration. Set to a ``KafkaMetrics`` instance to enable
+    /// automatic publishing of librdkafka statistics as swift-metrics gauges.
+    /// Requires ``statisticsIntervalMs`` to be configured.
+    public var metrics: KafkaMetrics?
+
+    internal var metricsEnabled: Bool {
+        ((self.statisticsIntervalMs ?? 0) > 0) && (self.metrics != nil)
+    }
 
     // MARK: - Properties generated from librdkafka config list
 
@@ -1176,13 +1182,6 @@ public struct KafkaConsumerConfig: Sendable {
             case .group(let groupID, _):
                 config["group.id"] = groupID
             }
-        }
-
-        if config["statistics.interval.ms"] == nil,
-            metrics.enabled,
-            let updateInterval = metrics.updateInterval
-        {
-            config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 
         return config
