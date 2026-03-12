@@ -10,6 +10,7 @@
 
 SWIFT_BUILD_ARGS := -Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error
 SWIFT_TEST_ARGS := $(SWIFT_BUILD_ARGS)
+COMPOSE_CMD := docker compose -f docker/docker-compose.yaml
 
 .PHONY: gyb
 gyb:
@@ -25,3 +26,11 @@ build: gyb
 .PHONY: test
 test:
 	swift test $(SWIFT_TEST_ARGS)
+
+.PHONY: docker-build
+docker-build:
+	$(COMPOSE_CMD) run --rm --no-deps client swift build $(SWIFT_BUILD_ARGS)
+
+.PHONY: docker-test
+docker-test:
+	$(COMPOSE_CMD) run --rm client swift test $(SWIFT_TEST_ARGS)
