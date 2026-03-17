@@ -27,6 +27,10 @@ build: gyb
 test:
 	swift test $(SWIFT_TEST_ARGS)
 
+.PHONY: benchmark
+benchmark:
+	cd Benchmarks && swift package --disable-sandbox benchmark
+
 .PHONY: docker-build
 docker-build:
 	$(COMPOSE_CMD) run --rm --no-deps client swift build $(SWIFT_BUILD_ARGS)
@@ -34,3 +38,7 @@ docker-build:
 .PHONY: docker-test
 docker-test:
 	$(COMPOSE_CMD) run --rm client swift test $(SWIFT_TEST_ARGS)
+
+.PHONY: docker-benchmark
+docker-benchmark:
+	$(COMPOSE_CMD) run --rm client bash -c 'cd Benchmarks && swift package --disable-sandbox benchmark'
