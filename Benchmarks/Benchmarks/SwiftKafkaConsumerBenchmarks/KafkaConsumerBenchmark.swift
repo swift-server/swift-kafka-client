@@ -22,7 +22,7 @@ import ServiceLifecycle
 import struct Foundation.Date
 import struct Foundation.UUID
 
-let benchmarks = {
+let benchmarks: @Sendable () -> Void = {
     var uniqueTestTopic: String!
     let messageCount: UInt = 1000
 
@@ -57,27 +57,26 @@ let benchmarks = {
 
     Benchmark.teardown = {
         if let uniqueTestTopic {
-            try deleteTopic(uniqueTestTopic)
+            try await deleteTopic(uniqueTestTopic)
         }
         uniqueTestTopic = nil
     }
 
     Benchmark("SwiftKafkaConsumer_basic_consumer_messages_\(messageCount)") { benchmark in
         let uniqueGroupID = UUID().uuidString
-        var consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(
-                id: uniqueGroupID,
-                topics: [uniqueTestTopic]
-            ),
-            bootstrapBrokerAddresses: [brokerAddress]
+        var consumerConfig = KafkaConsumerConfig()
+        consumerConfig.consumptionStrategy = .group(
+            id: uniqueGroupID,
+            topics: [uniqueTestTopic]
         )
+        consumerConfig.bootstrapServers = [bootstrapServer]
         consumerConfig.autoOffsetReset = .beginning
-        consumerConfig.broker.addressFamily = .v4
+        consumerConfig.brokerAddressFamily = .v4
         // We must specify it at least 10 otherwise CI will timeout
         consumerConfig.pollInterval = .milliseconds(1)
 
         let consumer = try KafkaConsumer(
-            configuration: consumerConfig,
+            config: consumerConfig,
             logger: .perfLogger
         )
 
@@ -106,19 +105,17 @@ let benchmarks = {
                 let totalStartDate = Date.timeIntervalSinceReferenceDate
                 var totalBytes: UInt64 = 0
 
-                try await benchmark.withMeasurement {
-                    for try await record in consumer.messages {
-                        ctr += 1
-                        totalBytes += UInt64(record.value.readableBytes)
+                for try await record in consumer.messages {
+                    ctr += 1
+                    totalBytes += UInt64(record.value.readableBytes)
 
-                        tmpCtr += 1
-                        if tmpCtr >= interval {
-                            benchLog("read \(ctr * 100 / UInt64(messageCount))%")
-                            tmpCtr = 0
-                        }
-                        if ctr >= messageCount {
-                            break
-                        }
+                    tmpCtr += 1
+                    if tmpCtr >= interval {
+                        benchLog("read \(ctr * 100 / UInt64(messageCount))%")
+                        tmpCtr = 0
+                    }
+                    if ctr >= messageCount {
+                        break
                     }
                 }
 
@@ -138,21 +135,20 @@ let benchmarks = {
 
     Benchmark("SwiftKafkaConsumer_with_offset_commit_messages_\(messageCount)") { benchmark in
         let uniqueGroupID = UUID().uuidString
-        var consumerConfig = KafkaConsumerConfiguration(
-            consumptionStrategy: .group(
-                id: uniqueGroupID,
-                topics: [uniqueTestTopic]
-            ),
-            bootstrapBrokerAddresses: [brokerAddress]
+        var consumerConfig = KafkaConsumerConfig()
+        consumerConfig.consumptionStrategy = .group(
+            id: uniqueGroupID,
+            topics: [uniqueTestTopic]
         )
+        consumerConfig.bootstrapServers = [bootstrapServer]
         consumerConfig.autoOffsetReset = .beginning
-        consumerConfig.broker.addressFamily = .v4
-        consumerConfig.isAutoCommitEnabled = false
+        consumerConfig.brokerAddressFamily = .v4
+        consumerConfig.enableAutoCommit = false
         // We must specify it at least 10 otherwise CI will timeout
         consumerConfig.pollInterval = .milliseconds(1)
 
         let consumer = try KafkaConsumer(
-            configuration: consumerConfig,
+            config: consumerConfig,
             logger: .perfLogger
         )
 
@@ -181,21 +177,19 @@ let benchmarks = {
                 let totalStartDate = Date.timeIntervalSinceReferenceDate
                 var totalBytes: UInt64 = 0
 
-                try await benchmark.withMeasurement {
-                    for try await record in consumer.messages {
-                        try consumer.scheduleCommit(record)
+                for try await record in consumer.messages {
+                    try consumer.scheduleCommit(record)
 
-                        ctr += 1
-                        totalBytes += UInt64(record.value.readableBytes)
+                    ctr += 1
+                    totalBytes += UInt64(record.value.readableBytes)
 
-                        tmpCtr += 1
-                        if tmpCtr >= interval {
-                            benchLog("read \(ctr * 100 / UInt64(messageCount))%")
-                            tmpCtr = 0
-                        }
-                        if ctr >= messageCount {
-                            break
-                        }
+                    tmpCtr += 1
+                    if tmpCtr >= interval {
+                        benchLog("read \(ctr * 100 / UInt64(messageCount))%")
+                        tmpCtr = 0
+                    }
+                    if ctr >= messageCount {
+                        break
                     }
                 }
 
@@ -217,7 +211,7 @@ let benchmarks = {
         let uniqueGroupID = UUID().uuidString
         let rdKafkaConsumerConfig: [String: String] = [
             "group.id": uniqueGroupID,
-            "bootstrap.servers": "\(brokerAddress.host):\(brokerAddress.port)",
+            "bootstrap.servers": bootstrapServer,
             "broker.address.family": "v4",
             "auto.offset.reset": "beginning",
         ]
@@ -287,7 +281,7 @@ let benchmarks = {
         let uniqueGroupID = UUID().uuidString
         let rdKafkaConsumerConfig: [String: String] = [
             "group.id": uniqueGroupID,
-            "bootstrap.servers": "\(brokerAddress.host):\(brokerAddress.port)",
+            "bootstrap.servers": bootstrapServer,
             "broker.address.family": "v4",
             "auto.offset.reset": "beginning",
             "enable.auto.commit": "false",

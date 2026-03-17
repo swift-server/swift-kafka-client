@@ -21,10 +21,8 @@ import ServiceLifecycle
 import class Foundation.ProcessInfo
 import struct Foundation.UUID
 
-let brokerAddress = KafkaConfiguration.BrokerAddress(
-    host: ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost",
-    port: 9092
-)
+let kafkaHost = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
+let bootstrapServer = "\(kafkaHost):9092"
 
 // swift-format-ignore: DontRepeatTypeInStaticProperties
 extension Logger {
@@ -42,30 +40,28 @@ func benchLog(_ log: @autoclosure () -> Logger.Message) {
     #endif
 }
 
-func createTopic(partitions: Int32) throws -> String {
-    var basicConfig = KafkaConsumerConfiguration(
-        consumptionStrategy: .group(id: "no-group", topics: []),
-        bootstrapBrokerAddresses: [brokerAddress]
-    )
-    basicConfig.broker.addressFamily = .v4
+func createTopic(partitions: Int32) async throws -> String {
+    var basicConfig = KafkaConsumerConfig()
+    basicConfig.consumptionStrategy = .group(id: "no-group", topics: [])
+    basicConfig.bootstrapServers = [bootstrapServer]
+    basicConfig.brokerAddressFamily = .v4
 
     let client = try RDKafkaClient.makeClientForTopics(config: basicConfig, logger: .perfLogger)
-    return try client._createUniqueTopic(partitions: partitions, timeout: 10 * 1000)
+    return try await client._createUniqueTopic(partitions: partitions)
 }
 
-func deleteTopic(_ topic: String) throws {
-    var basicConfig = KafkaConsumerConfiguration(
-        consumptionStrategy: .group(id: "no-group", topics: []),
-        bootstrapBrokerAddresses: [brokerAddress]
-    )
-    basicConfig.broker.addressFamily = .v4
+func deleteTopic(_ topic: String) async throws {
+    var basicConfig = KafkaConsumerConfig()
+    basicConfig.consumptionStrategy = .group(id: "no-group", topics: [])
+    basicConfig.bootstrapServers = [bootstrapServer]
+    basicConfig.brokerAddressFamily = .v4
 
     let client = try RDKafkaClient.makeClientForTopics(config: basicConfig, logger: .perfLogger)
-    try client._deleteTopic(topic, timeout: 10 * 1000)
+    try await client._deleteTopic(topic)
 }
 
 func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = .perfLogger) async throws -> String {
-    let uniqueTestTopic = try createTopic(partitions: partitions)
+    let uniqueTestTopic = try await createTopic(partitions: partitions)
 
     benchLog("Created topic \(uniqueTestTopic)")
 
@@ -73,10 +69,11 @@ func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = 
     let testMessages = _createTestMessages(topic: uniqueTestTopic, count: messagesCount)
     benchLog("Finish generating \(messagesCount) messages")
 
-    var producerConfig = KafkaProducerConfiguration(bootstrapBrokerAddresses: [brokerAddress])
-    producerConfig.broker.addressFamily = .v4
+    var producerConfig = KafkaProducerConfig()
+    producerConfig.bootstrapServers = [bootstrapServer]
+    producerConfig.brokerAddressFamily = .v4
 
-    let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: logger)
+    let (producer, acks) = try KafkaProducer.makeProducerWithEvents(config: producerConfig, logger: logger)
 
     let serviceGroupConfiguration = ServiceGroupConfiguration(
         services: [producer],
