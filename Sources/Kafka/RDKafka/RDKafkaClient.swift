@@ -292,17 +292,6 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
-    /// Describes a rebalance event from `librdkafka`.
-    struct RebalanceEvent: Sendable {
-        enum Action: Sendable {
-            case assign
-            case revoke
-        }
-
-        let action: Action
-        let partitions: [KafkaTopicPartition]
-    }
-
     /// Typed event returned by ``producerEventPoll(maxEvents:)``.
     /// Contains only events relevant to a Kafka producer.
     enum ProducerPollEvent {
@@ -313,15 +302,13 @@ public final class RDKafkaClient: Sendable {
     /// Typed event returned by ``consumerEventPoll(maxEvents:)``.
     /// Contains only events relevant to a Kafka consumer.
     enum ConsumerPollEvent {
-        case rebalance(RebalanceEvent)
         case statistics(RDKafkaStatistics)
     }
 
     /// Poll for producer-relevant events from the `librdkafka` event queue.
     ///
     /// Drains the queue, handling internal events (log, offset commit) and
-    /// returning only events relevant to a producer. Consumer-only events
-    /// (e.g., rebalance) are handled internally but never surfaced.
+    /// returning only events relevant to a producer.
     ///
     /// - Parameter maxEvents: Maximum number of events to serve in one invocation.
     func producerEventPoll(maxEvents: Int = 100) -> [ProducerPollEvent] {
@@ -349,9 +336,6 @@ public final class RDKafkaClient: Sendable {
                 self.handleLogEvent(event)
             case .offsetCommit:
                 self.handleOffsetCommitEvent(event)
-            case .rebalance:
-                // Should never occur on a producer queue, but handle defensively.
-                _ = self.handleRebalanceEvent(event)
             case .none:
                 return events
             default:
@@ -383,10 +367,6 @@ public final class RDKafkaClient: Sendable {
             }
 
             switch eventType {
-            case .rebalance:
-                if let rebalanceEvent = self.handleRebalanceEvent(event) {
-                    events.append(.rebalance(rebalanceEvent))
-                }
             case .statistics:
                 if let statistics = self.handleStatistics(event) {
                     events.append(.statistics(statistics))
@@ -517,105 +497,6 @@ public final class RDKafkaClient: Sendable {
             return
         }
         actualCallback(.success(()))
-    }
-
-    /// Handle event of type `RDKafkaEvent.rebalance`.
-    ///
-    /// When the application subscribes to `RD_KAFKA_EVENT_REBALANCE` via the event API,
-    /// it takes responsibility for calling `rd_kafka_assign` / `rd_kafka_incremental_assign` /
-    /// `rd_kafka_incremental_unassign` in response to rebalance events.
-    ///
-    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    /// - Returns: A ``RebalanceEvent``, or `nil` if the event could not be processed.
-    private func handleRebalanceEvent(_ event: OpaquePointer?) -> RebalanceEvent? {
-        let error = rd_kafka_event_error(event)
-        let partitionList = rd_kafka_event_topic_partition_list(event)
-
-        // Determine the rebalance protocol (EAGER or COOPERATIVE)
-        let protocolCStr = rd_kafka_rebalance_protocol(self.kafkaHandle.pointer)
-        let isCooperative = protocolCStr.map { String(cString: $0) == "COOPERATIVE" } ?? false
-
-        let action: RebalanceEvent.Action
-        switch error {
-        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
-            action = .assign
-            if isCooperative {
-                let err = rd_kafka_incremental_assign(self.kafkaHandle.pointer, partitionList)
-                if let err {
-                    let code = rd_kafka_error_code(err)
-                    if code != RD_KAFKA_RESP_ERR_NO_ERROR {
-                        self.logger.error(
-                            "Incremental assign failed",
-                            metadata: ["error": "\(String(cString: rd_kafka_err2str(code)))"]
-                        )
-                    }
-                    rd_kafka_error_destroy(err)
-                }
-            } else {
-                let result = rd_kafka_assign(self.kafkaHandle.pointer, partitionList)
-                if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-                    self.logger.error(
-                        "Assign failed",
-                        metadata: ["error": "\(String(cString: rd_kafka_err2str(result)))"]
-                    )
-                }
-            }
-
-        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
-            action = .revoke
-            if isCooperative {
-                let err = rd_kafka_incremental_unassign(self.kafkaHandle.pointer, partitionList)
-                if let err {
-                    let code = rd_kafka_error_code(err)
-                    if code != RD_KAFKA_RESP_ERR_NO_ERROR {
-                        self.logger.error(
-                            "Incremental unassign failed",
-                            metadata: ["error": "\(String(cString: rd_kafka_err2str(code)))"]
-                        )
-                    }
-                    rd_kafka_error_destroy(err)
-                }
-            } else {
-                let result = rd_kafka_assign(self.kafkaHandle.pointer, nil)
-                if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-                    self.logger.error(
-                        "Unassign failed",
-                        metadata: ["error": "\(String(cString: rd_kafka_err2str(result)))"]
-                    )
-                }
-            }
-
-        default:
-            // Unexpected rebalance error — reset assignment to sync state
-            self.logger.error(
-                "Unexpected rebalance error",
-                metadata: ["error": "\(String(cString: rd_kafka_err2str(error)))"]
-            )
-            let result = rd_kafka_assign(self.kafkaHandle.pointer, nil)
-            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
-                self.logger.error(
-                    "Assign (reset) failed",
-                    metadata: ["error": "\(String(cString: rd_kafka_err2str(result)))"]
-                )
-            }
-            return nil
-        }
-
-        // Extract partition info for the Swift event
-        var partitions: [KafkaTopicPartition] = []
-        if let partitionList {
-            let count = Int(partitionList.pointee.cnt)
-            partitions.reserveCapacity(count)
-            for i in 0..<count {
-                let element = partitionList.pointee.elems[i]
-                let topic = String(cString: element.topic)
-                let partition = KafkaPartition(rawValue: Int(element.partition))
-                partitions.append(KafkaTopicPartition(topic: topic, partition: partition))
-            }
-        }
-
-        let rebalanceEvent = RebalanceEvent(action: action, partitions: partitions)
-        return rebalanceEvent
     }
 
     /// Request a new message from the Kafka cluster.

@@ -71,17 +71,4 @@ public struct KafkaConsumerEvent: Sendable, Hashable {
         KafkaConsumerEvent(kind: .revokedPartitions, partitions: partitions)
     }
 
-    internal init(_ event: RDKafkaClient.ConsumerPollEvent) {
-        switch event {
-        case .rebalance(let rebalanceEvent):
-            switch rebalanceEvent.action {
-            case .assign:
-                self = .assignedPartitions(rebalanceEvent.partitions)
-            case .revoke:
-                self = .revokedPartitions(rebalanceEvent.partitions)
-            }
-        case .statistics:
-            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
-        }
-    }
 }

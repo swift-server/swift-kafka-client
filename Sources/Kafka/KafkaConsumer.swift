@@ -250,7 +250,7 @@ public final class KafkaConsumer: Sendable, Service {
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
-        var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance]
+        var subscribedEvents: [RDKafkaEvent] = [.log]
         let isAutoCommitEnabled = config.enableAutoCommit ?? true
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
@@ -390,8 +390,6 @@ public final class KafkaConsumer: Sendable, Service {
                     switch event {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
-                    case .rebalance:
-                        _ = self.eventsSource?.yield(KafkaConsumerEvent(event))
                     }
                 }
                 try await Task.sleep(for: self.config.pollInterval)
