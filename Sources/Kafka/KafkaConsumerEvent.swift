@@ -12,16 +12,75 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
-public enum KafkaConsumerEvent: Sendable, Hashable {
-    /// - Important: Always provide a `default` case when switiching over this `enum`.
-    case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
+/// An event received through the ``KafkaConsumerEvents`` asynchronous sequence.
+///
+/// Use the ``kind`` property to determine what type of event occurred,
+/// and the ``partitions`` property to access the affected topic-partitions.
+public struct KafkaConsumerEvent: Sendable, Hashable {
+    /// The kind of consumer event.
+    public struct Kind: Sendable, Hashable, CustomStringConvertible {
+        fileprivate enum BackingKind {
+            case assignedPartitions
+            case revokedPartitions
+        }
 
-    internal init(_ event: RDKafkaClient.KafkaEvent) {
+        fileprivate let backingKind: BackingKind
+
+        fileprivate init(_ backingKind: BackingKind) {
+            self.backingKind = backingKind
+        }
+
+        /// Partitions have been assigned to this consumer as part of a rebalance.
+        public static let assignedPartitions = Kind(.assignedPartitions)
+
+        /// Partitions have been revoked from this consumer as part of a rebalance.
+        public static let revokedPartitions = Kind(.revokedPartitions)
+
+        public var description: String {
+            switch self.backingKind {
+            case .assignedPartitions:
+                return "assignedPartitions"
+            case .revokedPartitions:
+                return "revokedPartitions"
+            }
+        }
+    }
+
+    /// The kind of consumer event (assigned or revoked partitions).
+    public let kind: Kind
+
+    /// The list of topic-partitions affected by this event.
+    public let partitions: [KafkaTopicPartition]
+
+    private init(kind: Kind, partitions: [KafkaTopicPartition]) {
+        self.kind = kind
+        self.partitions = partitions
+    }
+
+    /// Create a new ``KafkaConsumerEvent`` indicating partitions were assigned.
+    ///
+    /// - Parameter partitions: The assigned topic-partitions.
+    public static func assignedPartitions(_ partitions: [KafkaTopicPartition]) -> KafkaConsumerEvent {
+        KafkaConsumerEvent(kind: .assignedPartitions, partitions: partitions)
+    }
+
+    /// Create a new ``KafkaConsumerEvent`` indicating partitions were revoked.
+    ///
+    /// - Parameter partitions: The revoked topic-partitions.
+    public static func revokedPartitions(_ partitions: [KafkaTopicPartition]) -> KafkaConsumerEvent {
+        KafkaConsumerEvent(kind: .revokedPartitions, partitions: partitions)
+    }
+
+    internal init(_ event: RDKafkaClient.ConsumerPollEvent) {
         switch event {
+        case .rebalance(let rebalanceEvent):
+            switch rebalanceEvent.action {
+            case .assign:
+                self = .assignedPartitions(rebalanceEvent.partitions)
+            case .revoke:
+                self = .revokedPartitions(rebalanceEvent.partitions)
+            }
         case .statistics:
-            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
-        case .deliveryReport:
             fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         }
     }
