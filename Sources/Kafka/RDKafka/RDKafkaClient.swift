@@ -292,17 +292,27 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
-    /// Swift wrapper for events from `librdkafka`'s event queue.
-    enum KafkaEvent {
+    /// Typed event returned by ``producerEventPoll(maxEvents:)``.
+    /// Contains only events relevant to a Kafka producer.
+    enum ProducerPollEvent {
         case deliveryReport(results: [KafkaDeliveryReport])
         case statistics(RDKafkaStatistics)
     }
 
-    /// Poll the event `rd_kafka_queue_t` for new events.
+    /// Typed event returned by ``consumerEventPoll(maxEvents:)``.
+    /// Contains only events relevant to a Kafka consumer.
+    enum ConsumerPollEvent {
+        case statistics(RDKafkaStatistics)
+    }
+
+    /// Poll for producer-relevant events from the `librdkafka` event queue.
     ///
-    /// - Parameter maxEvents:Maximum number of events to serve in one invocation.
-    func eventPoll(maxEvents: Int = 100) -> [KafkaEvent] {
-        var events = [KafkaEvent]()
+    /// Drains the queue, handling internal events (log, offset commit) and
+    /// returning only events relevant to a producer.
+    ///
+    /// - Parameter maxEvents: Maximum number of events to serve in one invocation.
+    func producerEventPoll(maxEvents: Int = 100) -> [ProducerPollEvent] {
+        var events = [ProducerPollEvent]()
         events.reserveCapacity(maxEvents)
 
         for _ in 0..<maxEvents {
@@ -316,21 +326,62 @@ public final class RDKafkaClient: Sendable {
 
             switch eventType {
             case .deliveryReport:
-                let forwardEvent = self.handleDeliveryReportEvent(event)
-                events.append(forwardEvent)
+                let result = self.handleDeliveryReportEvent(event)
+                events.append(.deliveryReport(results: result))
+            case .statistics:
+                if let statistics = self.handleStatistics(event) {
+                    events.append(.statistics(statistics))
+                }
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
                 self.handleOffsetCommitEvent(event)
-            case .statistics:
-                if let forwardEvent = self.handleStatistics(event) {
-                    events.append(forwardEvent)
-                }
             case .none:
-                // Finished reading events, return early
                 return events
             default:
-                break  // Ignored Event
+                break
+            }
+        }
+
+        return events
+    }
+
+    /// Poll for consumer-relevant events from the `librdkafka` event queue.
+    ///
+    /// Drains the queue, handling internal events (log, offset commit) and
+    /// returning only events relevant to a consumer. Producer-only events
+    /// (e.g., delivery reports) are handled internally but never surfaced.
+    ///
+    /// - Parameter maxEvents: Maximum number of events to serve in one invocation.
+    func consumerEventPoll(maxEvents: Int = 100) -> [ConsumerPollEvent] {
+        var events = [ConsumerPollEvent]()
+        events.reserveCapacity(maxEvents)
+
+        for _ in 0..<maxEvents {
+            let event = rd_kafka_queue_poll(self.queueHandle.pointer, 0)
+            defer { rd_kafka_event_destroy(event) }
+
+            let rdEventType = rd_kafka_event_type(event)
+            guard let eventType = RDKafkaEvent(rawValue: rdEventType) else {
+                fatalError("Unsupported event type: \(rdEventType)")
+            }
+
+            switch eventType {
+            case .statistics:
+                if let statistics = self.handleStatistics(event) {
+                    events.append(.statistics(statistics))
+                }
+            case .log:
+                self.handleLogEvent(event)
+            case .offsetCommit:
+                self.handleOffsetCommitEvent(event)
+            case .deliveryReport:
+                // Should never occur on a consumer queue, but handle defensively.
+                _ = self.handleDeliveryReportEvent(event)
+            case .none:
+                return events
+            default:
+                break
             }
         }
 
@@ -340,8 +391,8 @@ public final class RDKafkaClient: Sendable {
     /// Handle event of type `RDKafkaEvent.deliveryReport`.
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    /// - Returns: `KafkaEvent` to be returned as part of ``RDKafkaClient.eventPoll()`.
-    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> KafkaEvent {
+    /// - Returns: Delivery report results parsed from the event.
+    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> [KafkaDeliveryReport] {
         let deliveryReportCount = rd_kafka_event_message_count(event)
         var deliveryReportResults = [KafkaDeliveryReport]()
         deliveryReportResults.reserveCapacity(deliveryReportCount)
@@ -354,18 +405,18 @@ public final class RDKafkaClient: Sendable {
         }
 
         // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
-        return .deliveryReport(results: deliveryReportResults)
+        return deliveryReportResults
     }
 
     /// Handle event of type `RDKafkaEvent.statistics`.
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    private func handleStatistics(_ event: OpaquePointer?) -> KafkaEvent? {
+    private func handleStatistics(_ event: OpaquePointer?) -> RDKafkaStatistics? {
         let jsonStr = String(cString: rd_kafka_event_stats(event))
         do {
             if let jsonData = jsonStr.data(using: .utf8) {
                 let json = try JSONDecoder().decode(RDKafkaStatistics.self, from: jsonData)
-                return .statistics(json)
+                return json
             }
         } catch {
             assertionFailure("Error occurred when decoding JSON statistics: \(error) when decoding \(jsonStr)")
@@ -424,7 +475,17 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
     private func handleOffsetCommitEvent(_ event: OpaquePointer?) {
         guard let opaquePointer = rd_kafka_event_opaque(event) else {
-            fatalError("Could not resolve reference to catpured Swift callback instance")
+            // No opaque pointer means this is an auto-commit event (e.g. triggered by
+            // rd_kafka_consumer_close_queue during shutdown) rather than a user-initiated
+            // rd_kafka_commit_queue call. These don't have a callback to invoke.
+            let error = rd_kafka_event_error(event)
+            if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                self.logger.warning(
+                    "Auto-commit failed during event processing",
+                    metadata: ["error": "\(String(cString: rd_kafka_err2str(error)))"]
+                )
+            }
+            return
         }
         let opaque = Unmanaged<CapturedCommitCallback>.fromOpaque(opaquePointer).takeUnretainedValue()
         let actualCallback = opaque.closure
@@ -494,6 +555,41 @@ public final class RDKafkaClient: Sendable {
 
         init(_ closure: @escaping Closure) {
             self.closure = closure
+        }
+    }
+
+    /// Store the offset of a consumed message in librdkafka's local offset store.
+    ///
+    /// This does **not** commit the offset to the broker. Instead, it marks the offset
+    /// in the local in-memory store. When `enable.auto.commit` is `true` (the default),
+    /// the auto-commit timer will periodically commit these stored offsets to the broker.
+    ///
+    /// This method is intended to be used with `enable.auto.offset.store` set to `false`,
+    /// allowing the application to store offsets only **after** successful message processing.
+    /// This is the recommended pattern for at-least-once delivery semantics.
+    ///
+    /// - Parameter message: The message whose offset should be stored.
+    /// - Throws: A ``KafkaError`` if storing the offset failed.
+    func storeOffset(_ message: KafkaConsumerMessage) throws {
+        // rd_kafka_offsets_store expects the offset of the *next* message to consume,
+        // which is the current message's offset + 1.
+        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+        let changesList = RDKafkaTopicPartitionList()
+        changesList.setOffset(
+            topic: message.topic,
+            partition: message.partition,
+            offset: Int64(message.offset.rawValue + 1)
+        )
+
+        let error = changesList.withListPointer { listPointer in
+            rd_kafka_offsets_store(
+                self.kafkaHandle.pointer,
+                listPointer
+            )
+        }
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
 
@@ -605,6 +701,153 @@ public final class RDKafkaClient: Sendable {
     /// Returns `true` if the underlying `librdkafka` consumer is closed.
     var isConsumerClosed: Bool {
         rd_kafka_consumer_closed(self.kafkaHandle.pointer) == 1
+    }
+
+    /// Retrieve the last-committed offsets for the given topic+partition pairs from the broker.
+    ///
+    /// - Parameters:
+    ///   - topicPartitions: An array of ``KafkaTopicPartition`` to query.
+    ///   - timeoutMilliseconds: Maximum time to wait for broker response.
+    /// - Returns: An array of ``KafkaTopicPartitionOffset``. Offset is `nil` if no committed offset exists.
+    /// - Throws: A ``KafkaError`` if the query failed.
+    func committed(
+        topicPartitions: [KafkaTopicPartition],
+        timeoutMilliseconds: Int32
+    ) throws -> [KafkaTopicPartitionOffset] {
+        let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitions.count))
+        for tp in topicPartitions {
+            tpl.add(topic: tp.topic, partition: tp.partition)
+        }
+
+        let error = tpl.withListPointer { listPointer in
+            rd_kafka_committed(
+                self.kafkaHandle.pointer,
+                listPointer,
+                timeoutMilliseconds
+            )
+        }
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
+
+        return tpl.withListPointer { listPointer in
+            Self.extractOffsetsFromList(listPointer)
+        }
+    }
+
+    /// Retrieve the current positions (next offset to fetch) for the given topic+partition pairs.
+    ///
+    /// - Parameter topicPartitions: An array of ``KafkaTopicPartition`` to query.
+    /// - Returns: An array of ``KafkaTopicPartitionOffset``. Offset is `nil` if no position is available.
+    /// - Throws: A ``KafkaError`` if the query failed.
+    func position(
+        topicPartitions: [KafkaTopicPartition]
+    ) throws -> [KafkaTopicPartitionOffset] {
+        let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitions.count))
+        for tp in topicPartitions {
+            tpl.add(topic: tp.topic, partition: tp.partition)
+        }
+
+        let error = tpl.withListPointer { listPointer in
+            rd_kafka_position(
+                self.kafkaHandle.pointer,
+                listPointer
+            )
+        }
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
+
+        return tpl.withListPointer { listPointer in
+            Self.extractOffsetsFromList(listPointer)
+        }
+    }
+
+    /// Extract offset information from a `rd_kafka_topic_partition_list_t`.
+    private static func extractOffsetsFromList(
+        _ listPointer: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
+    ) -> [KafkaTopicPartitionOffset] {
+        var results: [KafkaTopicPartitionOffset] = []
+        let count = Int(listPointer.pointee.cnt)
+        results.reserveCapacity(count)
+
+        for i in 0..<count {
+            let element = listPointer.pointee.elems[i]
+            let topic = String(cString: element.topic)
+            let partition = KafkaPartition(rawValue: Int(element.partition))
+            // RD_KAFKA_OFFSET_INVALID (-1001) means no offset is stored
+            let offset: KafkaOffset? = element.offset == Int64(RD_KAFKA_OFFSET_INVALID)
+                ? nil
+                : KafkaOffset(rawValue: Int(element.offset))
+            results.append(KafkaTopicPartitionOffset(topic: topic, partition: partition, offset: offset))
+        }
+
+        return results
+    }
+
+    /// Check if the current partition assignment has been lost involuntarily.
+    ///
+    /// This is only useful when reacting to a rebalance event or from within
+    /// a rebalance callback. Partitions that have been lost may already be
+    /// owned by other members in the group and therefore committing offsets
+    /// may fail.
+    ///
+    /// Calling `rd_kafka_assign`, `rd_kafka_incremental_assign`, or
+    /// `rd_kafka_incremental_unassign` resets this flag.
+    ///
+    /// - Returns: `true` if the current partition assignment is considered lost, `false` otherwise.
+    var isAssignmentLost: Bool {
+        rd_kafka_assignment_lost(self.kafkaHandle.pointer) == 1
+    }
+
+    /// Seek consumer for partitions to the per-partition offset.
+    ///
+    /// The offset may be either absolute (>= 0) or a logical offset
+    /// (e.g., `.beginning`, `.end`, `.storedOffset`).
+    ///
+    /// This call will purge all pre-fetched messages for the given partitions.
+    /// Repeated use of seek may lead to increased network usage as messages
+    /// are re-fetched from the broker.
+    ///
+    /// - Important: Seek must only be performed for already assigned/consumed partitions.
+    ///
+    /// - Parameters:
+    ///   - topicPartitionOffsets: An array of ``KafkaTopicPartitionOffset`` to seek to.
+    ///   - timeoutMilliseconds: Maximum time to wait. Pass `0` for async (fire-and-forget).
+    /// - Throws: A ``KafkaError`` if the seek operation failed.
+    func seekPartitions(
+        topicPartitionOffsets: [KafkaTopicPartitionOffset],
+        timeoutMilliseconds: Int32
+    ) throws {
+        let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitionOffsets.count))
+        for tpo in topicPartitionOffsets {
+            guard let offset = tpo.offset else {
+                throw KafkaError.config(reason: "Seek requires a non-nil offset for \(tpo.topic):\(tpo.partition)")
+            }
+            tpl.setOffset(
+                topic: tpo.topic,
+                partition: tpo.partition,
+                offset: Int64(offset.rawValue)
+            )
+        }
+
+        let error = tpl.withListPointer { listPointer in
+            rd_kafka_seek_partitions(
+                self.kafkaHandle.pointer,
+                listPointer,
+                timeoutMilliseconds
+            )
+        }
+
+        if let error {
+            let code = rd_kafka_error_code(error)
+            rd_kafka_error_destroy(error)
+            if code != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: code)
+            }
+        }
     }
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.

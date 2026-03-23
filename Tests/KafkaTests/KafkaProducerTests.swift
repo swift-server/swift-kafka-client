@@ -72,13 +72,8 @@ import Foundation
             var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
             for await event in events {
-                switch event {
-                case .deliveryReports(let deliveryReports):
-                    for deliveryReport in deliveryReports {
-                        receivedDeliveryReports.insert(deliveryReport)
-                    }
-                default:
-                    break  // Ignore any other events
+                for deliveryReport in event.deliveryReports {
+                    receivedDeliveryReports.insert(deliveryReport)
                 }
 
                 if receivedDeliveryReports.count >= 1 {
@@ -130,13 +125,8 @@ import Foundation
             var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
             for await event in events {
-                switch event {
-                case .deliveryReports(let deliveryReports):
-                    for deliveryReport in deliveryReports {
-                        receivedDeliveryReports.insert(deliveryReport)
-                    }
-                default:
-                    break  // Ignore any other events
+                for deliveryReport in event.deliveryReports {
+                    receivedDeliveryReports.insert(deliveryReport)
                 }
 
                 if receivedDeliveryReports.count >= 1 {
@@ -194,13 +184,8 @@ import Foundation
             var receivedDeliveryReports = Set<KafkaDeliveryReport>()
 
             for await event in events {
-                switch event {
-                case .deliveryReports(let deliveryReports):
-                    for deliveryReport in deliveryReports {
-                        receivedDeliveryReports.insert(deliveryReport)
-                    }
-                default:
-                    break  // Ignore any other events
+                for deliveryReport in event.deliveryReports {
+                    receivedDeliveryReports.insert(deliveryReport)
                 }
 
                 if receivedDeliveryReports.count >= 2 {
@@ -385,5 +370,43 @@ import Foundation
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
+    }
+
+    // MARK: - KafkaProducerEvent Struct Tests
+
+    @Test func producerEventKindDescription() {
+        #expect(KafkaProducerEvent.Kind.deliveryReports.description == "deliveryReports")
+    }
+
+    @Test func producerEventStaticFactory() {
+        let event = KafkaProducerEvent.deliveryReports([])
+        #expect(event.kind == .deliveryReports)
+        #expect(event.deliveryReports.isEmpty)
+    }
+
+    @Test func producerEventEquality() {
+        let event1 = KafkaProducerEvent.deliveryReports([])
+        let event2 = KafkaProducerEvent.deliveryReports([])
+
+        #expect(event1 == event2)
+    }
+
+    @Test func producerEventHashable() {
+        let event1 = KafkaProducerEvent.deliveryReports([])
+        let event2 = KafkaProducerEvent.deliveryReports([])
+
+        #expect(event1.hashValue == event2.hashValue)
+
+        var set: Set<KafkaProducerEvent> = []
+        set.insert(event1)
+        set.insert(event2)
+        #expect(set.count == 1)
+    }
+
+    @Test func producerEventKindEquality() {
+        let kind1 = KafkaProducerEvent.Kind.deliveryReports
+        let kind2 = KafkaProducerEvent.Kind.deliveryReports
+
+        #expect(kind1 == kind2)
     }
 }
