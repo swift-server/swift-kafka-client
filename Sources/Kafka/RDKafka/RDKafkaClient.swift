@@ -480,7 +480,7 @@ public final class RDKafkaClient: Sendable {
             // rd_kafka_commit_queue call. These don't have a callback to invoke.
             let error = rd_kafka_event_error(event)
             if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-                self.logger.warning(
+                self.logger.info(
                     "Auto-commit failed during event processing",
                     metadata: ["error": "\(String(cString: rd_kafka_err2str(error)))"]
                 )
@@ -778,7 +778,8 @@ public final class RDKafkaClient: Sendable {
             let topic = String(cString: element.topic)
             let partition = KafkaPartition(rawValue: Int(element.partition))
             // RD_KAFKA_OFFSET_INVALID (-1001) means no offset is stored
-            let offset: KafkaOffset? = element.offset == Int64(RD_KAFKA_OFFSET_INVALID)
+            let offset: KafkaOffset? =
+                element.offset == Int64(RD_KAFKA_OFFSET_INVALID)
                 ? nil
                 : KafkaOffset(rawValue: Int(element.offset))
             results.append(KafkaTopicPartitionOffset(topic: topic, partition: partition, offset: offset))

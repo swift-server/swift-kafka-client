@@ -539,11 +539,10 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Check if the current partition assignment has been lost involuntarily.
     ///
-    /// This is primarily useful when reacting to a rebalance event
-    /// (``KafkaConsumerEvent/revokedPartitions(_:)``). When partitions are lost
-    /// (e.g., because `max.poll.interval.ms` was exceeded), committing offsets
-    /// for those partitions will fail because they may already be owned by
-    /// another consumer in the group.
+    /// This is primarily useful when reacting to a rebalance event.
+    /// When partitions are lost (e.g., because `max.poll.interval.ms` was exceeded),
+    /// committing offsets for those partitions will fail because they may already
+    /// be owned by another consumer in the group.
     ///
     /// - Returns: `true` if the current assignment is considered lost, `false` otherwise.
     /// - Throws: A ``KafkaError`` if the consumer is closed.
