@@ -65,8 +65,13 @@ public func _sendAndAcknowledgeMessages(
     receivedDeliveryReports.reserveCapacity(messages.count)
 
     for await event in events {
-        for deliveryReport in event.deliveryReports {
-            receivedDeliveryReports.insert(deliveryReport)
+        switch event {
+        case .deliveryReports(let deliveryReports):
+            for deliveryReport in deliveryReports {
+                receivedDeliveryReports.insert(deliveryReport)
+            }
+        default:
+            break  // Ignore any other events
         }
 
         if receivedDeliveryReports.count >= messages.count {
