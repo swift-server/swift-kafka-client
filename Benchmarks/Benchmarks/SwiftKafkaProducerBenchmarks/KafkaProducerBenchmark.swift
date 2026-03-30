@@ -16,7 +16,7 @@ import Benchmark
 import Crdkafka
 import Kafka
 
-let benchmarks = {
+let benchmarks: @Sendable () -> Void = {
     Benchmark.defaultConfiguration = .init(
         metrics: [.wallClock, .cpuTotal, .allocatedResidentMemory, .contextSwitches, .throughput] + .arc,
         warmupIterations: 0,
