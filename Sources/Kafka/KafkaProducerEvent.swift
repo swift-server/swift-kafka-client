@@ -19,7 +19,7 @@ public enum KafkaProducerEvent: Sendable, Hashable {
     /// - Important: Always provide a `default` case when switching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 
-    internal init(_ event: RDKafkaClient.KafkaEvent) {
+    internal init(_ event: RDKafkaClient.ProducerPollEvent) {
         switch event {
         case .deliveryReport(let results):
             self = .deliveryReports(results)
