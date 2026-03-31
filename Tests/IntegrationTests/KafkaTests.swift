@@ -49,7 +49,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     try await client._deleteTopic(testTopic)
 }
 
-@Suite struct KafkaIntegrationTests {
+@Suite(.timeLimit(.minutes(2))) struct KafkaIntegrationTests {
     var producerConfig: KafkaProducerConfig
 
     init() throws {
