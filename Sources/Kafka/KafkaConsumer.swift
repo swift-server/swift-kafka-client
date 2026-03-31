@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Dispatch
 import Logging
 import NIOConcurrencyHelpers
 import NIOCore
@@ -74,9 +75,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         private let stateMachine: MachineHolder
         let pollInterval: Duration
         let enablePartitionEof: Bool
-
-        weak var cachedClient: RDKafkaClient?
-        var messagesCount: Int = 0
+        private let queue: DispatchQueueTaskExecutor
 
         private final class MachineHolder: Sendable { // only for deinit
             let stateMachine: LockedMachine
@@ -93,40 +92,37 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
             self.stateMachine = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
             self.enablePartitionEof = enablePartitionEof
+            self.queue = DispatchQueueTaskExecutor(
+                DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer")
+            )
         }
 
-        public mutating func next() async throws -> Element? {
-            defer {
-                self.messagesCount += 1
-                if self.messagesCount >= 100 {
-                    self.cachedClient = nil
-                    self.messagesCount = 0
-                }
-            }
+        public func next() async throws -> Element? {
             while !Task.isCancelled {
-                if let client = self.cachedClient, // fast path
-                   let message = try client.consumerPoll() {
-                    if !message.eof || self.enablePartitionEof {
-                        return message
-                    } else {
-                        continue
-                    }
-                }
                 let action = self.stateMachine.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
                 switch action {
                 case .poll(let client):
-                    let message = try client.consumerPoll()
-                    guard let message else {
-                        self.cachedClient = nil
-                        self.messagesCount = 0
+                    // Attempt to fetch a message synchronously. Bail
+                    // immediately if no message is waiting for us.
+                    if let message = try client.consumerPoll() {
+                        if !message.eof || self.enablePartitionEof {
+                            return message
+                        }
+                    }
+
+                    if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
+                        // Wait on a separate thread for the next message.
+                        // The call below will block for `pollInterval`.
+                        if let message = try await withTaskExecutorPreference(
+                            queue,
+                            operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
+                        ) {
+                            return message
+                        }
+                    } else {
+                        // No messages. Sleep a little.
                         try await Task.sleep(for: self.pollInterval)
-                        continue
                     }
-                    if message.eof && !self.enablePartitionEof {
-                        continue
-                    }
-                    self.cachedClient = client
-                    return message
                 case .suspendPollLoop:
                     try await Task.sleep(for: self.pollInterval)
                 case .terminatePollLoop:

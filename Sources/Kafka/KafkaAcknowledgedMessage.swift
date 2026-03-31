@@ -39,9 +39,10 @@ public struct KafkaAcknowledgedMessage {
             throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
         }
 
-        guard let topic = String(validatingUTF8: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
+        guard let topic = String(validatingCString: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
             fatalError("Received topic name that is non-valid UTF-8")
         }
+
         self.topic = topic
 
         self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
