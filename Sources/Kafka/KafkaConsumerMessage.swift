@@ -16,6 +16,11 @@ import Crdkafka
 import NIOCore
 import struct Foundation.Date
 import typealias Foundation.TimeInterval
+#if canImport(Glibc)
+import Glibc
+#elseif canImport(Darwin)
+import Darwin
+#endif
 
 extension FixedWidthInteger {
     func roundUpToMultipleOf(_ multiple: Self) -> Self {
