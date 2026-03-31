@@ -324,7 +324,6 @@ extension KafkaConsumerConfiguration {
         resultDict["broker.address.family"] = broker.addressFamily.description
         resultDict["reconnect.backoff.ms"] = String(reconnect.backoff.rawValue)
         resultDict["reconnect.backoff.max.ms"] = String(reconnect.maximumBackoff.inMilliseconds)
-        resultDict["queued.max.messages.kbytes"] = String(8 * 1024) // XX MB per partition // TODO: remove
 
         if let isolationLevel {
             resultDict["isolation.level"] = isolationLevel
