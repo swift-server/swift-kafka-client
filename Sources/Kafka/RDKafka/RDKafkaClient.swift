@@ -568,18 +568,9 @@ public final class RDKafkaClient: Sendable {
             return nil
         }
 
-        defer {
-            // Destroy message otherwise poll() will block forever
-            rd_kafka_message_destroy(messagePointer)
-        }
-
-        // Reached the end of the topic+partition queue on the broker
-        if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
-            return try KafkaConsumerMessage(messagePointer: messagePointer)
-        }
-
-        let message = try KafkaConsumerMessage(messagePointer: messagePointer)
-        return message
+        // Ownership of messagePointer is transferred to KafkaConsumerMessage.Storage,
+        // which calls rd_kafka_message_destroy in its deinit.
+        return try KafkaConsumerMessage(messagePointer: messagePointer)
     }
     /// Atomic  incremental assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
