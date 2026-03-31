@@ -124,6 +124,16 @@ public struct KafkaConsumerConfiguration {
     /// Default: `true`
     public var isAutoCommitEnabled: Bool = true
 
+    /// Automatically store offset of last message provided to application.
+    /// The offset store is an in-memory store of the next offset to (auto-)commit for each partition.
+    ///
+    /// When set to `false`, the application must explicitly call ``KafkaConsumer/storeOffset(_:)``
+    /// after processing each message. This is the **recommended pattern** for at-least-once delivery
+    /// semantics — it prevents offsets from being committed for unprocessed messages.
+    ///
+    /// Default: `true`
+    public var isAutoOffsetStoreEnabled: Bool = true
+
     /// Available actions to take when there is no initial offset in offset store / offset is out of range.
     public struct AutoOffsetReset: Sendable, Hashable, CustomStringConvertible {
         public let description: String
@@ -265,6 +275,7 @@ extension KafkaConsumerConfiguration {
         resultDict["heartbeat.interval.ms"] = String(heartbeatInterval.inMilliseconds)
         resultDict["max.poll.interval.ms"] = String(maximumPollInterval.inMilliseconds)
         resultDict["enable.auto.commit"] = String(isAutoCommitEnabled)
+        resultDict["enable.auto.offset.store"] = String(isAutoOffsetStoreEnabled)
         resultDict["auto.offset.reset"] = autoOffsetReset.description
         resultDict["allow.auto.create.topics"] = String(isAutoCreateTopicsEnabled)
 

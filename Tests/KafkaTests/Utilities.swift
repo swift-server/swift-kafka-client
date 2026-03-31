@@ -25,20 +25,20 @@ extension Logger {
 
 // MARK: - Mocks
 
-internal struct LogEvent {
+internal struct RecordedLogEvent {
     let level: Logger.Level
     let message: Logger.Message
     let source: String
 }
 
 internal struct LogEventRecorder {
-    let _recordedEvents = NIOLockedValueBox<[LogEvent]>([])
+    let _recordedEvents = NIOLockedValueBox<[RecordedLogEvent]>([])
 
-    var recordedEvents: [LogEvent] {
+    var recordedEvents: [RecordedLogEvent] {
         self._recordedEvents.withLockedValue { $0 }
     }
 
-    func record(_ event: LogEvent) {
+    func record(_ event: RecordedLogEvent) {
         self._recordedEvents.withLockedValue { $0.append(event) }
     }
 }
@@ -59,7 +59,11 @@ internal struct MockLogHandler: LogHandler {
         function: String,
         line: UInt
     ) {
-        self.recorder.record(LogEvent(level: level, message: message, source: source))
+        self.recorder.record(RecordedLogEvent(level: level, message: message, source: source))
+    }
+
+    func log(event: Logging.LogEvent) {
+        self.recorder.record(RecordedLogEvent(level: event.level, message: event.message, source: event.source))
     }
 
     private var _logLevel: Logger.Level?

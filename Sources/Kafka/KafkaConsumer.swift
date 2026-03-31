@@ -142,12 +142,20 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
 /// Can be used to consume messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
+    typealias ConsumerEventsProducer = NIOAsyncSequenceProducer<
+        KafkaConsumerEvent,
+        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
+        KafkaConsumerEventsDelegate
+    >
+
     /// The configuration object of the consumer client.
     private let config: KafkaConsumerConfig
     /// A logger.
     private let logger: Logger
     /// State of the `KafkaConsumer`.
     private let stateMachine: NIOLockedValueBox<StateMachine>
+    /// Source for yielding consumer events (rebalance, etc.). `nil` when created without events.
+    private let eventsSource: ConsumerEventsProducer.Source?
 
     /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
@@ -167,11 +175,13 @@ public final class KafkaConsumer: Sendable, Service {
         client: RDKafkaClient,
         stateMachine: NIOLockedValueBox<StateMachine>,
         config: KafkaConsumerConfig,
-        logger: Logger
+        logger: Logger,
+        eventsSource: ConsumerEventsProducer.Source? = nil
     ) throws {
         self.config = config
         self.stateMachine = stateMachine
         self.logger = logger
+        self.eventsSource = eventsSource
 
         self.messages = KafkaConsumerMessages(
             stateMachine: self.stateMachine,
@@ -258,13 +268,6 @@ public final class KafkaConsumer: Sendable, Service {
 
         let stateMachine = NIOLockedValueBox(StateMachine())
 
-        let consumer = try KafkaConsumer(
-            client: client,
-            stateMachine: stateMachine,
-            config: config,
-            logger: logger
-        )
-
         // Note:
         // It's crucial to initialize the `sourceAndSequence` variable AFTER `client`.
         // This order is important to prevent the accidental triggering of `KafkaConsumerCloseOnTerminate.didTerminate()`.
@@ -275,6 +278,14 @@ public final class KafkaConsumer: Sendable, Service {
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             finishOnDeinit: true,
             delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
+        )
+
+        let consumer = try KafkaConsumer(
+            client: client,
+            stateMachine: stateMachine,
+            config: config,
+            logger: logger,
+            eventsSource: sourceAndSequence.source
         )
 
         let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
@@ -374,19 +385,52 @@ public final class KafkaConsumer: Sendable, Service {
             switch nextAction {
             case .pollForEvents(let client):
                 // Event poll to serve any events queued inside of `librdkafka`.
-                let events = client.eventPoll()
+                let events = client.consumerEventPoll()
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
-                    default:
-                        break
                     }
                 }
                 try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoop:
+                self.eventsSource?.finish()
                 return
             }
+        }
+    }
+
+    /// Store the offset of a consumed message in the local offset store.
+    ///
+    /// This is used for **at-least-once** delivery semantics. The typical pattern is:
+    /// 1. Set `enableAutoOffsetStore` to `false` in the consumer configuration.
+    /// 2. Keep `enableAutoCommit` as `true` (the default).
+    /// 3. After successfully processing a message, call `storeOffset(_:)`.
+    /// 4. The auto-commit timer will periodically commit stored offsets to the broker.
+    ///
+    /// This ensures that only offsets for **successfully processed** messages are committed.
+    /// If the application crashes before calling `storeOffset`, the message will be
+    /// re-delivered on the next consumer start (at-least-once).
+    ///
+    /// - Warning: This method fails if `enableAutoOffsetStore` is not set to `false`.
+    ///
+    /// - Parameter message: The message whose offset should be stored.
+    /// - Throws: A ``KafkaError`` if storing the offset failed or the consumer is closed.
+    public func storeOffset(_ message: KafkaConsumerMessage) throws {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to store message offset on a closed consumer")
+        case .client(let client):
+            // enableAutoOffsetStore is Bool? — nil means the user did not set it,
+            // so librdkafka's default (true) applies. We require an explicit `false`.
+            guard self.config.enableAutoOffsetStore == false else {
+                throw KafkaError.config(
+                    reason: "storeOffset requires enableAutoOffsetStore to be set to false"
+                )
+            }
+
+            try client.storeOffset(message)
         }
     }
 
@@ -402,11 +446,11 @@ public final class KafkaConsumer: Sendable, Service {
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func scheduleCommit(_ message: KafkaConsumerMessage) throws {
-        let action = self.stateMachine.withLockedValue { $0.commit() }
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
-        case .commit(let client):
+        case .client(let client):
             guard (self.config.enableAutoCommit ?? true) == false else {
                 throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
             }
@@ -431,16 +475,115 @@ public final class KafkaConsumer: Sendable, Service {
     ///     - message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func commit(_ message: KafkaConsumerMessage) async throws {
-        let action = self.stateMachine.withLockedValue { $0.commit() }
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to commit message offset on a closed consumer")
-        case .commit(let client):
+        case .client(let client):
             guard (self.config.enableAutoCommit ?? true) == false else {
                 throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
             }
 
             try await client.commit(message)
+        }
+    }
+
+    /// Retrieve the last-committed offsets for the given topic+partition pairs from the broker.
+    ///
+    /// This is useful for monitoring consumer lag and verifying that offsets have been
+    /// successfully committed.
+    ///
+    /// - Parameters:
+    ///   - topicPartitions: An array of ``KafkaTopicPartition`` to query.
+    ///   - timeout: Maximum time to wait for broker response. Default: 5 seconds.
+    /// - Returns: An array of ``KafkaTopicPartitionOffset``. The ``KafkaTopicPartitionOffset/offset``
+    ///   is `nil` if no committed offset exists for that partition.
+    /// - Throws: A ``KafkaError`` if the query failed or the consumer is closed.
+    public func committed(
+        topicPartitions: [KafkaTopicPartition],
+        timeout: Duration = .milliseconds(5000)
+    ) throws -> [KafkaTopicPartitionOffset] {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to query committed offsets on a closed consumer")
+        case .client(let client):
+            return try client.committed(
+                topicPartitions: topicPartitions,
+                timeoutMilliseconds: Int32(timeout.inMilliseconds)
+            )
+        }
+    }
+
+    /// Retrieve the current positions (next offset to be fetched) for the given topic+partition pairs.
+    ///
+    /// The position reflects the consumer's in-memory position, which is the last consumed
+    /// message's offset + 1. This is useful for computing consumer lag when compared with
+    /// the committed offsets.
+    ///
+    /// - Parameter topicPartitions: An array of ``KafkaTopicPartition`` to query.
+    /// - Returns: An array of ``KafkaTopicPartitionOffset``. The ``KafkaTopicPartitionOffset/offset``
+    ///   is `nil` if no position is available for that partition.
+    /// - Throws: A ``KafkaError`` if the query failed or the consumer is closed.
+    public func position(
+        topicPartitions: [KafkaTopicPartition]
+    ) throws -> [KafkaTopicPartitionOffset] {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to query consumer position on a closed consumer")
+        case .client(let client):
+            return try client.position(topicPartitions: topicPartitions)
+        }
+    }
+
+    /// Check if the current partition assignment has been lost involuntarily.
+    ///
+    /// This is primarily useful when reacting to a rebalance event.
+    /// When partitions are lost (e.g., because `max.poll.interval.ms` was exceeded),
+    /// committing offsets for those partitions will fail because they may already
+    /// be owned by another consumer in the group.
+    ///
+    /// - Returns: `true` if the current assignment is considered lost, `false` otherwise.
+    /// - Throws: A ``KafkaError`` if the consumer is closed.
+    public var isAssignmentLost: Bool {
+        get throws {
+            let action = self.stateMachine.withLockedValue { $0.withClient() }
+            switch action {
+            case .throwClosedError:
+                throw KafkaError.connectionClosed(reason: "Tried to check assignment on a closed consumer")
+            case .client(let client):
+                return client.isAssignmentLost
+            }
+        }
+    }
+
+    /// Seek to specific offsets for the given partitions.
+    ///
+    /// This is useful for replaying messages or skipping ahead. The partitions
+    /// must already be assigned to this consumer (via subscription or manual assignment).
+    ///
+    /// This call purges all pre-fetched messages for the given partitions.
+    ///
+    /// - Parameters:
+    ///   - topicPartitionOffsets: An array of ``KafkaTopicPartitionOffset`` specifying where to seek.
+    ///     The ``KafkaTopicPartitionOffset/offset`` must be non-`nil`.
+    ///   - timeout: Maximum time to wait. Pass `.zero` for async (fire-and-forget).
+    ///              Default: `.milliseconds(5000)`.
+    /// - Throws: A ``KafkaError`` if the seek failed or the consumer is closed.
+    public func seek(
+        topicPartitionOffsets: [KafkaTopicPartitionOffset],
+        timeout: Duration = .milliseconds(5000)
+    ) throws {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to seek on a closed consumer")
+        case .client(let client):
+            try client.seekPartitions(
+                topicPartitionOffsets: topicPartitionOffsets,
+                timeoutMilliseconds: Int32(timeout.inMilliseconds)
+            )
         }
     }
 
@@ -618,28 +761,33 @@ extension KafkaConsumer {
             }
         }
 
-        /// Action to be taken when wanting to do a commit.
-        enum CommitAction {
-            /// Do a commit.
+        /// Action to be taken when needing access to the running client.
+        enum ClientAction {
+            /// The client is available.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case commit(client: RDKafkaClient)
+            case client(RDKafkaClient)
             /// Throw an error. The ``KafkaConsumer`` is closed.
             case throwClosedError
         }
 
-        /// Get action to be taken when wanting to do a commit.
+        /// Get the running client for performing an operation that requires an active consumer.
+        ///
+        /// This is a general-purpose accessor used by methods that need the underlying
+        /// `RDKafkaClient` while the consumer is running (e.g., commit, storeOffset,
+        /// committed, position, seek, isAssignmentLost).
+        ///
         /// - Returns: The action to be taken.
         ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
-        func commit() -> CommitAction {
+        /// - Important: This function calls `fatalError` if called while in the `.initializing` state.
+        func withClient() -> ClientAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
             case .running(let client):
-                return .commit(client: client)
+                return .client(client)
             case .finishing, .finished:
                 return .throwClosedError
             }

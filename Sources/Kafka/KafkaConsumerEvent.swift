@@ -14,14 +14,12 @@
 
 /// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
 public enum KafkaConsumerEvent: Sendable, Hashable {
-    /// - Important: Always provide a `default` case when switiching over this `enum`.
+    /// - Important: Always provide a `default` case when switching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 
-    internal init(_ event: RDKafkaClient.KafkaEvent) {
+    internal init(_ event: RDKafkaClient.ConsumerPollEvent) {
         switch event {
         case .statistics:
-            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
-        case .deliveryReport:
             fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         }
     }

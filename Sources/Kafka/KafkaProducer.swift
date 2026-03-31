@@ -236,9 +236,9 @@ public final class KafkaProducer: Service, Sendable {
             switch nextAction {
             case .pollWithoutYield(let client):
                 // Drop any incoming events
-                let _ = client.eventPoll()
+                let _ = client.producerEventPoll()
             case .pollAndYield(let client, let source):
-                let events = client.eventPoll()
+                let events = client.producerEventPoll()
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
