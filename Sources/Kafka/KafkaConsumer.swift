@@ -153,9 +153,17 @@ public final class KafkaConsumer: Sendable, Service {
     /// A logger.
     private let logger: Logger
     /// State of the `KafkaConsumer`.
+    /// - Important: Must be declared BEFORE `rebalanceContext` so that `RDKafkaClient`
+    ///   (held inside the state machine) is destroyed first during deinit. This ensures
+    ///   `rd_kafka_destroy` stops all librdkafka threads before the `RebalanceContext`
+    ///   (which holds the C callback's unretained pointer target) is deallocated.
     private let stateMachine: NIOLockedValueBox<StateMachine>
     /// Source for yielding consumer events (rebalance, etc.). `nil` when created without events.
     private let eventsSource: ConsumerEventsProducer.Source?
+    /// Context for the C rebalance callback. Must outlive the `RDKafkaClient` because the
+    /// C callback holds an unretained pointer to it.
+    /// - Important: Must be declared AFTER `stateMachine` — see ordering note above.
+    private let rebalanceContext: RebalanceContext
 
     /// An asynchronous sequence containing messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
@@ -169,12 +177,14 @@ public final class KafkaConsumer: Sendable, Service {
     ///     - client: Client used for handling the connection to the Kafka cluster.
     ///     - stateMachine: The state machine containing the state of the ``KafkaConsumer``.
     ///     - config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
+    ///     - rebalanceContext: The context for the C rebalance callback.
     ///     - logger: A logger.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     private init(
         client: RDKafkaClient,
         stateMachine: NIOLockedValueBox<StateMachine>,
         config: KafkaConsumerConfig,
+        rebalanceContext: RebalanceContext,
         logger: Logger,
         eventsSource: ConsumerEventsProducer.Source? = nil
     ) throws {
@@ -182,6 +192,7 @@ public final class KafkaConsumer: Sendable, Service {
         self.stateMachine = stateMachine
         self.logger = logger
         self.eventsSource = eventsSource
+        self.rebalanceContext = rebalanceContext
 
         self.messages = KafkaConsumerMessages(
             stateMachine: self.stateMachine,
@@ -190,7 +201,8 @@ public final class KafkaConsumer: Sendable, Service {
 
         self.stateMachine.withLockedValue {
             $0.initialize(
-                client: client
+                client: client,
+                rebalanceContext: rebalanceContext
             )
         }
     }
@@ -207,7 +219,7 @@ public final class KafkaConsumer: Sendable, Service {
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
-        var subscribedEvents: [RDKafkaEvent] = [.log]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance]
         let isAutoCommitEnabled = config.enableAutoCommit ?? true
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
@@ -216,11 +228,14 @@ public final class KafkaConsumer: Sendable, Service {
             subscribedEvents.append(.statistics)
         }
 
+        let rebalanceContext = RebalanceContext(logger: logger)
+
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: config.config,
             events: subscribedEvents,
-            logger: logger
+            logger: logger,
+            rebalanceContext: rebalanceContext
         )
 
         let stateMachine = NIOLockedValueBox(StateMachine())
@@ -229,6 +244,7 @@ public final class KafkaConsumer: Sendable, Service {
             client: client,
             stateMachine: stateMachine,
             config: config,
+            rebalanceContext: rebalanceContext,
             logger: logger
         )
     }
@@ -250,7 +266,7 @@ public final class KafkaConsumer: Sendable, Service {
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
-        var subscribedEvents: [RDKafkaEvent] = [.log]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance]
         let isAutoCommitEnabled = config.enableAutoCommit ?? true
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
@@ -259,11 +275,14 @@ public final class KafkaConsumer: Sendable, Service {
             subscribedEvents.append(.statistics)
         }
 
+        let rebalanceContext = RebalanceContext(logger: logger)
+
         let client = try RDKafkaClient.makeClient(
             type: .consumer,
             configDictionary: config.config,
             events: subscribedEvents,
-            logger: logger
+            logger: logger,
+            rebalanceContext: rebalanceContext
         )
 
         let stateMachine = NIOLockedValueBox(StateMachine())
@@ -284,6 +303,7 @@ public final class KafkaConsumer: Sendable, Service {
             client: client,
             stateMachine: stateMachine,
             config: config,
+            rebalanceContext: rebalanceContext,
             logger: logger,
             eventsSource: sourceAndSequence.source
         )
@@ -380,11 +400,18 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Run loop polling Kafka for new events.
     private func eventRunLoop() async throws {
+        defer {
+            // Guarantee the events stream is finished on ALL exit paths:
+            // normal .terminatePollLoop, Task cancellation (CancellationError from Task.sleep),
+            // or any other thrown error. Without this, `for await event in events` hangs forever.
+            self.eventsSource?.finish()
+        }
+
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextEventPollLoopAction() }
             switch nextAction {
             case .pollForEvents(let client):
-                // Event poll to serve any events queued inside of `librdkafka`.
+                // Event poll to serve any events queued inside of `librdkafka` (statistics, logs, offset commits).
                 let events = client.consumerEventPoll()
                 for event in events {
                     switch event {
@@ -392,11 +419,90 @@ public final class KafkaConsumer: Sendable, Service {
                         self.config.metrics.update(with: statistics)
                     }
                 }
+
+                // Drain rebalance events from the callback context.
+                // These were buffered by the C rebalance callback during rd_kafka_consumer_poll().
+                let rebalanceEvents = self.rebalanceContext.drainEvents()
+                for event in rebalanceEvents {
+                    let kind: KafkaConsumerRebalance.Kind
+                    switch event.kind {
+                    case .assign:
+                        kind = .assign
+                    case .revoke:
+                        kind = .revoke
+                    case .error(let description):
+                        kind = .error(description)
+                    }
+
+                    let rebalance = KafkaConsumerRebalance(
+                        kind: kind,
+                        partitions: event.partitions.map {
+                            KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
+                        }
+                    )
+                    if let source = self.eventsSource {
+                        _ = source.yield(.rebalance(rebalance))
+                    }
+                    self.logger.info(
+                        "Consumer rebalance",
+                        metadata: [
+                            "kind": "\(rebalance.kind)",
+                            "partitions": "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
+                        ]
+                    )
+                }
+
                 try await Task.sleep(for: self.config.pollInterval)
-            case .terminatePollLoop:
-                self.eventsSource?.finish()
+            case .terminatePollLoop(let client):
+                // Final drain: the close process may have completed (isConsumerClosed = true)
+                // before we polled the shutdown revoke from mainQueue. Do one last poll+drain
+                // so no rebalance events are lost.
+                if let client {
+                    self.finalDrain(client: client)
+                }
                 return
             }
+        }
+    }
+
+    /// Final drain of the event queue and rebalance buffer before shutdown completes.
+    ///
+    /// Called after `isConsumerClosed` returns true. The close process
+    /// (`rd_kafka_consumer_close_queue`) may have enqueued a final revoke on
+    /// mainQueue and completed (`rkcg_terminated = true`) before the event loop
+    /// had a chance to poll it. This one last poll+drain ensures that event
+    /// is not lost.
+    private func finalDrain(client: RDKafkaClient) {
+        let _ = client.consumerEventPoll()
+
+        let rebalanceEvents = self.rebalanceContext.drainEvents()
+        for event in rebalanceEvents {
+            let kind: KafkaConsumerRebalance.Kind
+            switch event.kind {
+            case .assign:
+                kind = .assign
+            case .revoke:
+                kind = .revoke
+            case .error(let description):
+                kind = .error(description)
+            }
+
+            let rebalance = KafkaConsumerRebalance(
+                kind: kind,
+                partitions: event.partitions.map {
+                    KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
+                }
+            )
+            if let source = self.eventsSource {
+                _ = source.yield(.rebalance(rebalance))
+            }
+            self.logger.info(
+                "Consumer rebalance",
+                metadata: [
+                    "kind": "\(rebalance.kind)",
+                    "partitions": "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
+                ]
+            )
         }
     }
 
@@ -502,13 +608,13 @@ public final class KafkaConsumer: Sendable, Service {
     public func committed(
         topicPartitions: [KafkaTopicPartition],
         timeout: Duration = .milliseconds(5000)
-    ) throws -> [KafkaTopicPartitionOffset] {
+    ) async throws -> [KafkaTopicPartitionOffset] {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to query committed offsets on a closed consumer")
         case .client(let client):
-            return try client.committed(
+            return try await client.committed(
                 topicPartitions: topicPartitions,
                 timeoutMilliseconds: Int32(timeout.inMilliseconds)
             )
@@ -574,13 +680,13 @@ public final class KafkaConsumer: Sendable, Service {
     public func seek(
         topicPartitionOffsets: [KafkaTopicPartitionOffset],
         timeout: Duration = .milliseconds(5000)
-    ) throws {
+    ) async throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Tried to seek on a closed consumer")
         case .client(let client):
-            try client.seekPartitions(
+            try await client.seekPartitions(
                 topicPartitionOffsets: topicPartitionOffsets,
                 timeoutMilliseconds: Int32(timeout.inMilliseconds)
             )
@@ -634,20 +740,22 @@ extension KafkaConsumer {
             /// though ``subscribe()`` / ``assign()`` have not been invoked.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter source: The source for yielding new messages.
+            /// - Parameter rebalanceContext: The context for the C rebalance callback.
             case initializing(
-                client: RDKafkaClient
+                client: RDKafkaClient,
+                rebalanceContext: RebalanceContext
             )
             /// The ``KafkaConsumer`` is consuming messages.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            /// - Parameter state: State of the event loop fetching new consumer messages.
-            case running(client: RDKafkaClient)
+            /// - Parameter rebalanceContext: The context for the C rebalance callback.
+            case running(client: RDKafkaClient, rebalanceContext: RebalanceContext)
             /// The ``KafkaConsumer/triggerGracefulShutdown()`` has been invoked.
             /// We are now in the process of commiting our last state to the broker.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case finishing(client: RDKafkaClient)
+            /// - Parameter rebalanceContext: The context for the C rebalance callback.
+            case finishing(client: RDKafkaClient, rebalanceContext: RebalanceContext)
             /// The ``KafkaConsumer`` is closed.
             case finished
         }
@@ -658,7 +766,8 @@ extension KafkaConsumer {
         /// Delayed initialization of `StateMachine` as the `source` and the `pollClosure` are
         /// not yet available when the normal initialization occurs.
         mutating func initialize(
-            client: RDKafkaClient
+            client: RDKafkaClient,
+            rebalanceContext: RebalanceContext
         ) {
             guard case .uninitialized = self.state else {
                 fatalError(
@@ -666,7 +775,8 @@ extension KafkaConsumer {
                 )
             }
             self.state = .initializing(
-                client: client
+                client: client,
+                rebalanceContext: rebalanceContext
             )
         }
 
@@ -677,7 +787,9 @@ extension KafkaConsumer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case pollForEvents(client: RDKafkaClient)
             /// Terminate the poll loop.
-            case terminatePollLoop
+            ///
+            /// - Parameter client: Client for final drain (may be nil if state was already `.finished`).
+            case terminatePollLoop(client: RDKafkaClient?)
         }
 
         /// Returns the next action to be taken when wanting to poll.
@@ -690,17 +802,17 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .running(let client):
+            case .running(let client, _):
                 return .pollForEvents(client: client)
-            case .finishing(let client):
+            case .finishing(let client, _):
                 if client.isConsumerClosed {
                     self.state = .finished
-                    return .terminatePollLoop
+                    return .terminatePollLoop(client: client)
                 } else {
                     return .pollForEvents(client: client)
                 }
             case .finished:
-                return .terminatePollLoop
+                return .terminatePollLoop(client: nil)
             }
         }
 
@@ -726,7 +838,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 return .suspendPollLoop
-            case .running(let client):
+            case .running(let client, _):
                 return .poll(client: client)
             case .finishing, .finished:
                 return .terminatePollLoop
@@ -749,8 +861,8 @@ extension KafkaConsumer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .initializing(let client):
-                self.state = .running(client: client)
+            case .initializing(let client, let rebalanceContext):
+                self.state = .running(client: client, rebalanceContext: rebalanceContext)
                 return .setUpConnection(client: client)
             case .running:
                 fatalError("\(#function) should not be invoked more than once")
@@ -786,7 +898,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .running(let client):
+            case .running(let client, _):
                 return .client(client)
             case .finishing, .finished:
                 return .throwClosedError
@@ -811,8 +923,8 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .running(let client):
-                self.state = .finishing(client: client)
+            case .running(let client, let rebalanceContext):
+                self.state = .finishing(client: client, rebalanceContext: rebalanceContext)
                 return .triggerGracefulShutdown(client: client)
             case .finishing, .finished:
                 return nil
@@ -830,6 +942,20 @@ extension KafkaConsumer {
                 self.state = .finished
             case .finishing, .finished:
                 break
+            }
+        }
+
+        /// Returns the client if available, for cleanup purposes (e.g., final event drain).
+        /// Unlike ``withClient()``, this does not fatalError in transitional states —
+        /// it returns `nil` when no client is available.
+        func clientForCleanup() -> RDKafkaClient? {
+            switch self.state {
+            case .uninitialized, .finished:
+                return nil
+            case .initializing(let client, _),
+                .running(let client, _),
+                .finishing(let client, _):
+                return client
             }
         }
     }
