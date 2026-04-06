@@ -201,8 +201,8 @@ import Foundation
             await serviceGroup.triggerGracefulShutdown()
         }
 
-        #expect(throws: KafkaError.self) {
-            _ = try consumer.committed(
+        await #expect(throws: KafkaError.self) {
+            _ = try await consumer.committed(
                 topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))],
                 timeout: .milliseconds(1000)
             )
@@ -294,8 +294,8 @@ import Foundation
             await serviceGroup.triggerGracefulShutdown()
         }
 
-        #expect(throws: KafkaError.self) {
-            try consumer.seek(
+        await #expect(throws: KafkaError.self) {
+            try await consumer.seek(
                 topicPartitionOffsets: [
                     KafkaTopicPartitionOffset(topic: "test", partition: KafkaPartition(rawValue: 0), offset: .beginning)
                 ]
@@ -455,6 +455,347 @@ import Foundation
         set.insert(tpo2)
         set.insert(tpo3)
         #expect(set.count == 2)
+    }
+
+    // MARK: - KafkaConsumerRebalance Tests
+
+    @Test func rebalanceAssignConstruction() {
+        let partitions = [
+            KafkaTopicPartition(topic: "topic-a", partition: KafkaPartition(rawValue: 0)),
+            KafkaTopicPartition(topic: "topic-a", partition: KafkaPartition(rawValue: 1)),
+        ]
+        let rebalance = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        #expect(rebalance.kind == .assign)
+        #expect(rebalance.partitions.count == 2)
+        #expect(rebalance.partitions[0].topic == "topic-a")
+        #expect(rebalance.partitions[0].partition == KafkaPartition(rawValue: 0))
+        #expect(rebalance.partitions[1].partition == KafkaPartition(rawValue: 1))
+    }
+
+    @Test func rebalanceRevokeConstruction() {
+        let rebalance = KafkaConsumerRebalance(kind: .revoke, partitions: [])
+        #expect(rebalance.kind == .revoke)
+        #expect(rebalance.partitions.isEmpty)
+    }
+
+    @Test func rebalanceEquality() {
+        let partitions = [
+            KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))
+        ]
+        let r1 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r2 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r3 = KafkaConsumerRebalance(kind: .revoke, partitions: partitions)
+        let r4 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+
+        #expect(r1 == r2)
+        #expect(r1 != r3)
+        #expect(r1 != r4)
+    }
+
+    @Test func rebalanceHashable() {
+        let partitions = [
+            KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))
+        ]
+        let r1 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r2 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r3 = KafkaConsumerRebalance(kind: .revoke, partitions: partitions)
+
+        var set: Set<KafkaConsumerRebalance> = []
+        set.insert(r1)
+        set.insert(r2)
+        set.insert(r3)
+        #expect(set.count == 2)
+    }
+
+    @Test func rebalanceKindEquality() {
+        #expect(KafkaConsumerRebalance.Kind.assign == KafkaConsumerRebalance.Kind.assign)
+        #expect(KafkaConsumerRebalance.Kind.revoke == KafkaConsumerRebalance.Kind.revoke)
+        #expect(KafkaConsumerRebalance.Kind.assign != KafkaConsumerRebalance.Kind.revoke)
+    }
+
+    // MARK: - KafkaConsumerEvent Rebalance Tests
+
+    @Test func consumerEventRebalancePatternMatch() {
+        let rebalance = KafkaConsumerRebalance(
+            kind: .assign,
+            partitions: [KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))]
+        )
+        let event = KafkaConsumerEvent.rebalance(rebalance)
+
+        switch event {
+        case .rebalance(let r):
+            #expect(r.kind == .assign)
+            #expect(r.partitions.count == 1)
+        default:
+            Issue.record("Expected .rebalance event")
+        }
+    }
+
+    @Test func consumerEventFromConsumerPollEvent() {
+        let rebalance = KafkaConsumerRebalance(
+            kind: .revoke,
+            partitions: [
+                KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0)),
+                KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 1)),
+            ]
+        )
+        let event = KafkaConsumerEvent.rebalance(rebalance)
+
+        switch event {
+        case .rebalance(let r):
+            #expect(r.kind == .revoke)
+            #expect(r.partitions.count == 2)
+        default:
+            Issue.record("Expected .rebalance event")
+        }
+    }
+
+    // MARK: - KafkaConsumerRebalance.Kind.error Tests
+
+    @Test func rebalanceErrorConstruction() {
+        let rebalance = KafkaConsumerRebalance(kind: .error("broker unavailable"), partitions: [])
+        #expect(rebalance.partitions.isEmpty)
+        if case .error(let description) = rebalance.kind {
+            #expect(description == "broker unavailable")
+        } else {
+            Issue.record("Expected .error kind")
+        }
+    }
+
+    @Test func rebalanceErrorEquality() {
+        let r1 = KafkaConsumerRebalance(kind: .error("err1"), partitions: [])
+        let r2 = KafkaConsumerRebalance(kind: .error("err1"), partitions: [])
+        let r3 = KafkaConsumerRebalance(kind: .error("err2"), partitions: [])
+        let r4 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+
+        #expect(r1 == r2)
+        #expect(r1 != r3)
+        #expect(r1 != r4)
+    }
+
+    @Test func rebalanceErrorHashable() {
+        let r1 = KafkaConsumerRebalance(kind: .error("err"), partitions: [])
+        let r2 = KafkaConsumerRebalance(kind: .error("err"), partitions: [])
+        let r3 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+
+        var set: Set<KafkaConsumerRebalance> = []
+        set.insert(r1)
+        set.insert(r2)
+        set.insert(r3)
+        #expect(set.count == 2)
+    }
+
+    @Test func rebalanceErrorEventPatternMatch() {
+        let rebalance = KafkaConsumerRebalance(kind: .error("group coordinator not available"), partitions: [])
+        let event = KafkaConsumerEvent.rebalance(rebalance)
+
+        switch event {
+        case .rebalance(let r):
+            if case .error(let desc) = r.kind {
+                #expect(desc == "group coordinator not available")
+            } else {
+                Issue.record("Expected .error kind")
+            }
+            #expect(r.partitions.isEmpty)
+        default:
+            Issue.record("Expected .rebalance event")
+        }
+    }
+
+    // MARK: - RebalanceContext Tests
+
+    @Test func rebalanceContextDrainEventsEmpty() {
+        let context = RebalanceContext(logger: .kafkaTest)
+        let events = context.drainEvents()
+        #expect(events.isEmpty)
+    }
+
+    @Test func rebalanceContextInjectAndDrain() {
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(
+                kind: .assign,
+                partitions: [("topic-a", 0), ("topic-a", 1)]
+            )
+        )
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(
+                kind: .revoke,
+                partitions: [("topic-a", 1)]
+            )
+        )
+
+        let events = context.drainEvents()
+        #expect(events.count == 2)
+
+        // Verify FIFO ordering
+        if case .assign = events[0].kind {
+            #expect(events[0].partitions.count == 2)
+        } else {
+            Issue.record("Expected first event to be .assign")
+        }
+
+        if case .revoke = events[1].kind {
+            #expect(events[1].partitions.count == 1)
+        } else {
+            Issue.record("Expected second event to be .revoke")
+        }
+    }
+
+    @Test func rebalanceContextDrainClearsBuffer() {
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(kind: .assign, partitions: [("t", 0)])
+        )
+
+        let first = context.drainEvents()
+        #expect(first.count == 1)
+
+        let second = context.drainEvents()
+        #expect(second.isEmpty, "Second drain should return empty after first drain consumed the event")
+    }
+
+    @Test func rebalanceContextErrorEventInjection() {
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(kind: .error("coordinator not available"), partitions: [])
+        )
+
+        let events = context.drainEvents()
+        #expect(events.count == 1)
+        if case .error(let desc) = events[0].kind {
+            #expect(desc == "coordinator not available")
+        } else {
+            Issue.record("Expected .error kind")
+        }
+        #expect(events[0].partitions.isEmpty)
+    }
+
+    @Test func rebalanceContextConcurrentInjectAndDrain() async {
+        // This tests the core race condition: the C callback thread appends events
+        // while the Swift event loop drains them concurrently.
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        // Use an actor to safely count drained events across tasks
+        actor Counter {
+            var value = 0
+            func add(_ n: Int) { value += n }
+            func get() -> Int { value }
+        }
+        let drainCounter = Counter()
+
+        await withTaskGroup(of: Void.self) { group in
+            // Simulate C callback thread: rapidly inject events
+            group.addTask {
+                for i in 0..<200 {
+                    context._testInjectEvent(
+                        RebalanceContext.ConsumerRebalanceEvent(
+                            kind: i % 2 == 0 ? .assign : .revoke,
+                            partitions: [("topic", i)]
+                        )
+                    )
+                }
+            }
+
+            // Simulate event loop: drain repeatedly
+            group.addTask {
+                for _ in 0..<500 {
+                    let events = context.drainEvents()
+                    await drainCounter.add(events.count)
+                    await Task.yield()
+                }
+            }
+
+            await group.waitForAll()
+        }
+
+        // Drain any remaining events after both tasks complete
+        let remaining = context.drainEvents()
+        await drainCounter.add(remaining.count)
+
+        // Every injected event must be drained exactly once — no loss, no duplication
+        let finalDrained = await drainCounter.get()
+        #expect(finalDrained == 200, "Expected 200 drained events, got \(finalDrained)")
+    }
+
+    @Test func rebalanceContextConcurrentMultipleInjectersAndDrain() async {
+        // Multiple "C callback threads" appending simultaneously while event loop drains
+        let context = RebalanceContext(logger: .kafkaTest)
+        let injectersCount = 5
+        let eventsPerInjecter = 50
+
+        actor Counter {
+            var value = 0
+            func add(_ n: Int) { value += n }
+            func get() -> Int { value }
+        }
+        let drainCounter = Counter()
+
+        await withTaskGroup(of: Void.self) { group in
+            // Multiple concurrent injecters
+            for t in 0..<injectersCount {
+                group.addTask {
+                    for i in 0..<eventsPerInjecter {
+                        context._testInjectEvent(
+                            RebalanceContext.ConsumerRebalanceEvent(
+                                kind: .assign,
+                                partitions: [("topic-\(t)", i)]
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Single drain loop
+            group.addTask {
+                for _ in 0..<1000 {
+                    let events = context.drainEvents()
+                    await drainCounter.add(events.count)
+                    await Task.yield()
+                }
+            }
+
+            await group.waitForAll()
+        }
+
+        let remaining = context.drainEvents()
+        await drainCounter.add(remaining.count)
+        let finalDrained = await drainCounter.get()
+        let expected = injectersCount * eventsPerInjecter
+        #expect(finalDrained == expected, "Expected \(expected) drained events, got \(finalDrained)")
+    }
+
+    @Test func rebalanceContextFIFOOrderingPreservedUnderConcurrency() async {
+        // Verify events from a single injecter maintain FIFO order
+        let context = RebalanceContext(logger: .kafkaTest)
+        var allDrained: [RebalanceContext.ConsumerRebalanceEvent] = []
+
+        // Inject 100 events with sequential partition IDs
+        for i in 0..<100 {
+            context._testInjectEvent(
+                RebalanceContext.ConsumerRebalanceEvent(
+                    kind: .assign,
+                    partitions: [("topic", i)]
+                )
+            )
+        }
+
+        // Drain in batches
+        while true {
+            let batch = context.drainEvents()
+            if batch.isEmpty { break }
+            allDrained.append(contentsOf: batch)
+        }
+
+        #expect(allDrained.count == 100)
+
+        // Verify ordering: partition IDs should be 0, 1, 2, ... 99
+        for (index, event) in allDrained.enumerated() {
+            #expect(event.partitions[0].partition == index, "Event at index \(index) has partition \(event.partitions[0].partition), expected \(index)")
+        }
     }
 
 }
