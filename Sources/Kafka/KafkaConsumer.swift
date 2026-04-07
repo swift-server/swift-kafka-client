@@ -117,7 +117,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                             queue,
                             operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
                         ) {
-                            return message
+                            if !message.eof || self.enablePartitionEof {
+                                return message
+                            }
                         }
                     } else {
                         // No messages. Sleep a little.
