@@ -37,6 +37,10 @@ public struct KafkaConsumerMessage {
 
         init(messagePointer: UnsafeMutablePointer<rd_kafka_message_t>) {
             self.messagePointer = messagePointer
+
+            // Force lazy init now, single-threaded, before this becomes Sendable
+            var headersPtr: OpaquePointer?
+            _ = rd_kafka_message_headers(messagePointer, &headersPtr)
         }
 
         deinit {
