@@ -400,4 +400,39 @@ import Foundation
             Issue.record("Expected .error event")
         }
     }
+
+    // MARK: - sendAndAwait Tests
+
+    @Test func sendAndAwaitFailsOnClosedProducer() async throws {
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: self.config,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            group.addTask {
+                for await _ in events {}
+            }
+
+            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+        }
+
+        // After shutdown, sendAndAwait should throw connectionClosed
+        await #expect(throws: KafkaError.self) {
+            let message = KafkaProducerMessage(
+                topic: "test-topic",
+                key: "key",
+                value: "value"
+            )
+            _ = try await producer.sendAndAwait(message)
+        }
+    }
 }

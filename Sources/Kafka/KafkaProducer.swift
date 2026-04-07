@@ -116,7 +116,7 @@ public final class KafkaProducer: Service, Sendable {
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        var subscribedEvents: [RDKafkaEvent] = [.log, .error]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
 
         if config.metrics.enabled {
             subscribedEvents.append(.statistics)
@@ -247,8 +247,8 @@ public final class KafkaProducer: Service, Sendable {
                     switch event {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
-                    case .deliveryReport:
-                        break
+                    case .deliveryReport(let reports):
+                        self.resumeContinuations(for: reports)
                     case .error(let kafkaError):
                         self.logger.error(
                             "Kafka client error",
@@ -264,6 +264,7 @@ public final class KafkaProducer: Service, Sendable {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
+                        self.resumeContinuations(for: reports)
                         _ = source?.yield(.deliveryReports(reports))
                     case .error(let kafkaError):
                         _ = source?.yield(.error(kafkaError))
@@ -286,6 +287,29 @@ public final class KafkaProducer: Service, Sendable {
                 return
             case .terminatePollLoop:
                 return
+            }
+        }
+    }
+
+    /// Match delivery reports against pending `sendAndAwait` continuations.
+    ///
+    /// For each report, if a continuation is registered for that message ID, resume it.
+    /// ALL reports are returned — they should be yielded to the events sequence regardless
+    /// of whether a continuation was resumed. This ensures the events sequence is a complete
+    /// log of all delivery reports, even for messages sent via `sendAndAwait`.
+    private func resumeContinuations(for reports: [KafkaDeliveryReport]) {
+        for report in reports {
+            let continuation: CheckedContinuation<KafkaDeliveryReport, Error>? =
+                self.stateMachine.withLockedValue {
+                    $0.removeContinuation(for: report.id.rawValue)
+                }
+            if let continuation {
+                switch report.status {
+                case .acknowledged:
+                    continuation.resume(returning: report)
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
             }
         }
     }
@@ -321,6 +345,68 @@ public final class KafkaProducer: Service, Sendable {
             return KafkaProducerMessageID(rawValue: newMessageID)
         }
     }
+
+    /// Send a ``KafkaProducerMessage`` to the Kafka cluster and await the delivery report.
+    ///
+    /// Unlike ``send(_:)``, this method suspends until the broker acknowledges (or rejects)
+    /// the message. The returned ``KafkaDeliveryReport`` contains the acknowledgment status,
+    /// partition, offset, and other metadata.
+    ///
+    /// This provides a Java-like `producer.send(record).get()` or Rust-like
+    /// `producer.send(record).await` experience — a single awaitable call that confirms delivery.
+    ///
+    /// - Parameter message: The ``KafkaProducerMessage`` to send.
+    /// - Returns: A ``KafkaDeliveryReport`` with the delivery status.
+    /// - Throws: A ``KafkaError`` if the message could not be enqueued or was rejected by the broker.
+    public func sendAndAwait<Key, Value>(
+        _ message: KafkaProducerMessage<Key, Value>
+    ) async throws -> KafkaDeliveryReport {
+        // Get the message ID and produce BEFORE entering the continuation,
+        // so we have the ID available for the cancellation handler.
+        let action = try self.stateMachine.withLockedValue { try $0.send() }
+        let newMessageID: UInt
+        let client: RDKafkaClient
+        let topicHandles: RDKafkaTopicHandles
+
+        switch action {
+        case .send(let c, let id, let th):
+            newMessageID = id
+            client = c
+            topicHandles = th
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<KafkaDeliveryReport, Error>) in
+                // Register the continuation BEFORE producing — the delivery report
+                // could theoretically arrive before produce() returns on a fast broker.
+                self.stateMachine.withLockedValue {
+                    $0.registerContinuation(continuation, for: newMessageID)
+                }
+                do {
+                    try client.produce(
+                        message: message,
+                        newMessageID: newMessageID,
+                        topicHandles: topicHandles
+                    )
+                } catch {
+                    // produce() failed synchronously — remove the continuation and resume with error
+                    _ = self.stateMachine.withLockedValue {
+                        $0.removeContinuation(for: newMessageID)
+                    }
+                    continuation.resume(throwing: error)
+                }
+            }
+        } onCancel: {
+            // Task was cancelled — remove the pending continuation and resume with CancellationError.
+            // The message is already enqueued in librdkafka and will be delivered regardless,
+            // but the caller no longer cares about the result.
+            let cancelled = self.stateMachine.withLockedValue {
+                $0.removeContinuation(for: newMessageID)
+            }
+            cancelled?.resume(throwing: CancellationError())
+        }
+    }
 }
 
 // MARK: - KafkaProducer + StateMachine
@@ -330,6 +416,16 @@ extension KafkaProducer {
     struct StateMachine: Sendable {
         /// A logger.
         let logger: Logger
+
+        /// Pending continuations for ``sendAndAwait(_:)`` calls, keyed by message ID.
+        /// When a delivery report arrives, the event loop checks this dictionary.
+        /// If a match is found, the continuation is resumed and removed.
+        /// Protected by the enclosing `NIOLockedValueBox`.
+        private var pendingContinuations: [UInt: CheckedContinuation<KafkaDeliveryReport, Error>] = [:]
+
+        init(logger: Logger) {
+            self.logger = logger
+        }
 
         /// The state of the ``StateMachine``.
         enum State: Sendable {
@@ -514,6 +610,30 @@ extension KafkaProducer {
             case .finishing, .finished:
                 break
             }
+        }
+
+        // MARK: - sendAndAwait Continuation Management
+
+        /// Register a continuation for a pending `sendAndAwait` call.
+        ///
+        /// Called from `sendAndAwait()` BEFORE `produce()` to ensure the continuation
+        /// is registered before the delivery report can arrive.
+        mutating func registerContinuation(
+            _ continuation: CheckedContinuation<KafkaDeliveryReport, Error>,
+            for messageID: UInt
+        ) {
+            self.pendingContinuations[messageID] = continuation
+        }
+
+        /// Remove and return a pending continuation for the given message ID.
+        ///
+        /// Called from the event loop when a delivery report arrives. Returns `nil`
+        /// if the message was sent via `send()` (no continuation registered).
+        @discardableResult
+        mutating func removeContinuation(
+            for messageID: UInt
+        ) -> CheckedContinuation<KafkaDeliveryReport, Error>? {
+            self.pendingContinuations.removeValue(forKey: messageID)
         }
     }
 }
