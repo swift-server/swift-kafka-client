@@ -15,7 +15,12 @@
 import Crdkafka
 
 /// Swift wrapper type for `rd_kafka_topic_partition_list_t`.
-final class RDKafkaTopicPartitionList {
+///
+/// Marked `@unchecked Sendable` because it wraps a C heap allocation
+/// (`rd_kafka_topic_partition_list_t*`). Callers are responsible for
+/// ensuring the list is not accessed concurrently — the typical pattern
+/// is single-owner (create → populate → pass to blocking C call → read result).
+final class RDKafkaTopicPartitionList: @unchecked Sendable {
     private let _internal: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
 
     /// Create a new topic+partition list.

@@ -26,6 +26,14 @@ public final class RDKafkaClient: Sendable {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
+    /// Shared concurrent queue for offloading blocking C calls (e.g., `rd_kafka_committed`,
+    /// `rd_kafka_seek_partitions`, `rd_kafka_flush`) so they don't block Swift Concurrency's
+    /// cooperative thread pool. Concurrent so independent operations can run in parallel.
+    private static let blockingQueue = DispatchQueue(
+        label: "com.swift-server.swift-kafka.blocking",
+        attributes: .concurrent
+    )
+
     /// Determines if client is a producer or a consumer.
     enum ClientType {
         case producer
@@ -64,13 +72,24 @@ public final class RDKafkaClient: Sendable {
         type: ClientType,
         configDictionary: [String: String],
         events: [RDKafkaEvent],
-        logger: Logger
+        logger: Logger,
+        rebalanceContext: RebalanceContext? = nil
     ) throws -> RDKafkaClient {
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
         // Manually override some of the configuration options
         // Handle logs in event queue
         try RDKafkaConfig.set(configPointer: rdConfig, key: "log.queue", value: "true")
         RDKafkaConfig.setEvents(configPointer: rdConfig, events: events)
+
+        // Register rebalance callback for consumer clients.
+        // This handles rebalance events synchronously inside rd_kafka_consumer_poll(),
+        // which is the correct queue for these events (consumer group queue, not main queue).
+        if let rebalanceContext {
+            RDKafkaConfig.setRebalanceCallback(
+                configPointer: rdConfig,
+                context: rebalanceContext
+            )
+        }
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
         defer { errorChars.deallocate() }
@@ -378,6 +397,23 @@ public final class RDKafkaClient: Sendable {
             case .deliveryReport:
                 // Should never occur on a consumer queue, but handle defensively.
                 _ = self.handleDeliveryReportEvent(event)
+            case .rebalance:
+                // Rebalance events arrive here when polled from the main queue
+                // (e.g., during shutdown after rd_kafka_consumer_close_queue forwards
+                // the consumer queue to the main queue). Dispatch through the
+                // rebalance callback so assign/unassign is performed and the cgrp
+                // subsystem is acknowledged — otherwise the close process hangs.
+                let err = rd_kafka_event_error(event)
+                let tpl = rd_kafka_event_topic_partition_list(event)
+                let opaque = rd_kafka_opaque(self.kafkaHandle.pointer)
+                if let opaque {
+                    let context = Unmanaged<RebalanceContext>.fromOpaque(opaque).takeUnretainedValue()
+                    context.handleRebalance(
+                        kafkaHandle: self.kafkaHandle.pointer,
+                        error: err,
+                        partitions: tpl
+                    )
+                }
             case .none:
                 return events
             default:
@@ -673,9 +709,8 @@ public final class RDKafkaClient: Sendable {
         // rd_kafka_flush is blocking and there is no convenient way to make it non-blocking.
         // We therefore execute rd_kafka_flush on a DispatchQueue to ensure it gets executed
         // on a separate thread that is not part of Swift Concurrency's cooperative thread pool.
-        let queue = DispatchQueue(label: "com.swift-server.swift-kafka.flush")
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            queue.async {
+            Self.blockingQueue.async {
                 let error = rd_kafka_flush(self.kafkaHandle.pointer, timeoutMilliseconds)
                 if error != RD_KAFKA_RESP_ERR_NO_ERROR {
                     continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
@@ -713,26 +748,35 @@ public final class RDKafkaClient: Sendable {
     func committed(
         topicPartitions: [KafkaTopicPartition],
         timeoutMilliseconds: Int32
-    ) throws -> [KafkaTopicPartitionOffset] {
+    ) async throws -> [KafkaTopicPartitionOffset] {
         let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitions.count))
         for tp in topicPartitions {
             tpl.add(topic: tp.topic, partition: tp.partition)
         }
 
-        let error = tpl.withListPointer { listPointer in
-            rd_kafka_committed(
-                self.kafkaHandle.pointer,
-                listPointer,
-                timeoutMilliseconds
-            )
-        }
+        // rd_kafka_committed is blocking — offload to a DispatchQueue so it does not
+        // block Swift Concurrency's cooperative thread pool.
+        let kafkaHandle = self.kafkaHandle
+        return try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<[KafkaTopicPartitionOffset], Error>) in
+            Self.blockingQueue.async {
+                let error = tpl.withListPointer { listPointer in
+                    rd_kafka_committed(
+                        kafkaHandle.pointer,
+                        listPointer,
+                        timeoutMilliseconds
+                    )
+                }
 
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
-        }
-
-        return tpl.withListPointer { listPointer in
-            Self.extractOffsetsFromList(listPointer)
+                if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
+                } else {
+                    let results = tpl.withListPointer { listPointer in
+                        Self.extractOffsetsFromList(listPointer)
+                    }
+                    continuation.resume(returning: results)
+                }
+            }
         }
     }
 
@@ -821,7 +865,7 @@ public final class RDKafkaClient: Sendable {
     func seekPartitions(
         topicPartitionOffsets: [KafkaTopicPartitionOffset],
         timeoutMilliseconds: Int32
-    ) throws {
+    ) async throws {
         let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitionOffsets.count))
         for tpo in topicPartitionOffsets {
             guard let offset = tpo.offset else {
@@ -834,19 +878,30 @@ public final class RDKafkaClient: Sendable {
             )
         }
 
-        let error = tpl.withListPointer { listPointer in
-            rd_kafka_seek_partitions(
-                self.kafkaHandle.pointer,
-                listPointer,
-                timeoutMilliseconds
-            )
-        }
+        // rd_kafka_seek_partitions is blocking — offload to a DispatchQueue so it does not
+        // block Swift Concurrency's cooperative thread pool.
+        let kafkaHandle = self.kafkaHandle
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            Self.blockingQueue.async {
+                let error = tpl.withListPointer { listPointer in
+                    rd_kafka_seek_partitions(
+                        kafkaHandle.pointer,
+                        listPointer,
+                        timeoutMilliseconds
+                    )
+                }
 
-        if let error {
-            let code = rd_kafka_error_code(error)
-            rd_kafka_error_destroy(error)
-            if code != RD_KAFKA_RESP_ERR_NO_ERROR {
-                throw KafkaError.rdKafkaError(wrapping: code)
+                if let error {
+                    let code = rd_kafka_error_code(error)
+                    rd_kafka_error_destroy(error)
+                    if code != RD_KAFKA_RESP_ERR_NO_ERROR {
+                        continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: code))
+                    } else {
+                        continuation.resume()
+                    }
+                } else {
+                    continuation.resume()
+                }
             }
         }
     }
