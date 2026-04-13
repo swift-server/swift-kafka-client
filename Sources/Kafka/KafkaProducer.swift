@@ -361,6 +361,10 @@ public final class KafkaProducer: Service, Sendable {
     public func sendAndAwait<Key, Value>(
         _ message: KafkaProducerMessage<Key, Value>
     ) async throws -> KafkaDeliveryReport {
+        // if the task is already cancelled, bail out immediately
+        // without enqueuing the message in librdkafka.
+        try Task.checkCancellation()
+
         // Get the message ID and produce BEFORE entering the continuation,
         // so we have the ID available for the cancellation handler.
         let action = try self.stateMachine.withLockedValue { try $0.send() }
@@ -383,6 +387,17 @@ public final class KafkaProducer: Service, Sendable {
                 self.stateMachine.withLockedValue {
                     $0.registerContinuation(continuation, for: newMessageID)
                 }
+
+                // If onCancel fired before registerContinuation (task already cancelled),
+                // removeContinuation safely returns nil preventing double-resume.
+                if Task.isCancelled {
+                    let removed = self.stateMachine.withLockedValue {
+                        $0.removeContinuation(for: newMessageID)
+                    }
+                    removed?.resume(throwing: CancellationError())
+                    return
+                }
+
                 do {
                     try client.produce(
                         message: message,
@@ -390,11 +405,12 @@ public final class KafkaProducer: Service, Sendable {
                         topicHandles: topicHandles
                     )
                 } catch {
-                    // produce() failed synchronously — remove the continuation and resume with error
-                    _ = self.stateMachine.withLockedValue {
+                    // produce() failed synchronously — remove the continuation and resume with error.
+                    // removeContinuation returns nil if onCancel already resumed it.
+                    let removed = self.stateMachine.withLockedValue {
                         $0.removeContinuation(for: newMessageID)
                     }
-                    continuation.resume(throwing: error)
+                    removed?.resume(throwing: error)
                 }
             }
         } onCancel: {
