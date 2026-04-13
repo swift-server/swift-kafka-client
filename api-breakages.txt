@@ -1,0 +1,1 @@
+API breakage: enumelement KafkaConsumerEvent.rebalance has been added as a new enum case
