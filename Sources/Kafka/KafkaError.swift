@@ -14,9 +14,57 @@
 
 import Crdkafka
 
+/// A type-safe wrapper around librdkafka's `rd_kafka_resp_err_t` error codes.
+///
+/// Use the static constants (e.g., `.allBrokersDown`, `.authentication`) to match
+/// against the ``KafkaError/rdKafkaErrorCode`` property without importing Crdkafka.
+public struct RDKafkaErrorCode: Hashable, Sendable, CustomStringConvertible {
+    /// The raw `Int32` value corresponding to the librdkafka error code.
+    public let rawValue: Int32
+
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+
+    // MARK: - Common error codes
+
+    /// All broker connections are down.
+    public static let allBrokersDown = RDKafkaErrorCode(rawValue: -187)
+    /// Authentication failure.
+    public static let authentication = RDKafkaErrorCode(rawValue: -169)
+    /// Broker transport failure.
+    public static let transport = RDKafkaErrorCode(rawValue: -195)
+    /// Operation timed out.
+    public static let timedOut = RDKafkaErrorCode(rawValue: -185)
+    /// SSL error.
+    public static let ssl = RDKafkaErrorCode(rawValue: -181)
+    /// Message timed out.
+    public static let messageTimedOut = RDKafkaErrorCode(rawValue: -192)
+    /// Queue full.
+    public static let queueFull = RDKafkaErrorCode(rawValue: -184)
+    /// Fatal error.
+    public static let fatal = RDKafkaErrorCode(rawValue: -150)
+    /// Maximum poll interval exceeded.
+    public static let maxPollExceeded = RDKafkaErrorCode(rawValue: -147)
+    /// Invalid argument.
+    public static let invalidArgument = RDKafkaErrorCode(rawValue: -186)
+    /// Unknown topic.
+    public static let unknownTopic = RDKafkaErrorCode(rawValue: -188)
+    /// Unknown partition.
+    public static let unknownPartition = RDKafkaErrorCode(rawValue: -190)
+    /// No error.
+    public static let noError = RDKafkaErrorCode(rawValue: 0)
+
+    public var description: String {
+        let name = String(cString: rd_kafka_err2str(rd_kafka_resp_err_t(rawValue: self.rawValue)))
+        return "\(name) (code: \(self.rawValue))"
+    }
+}
+
 /// An error that can occur on `Kafka` operations
 ///
-/// - Note: `Hashable` conformance only considers the ``KafkaError/code``.
+/// - Note: `Hashable` conformance considers both the ``KafkaError/code``
+///   and the ``KafkaError/rdKafkaErrorCode``.
 public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     // Note: @unchecked because we use a backing class for storage (copy-on-write).
 
@@ -31,6 +79,14 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
             self.makeUnique()
             self.backing.code = newValue
         }
+    }
+
+    /// The underlying librdkafka error code, if this error originated from librdkafka.
+    ///
+    /// Returns `nil` for errors that do not wrap a `rd_kafka_resp_err_t`
+    /// (e.g., pure configuration or lifecycle errors).
+    public var rdKafkaErrorCode: RDKafkaErrorCode? {
+        self.backing.rdKafkaErrorCode
     }
 
     private var reason: String {
@@ -66,7 +122,25 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
                 code: .underlying,
                 reason: errorMessage,
                 file: file,
-                line: line
+                line: line,
+                rdKafkaErrorCode: RDKafkaErrorCode(rawValue: error.rawValue)
+            )
+        )
+    }
+
+    static func rdKafkaError(
+        wrapping error: rd_kafka_resp_err_t,
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> KafkaError {
+        KafkaError(
+            backing: .init(
+                code: .underlying,
+                reason: reason,
+                file: file,
+                line: line,
+                rdKafkaErrorCode: RDKafkaErrorCode(rawValue: error.rawValue)
             )
         )
     }
@@ -236,29 +310,39 @@ extension KafkaError {
 
         let line: UInt
 
+        let rdKafkaErrorCode: RDKafkaErrorCode?
+
         fileprivate init(
             code: KafkaError.ErrorCode,
             reason: String,
             file: String,
-            line: UInt
+            line: UInt,
+            rdKafkaErrorCode: RDKafkaErrorCode? = nil
         ) {
             self.code = code
             self.reason = reason
             self.file = file
             self.line = line
+            self.rdKafkaErrorCode = rdKafkaErrorCode
         }
 
-        // Only the error code matters for equality.
         static func == (lhs: Backing, rhs: Backing) -> Bool {
-            lhs.code == rhs.code
+            lhs.code == rhs.code && lhs.rdKafkaErrorCode == rhs.rdKafkaErrorCode
         }
 
         func hash(into hasher: inout Hasher) {
             hasher.combine(self.code)
+            hasher.combine(self.rdKafkaErrorCode)
         }
 
         fileprivate func copy() -> Backing {
-            Backing(code: self.code, reason: self.reason, file: self.file, line: self.line)
+            Backing(
+                code: self.code,
+                reason: self.reason,
+                file: self.file,
+                line: self.line,
+                rdKafkaErrorCode: self.rdKafkaErrorCode
+            )
         }
     }
 }

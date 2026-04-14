@@ -219,7 +219,7 @@ public final class KafkaConsumer: Sendable, Service {
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws {
-        var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance, .error]
         let isAutoCommitEnabled = config.enableAutoCommit ?? true
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
@@ -266,7 +266,7 @@ public final class KafkaConsumer: Sendable, Service {
         config: KafkaConsumerConfig,
         logger: Logger
     ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
-        var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance, .error]
         let isAutoCommitEnabled = config.enableAutoCommit ?? true
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
@@ -417,6 +417,14 @@ public final class KafkaConsumer: Sendable, Service {
                     switch event {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
+                    case .error(let kafkaError):
+                        if let source = self.eventsSource {
+                            _ = source.yield(.error(kafkaError))
+                        }
+                        self.logger.error(
+                            "Kafka client error",
+                            metadata: ["error": "\(kafkaError)"]
+                        )
                     }
                 }
 
@@ -473,7 +481,21 @@ public final class KafkaConsumer: Sendable, Service {
     /// had a chance to poll it. This one last poll+drain ensures that event
     /// is not lost.
     private func finalDrain(client: RDKafkaClient) {
-        let _ = client.consumerEventPoll()
+        let events = client.consumerEventPoll()
+        for event in events {
+            switch event {
+            case .statistics(let statistics):
+                self.config.metrics.update(with: statistics)
+            case .error(let kafkaError):
+                if let source = self.eventsSource {
+                    _ = source.yield(.error(kafkaError))
+                }
+                self.logger.error(
+                    "Kafka client error",
+                    metadata: ["error": "\(kafkaError)"]
+                )
+            }
+        }
 
         let rebalanceEvents = self.rebalanceContext.drainEvents()
         for event in rebalanceEvents {

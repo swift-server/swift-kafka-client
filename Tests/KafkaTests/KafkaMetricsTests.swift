@@ -32,8 +32,6 @@ import Foundation
 @Suite(.serialized)
 final class KafkaMetricsTests {
     var metrics: TestMetrics = TestMetrics()
-    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
-    let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
 
     init() async throws {
         MetricsSystem.bootstrapInternal(self.metrics)
@@ -74,13 +72,7 @@ final class KafkaMetricsTests {
     }
 
     @Test func producerStatistics() async throws {
-        let bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
-            host: self.kafkaHost,
-            port: self.kafkaPort
-        )
-
         var config = KafkaProducerConfig()
-        config.bootstrapServers = ["\(bootstrapBrokerAddress)"]
         config.brokerAddressFamily = .v4
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
