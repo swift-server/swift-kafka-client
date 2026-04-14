@@ -82,6 +82,9 @@ public final class KafkaProducer: Service, Sendable {
     /// The configuration object of the producer client.
     private let config: KafkaProducerConfig
 
+    /// A logger.
+    private let logger: Logger
+
     // Private initializer, use factory method or convenience init to create KafkaProducer
     /// Initialize a new ``KafkaProducer``.
     ///
@@ -91,10 +94,12 @@ public final class KafkaProducer: Service, Sendable {
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
-        config: KafkaProducerConfig
+        config: KafkaProducerConfig,
+        logger: Logger
     ) {
         self.stateMachine = stateMachine
         self.config = config
+        self.logger = logger
     }
 
     /// Initialize a new ``KafkaProducer``.
@@ -111,7 +116,7 @@ public final class KafkaProducer: Service, Sendable {
     ) throws {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        var subscribedEvents: [RDKafkaEvent] = [.log]  // No .deliveryReport here!
+        var subscribedEvents: [RDKafkaEvent] = [.log, .error]
 
         if config.metrics.enabled {
             subscribedEvents.append(.statistics)
@@ -133,7 +138,8 @@ public final class KafkaProducer: Service, Sendable {
 
         self.init(
             stateMachine: stateMachine,
-            config: config
+            config: config,
+            logger: logger
         )
     }
 
@@ -156,7 +162,7 @@ public final class KafkaProducer: Service, Sendable {
     ) throws -> (KafkaProducer, KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
-        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport]
+        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
         // Listen to statistics events when statistics enabled
         if config.metrics.enabled {
             subscribedEvents.append(.statistics)
@@ -171,7 +177,8 @@ public final class KafkaProducer: Service, Sendable {
 
         let producer = KafkaProducer(
             stateMachine: stateMachine,
-            config: config
+            config: config,
+            logger: logger
         )
 
         // Note:
@@ -235,8 +242,20 @@ public final class KafkaProducer: Service, Sendable {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
             case .pollWithoutYield(let client):
-                // Drop any incoming events
-                let _ = client.producerEventPoll()
+                let events = client.producerEventPoll()
+                for event in events {
+                    switch event {
+                    case .statistics(let statistics):
+                        self.config.metrics.update(with: statistics)
+                    case .deliveryReport:
+                        break
+                    case .error(let kafkaError):
+                        self.logger.error(
+                            "Kafka client error",
+                            metadata: ["error": "\(kafkaError)"]
+                        )
+                    }
+                }
             case .pollAndYield(let client, let source):
                 let events = client.producerEventPoll()
                 for event in events {
@@ -245,6 +264,12 @@ public final class KafkaProducer: Service, Sendable {
                         self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
                         _ = source?.yield(.deliveryReports(reports))
+                    case .error(let kafkaError):
+                        _ = source?.yield(.error(kafkaError))
+                        self.logger.error(
+                            "Kafka client error",
+                            metadata: ["error": "\(kafkaError)"]
+                        )
                     }
                 }
                 try await Task.sleep(for: self.config.pollInterval)

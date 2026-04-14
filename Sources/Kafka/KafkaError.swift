@@ -71,6 +71,22 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         )
     }
 
+    static func rdKafkaError(
+        wrapping error: rd_kafka_resp_err_t,
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> KafkaError {
+        KafkaError(
+            backing: .init(
+                code: .underlying,
+                reason: reason,
+                file: file,
+                line: line
+            )
+        )
+    }
+
     static func config(
         reason: String,
         file: String = #fileID,

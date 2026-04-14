@@ -801,4 +801,29 @@ import Foundation
         }
     }
 
+    // MARK: - KafkaConsumerEvent.error Tests
+
+    @Test func consumerEventErrorPatternMatch() {
+        let error = KafkaError.config(reason: "All brokers are down")
+        let event = KafkaConsumerEvent.error(error)
+
+        switch event {
+        case .error(let e):
+            #expect(e.description.contains("All brokers are down"))
+        default:
+            Issue.record("Expected .error event")
+        }
+    }
+
+    @Test func consumerEventErrorEquality() {
+        let error1 = KafkaError.config(reason: "All brokers are down")
+        let error2 = KafkaError.config(reason: "Authentication failed")
+
+        let event1 = KafkaConsumerEvent.error(error1)
+        let event2 = KafkaConsumerEvent.error(error2)
+
+        // Same error code (.config), so they are equal per current Equatable (known limitation)
+        #expect(event1 == event2)
+    }
+
 }

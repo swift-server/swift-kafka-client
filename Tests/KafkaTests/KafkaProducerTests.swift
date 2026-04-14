@@ -26,20 +26,10 @@ import Foundation
 #endif
 
 @Suite struct KafkaProducerTests {
-    // Read environment variables to get information about the test Kafka server
-    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
-    let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
-    var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress
     var config: KafkaProducerConfig
 
     init() throws {
-        self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
-            host: self.kafkaHost,
-            port: self.kafkaPort
-        )
-
         self.config = KafkaProducerConfig()
-        self.config.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
         self.config.brokerAddressFamily = .v4
     }
 
@@ -384,6 +374,20 @@ import Foundation
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    // MARK: - KafkaProducerEvent.error Tests
+
+    @Test func producerEventErrorPatternMatch() {
+        let error = KafkaError.config(reason: "Authentication failed")
+        let event = KafkaProducerEvent.error(error)
+
+        switch event {
+        case .error(let e):
+            #expect(e.description.contains("Authentication failed"))
+        default:
+            Issue.record("Expected .error event")
         }
     }
 }
