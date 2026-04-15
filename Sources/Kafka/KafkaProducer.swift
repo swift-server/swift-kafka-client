@@ -256,6 +256,7 @@ public final class KafkaProducer: Service, Sendable {
                         )
                     }
                 }
+                try await Task.sleep(for: self.config.pollInterval)
             case .pollAndYield(let client, let source):
                 let events = client.producerEventPoll()
                 for event in events {

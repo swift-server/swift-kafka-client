@@ -26,10 +26,20 @@ import Foundation
 #endif
 
 @Suite struct KafkaProducerTests {
+    // Read environment variables to get information about the test Kafka server
+    let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
+    let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
+    var bootstrapBrokerAddress: KafkaConfiguration.BrokerAddress
     var config: KafkaProducerConfig
 
     init() throws {
+        self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
+            host: self.kafkaHost,
+            port: self.kafkaPort
+        )
+
         self.config = KafkaProducerConfig()
+        self.config.bootstrapServers = ["\(self.bootstrapBrokerAddress)"]
         self.config.brokerAddressFamily = .v4
     }
 
