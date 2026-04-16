@@ -133,7 +133,7 @@ final class KafkaTests: XCTestCase {
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
                     XCTAssertEqual(ByteBuffer(string: testMessages[index].key!), consumedMessage.key)
-                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value), consumedMessage.value)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value!), consumedMessage.value)
                 }
             }
 
@@ -551,7 +551,7 @@ final class KafkaTests: XCTestCase {
             let consumedMessage = try await consumerIterator.next()
             XCTAssertEqual(testMessages.first!.topic, consumedMessage!.topic)
             XCTAssertEqual(ByteBuffer(string: testMessages.first!.key!), consumedMessage!.key)
-            XCTAssertEqual(ByteBuffer(string: testMessages.first!.value), consumedMessage!.value)
+            XCTAssertEqual(ByteBuffer(string: testMessages.first!.value!), consumedMessage!.value)
 
             // Trigger a graceful shutdown
             await serviceGroup.triggerGracefulShutdown()
@@ -627,7 +627,7 @@ final class KafkaTests: XCTestCase {
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
                     XCTAssertEqual(ByteBuffer(string: testMessages[index].key!), consumedMessage.key)
-                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value), consumedMessage.value)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value!), consumedMessage.value)
                 }
             }
 
@@ -689,7 +689,7 @@ final class KafkaTests: XCTestCase {
                 for (index, consumedMessage) in consumedMessages.enumerated() {
                     XCTAssertEqual(testMessages[firstConsumerOffset + index].topic, consumedMessage.topic)
                     XCTAssertEqual(ByteBuffer(string: testMessages[firstConsumerOffset + index].key!), consumedMessage.key)
-                    XCTAssertEqual(ByteBuffer(string: testMessages[firstConsumerOffset + index].value), consumedMessage.value)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[firstConsumerOffset + index].value!), consumedMessage.value)
                 }
             }
 
@@ -755,7 +755,7 @@ final class KafkaTests: XCTestCase {
             XCTAssertEqual(expectedTopic, receivedMessage.topic)
             XCTAssertEqual(expectedPartition, receivedMessage.partition)
             XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
-            XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
+            XCTAssertEqual(ByteBuffer(string: message.value!), receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()

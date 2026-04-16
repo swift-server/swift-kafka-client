@@ -67,6 +67,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     let stateMachine: LockedMachine
     let pollInterval: Duration
     let enablePartitionEof: Bool
+    let enableTombstone: Bool
 
     public typealias Element = KafkaConsumerMessage
 
@@ -75,6 +76,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         private let stateMachine: MachineHolder
         let pollInterval: Duration
         let enablePartitionEof: Bool
+        let enableTombstone: Bool
         private let queue: DispatchQueueTaskExecutor
 
         private final class MachineHolder: Sendable { // only for deinit
@@ -88,10 +90,11 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
             }
         }
 
-        init(stateMachine: LockedMachine, pollInterval: Duration, enablePartitionEof: Bool) {
+        init(stateMachine: LockedMachine, pollInterval: Duration, enablePartitionEof: Bool, enableTombstone: Bool) {
             self.stateMachine = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
             self.enablePartitionEof = enablePartitionEof
+            self.enableTombstone = enableTombstone
             self.queue = DispatchQueueTaskExecutor(
                 DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer")
             )
@@ -105,7 +108,13 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                     // Attempt to fetch a message synchronously. Bail
                     // immediately if no message is waiting for us.
                     if let message = try client.consumerPoll() {
-                        if !message.eof || self.enablePartitionEof {
+                        if !message.eof && !message.tombstone {
+                            return message
+                        }
+                        if message.eof && self.enablePartitionEof {
+                            return message
+                        }
+                        if message.tombstone && self.enableTombstone {
                             return message
                         }
                     }
@@ -117,7 +126,13 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                             queue,
                             operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
                         ) {
-                            if !message.eof || self.enablePartitionEof {
+                            if !message.eof && !message.tombstone {
+                                return message
+                            }
+                            if message.eof && self.enablePartitionEof {
+                                return message
+                            }
+                            if message.tombstone && self.enableTombstone {
                                 return message
                             }
                         }
@@ -139,7 +154,8 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         return AsyncIterator(
             stateMachine: self.stateMachine,
             pollInterval: self.pollInterval,
-            enablePartitionEof: self.enablePartitionEof
+            enablePartitionEof: self.enablePartitionEof,
+            enableTombstone: self.enableTombstone
         )
     }
 }
@@ -215,7 +231,8 @@ public final class KafkaConsumer: Sendable, Service {
         self.messages = KafkaConsumerMessages(
             stateMachine: self.stateMachine,
             pollInterval: configuration.pollInterval,
-            enablePartitionEof: configuration.enablePartitionEof
+            enablePartitionEof: configuration.enablePartitionEof,
+            enableTombstone: configuration.enableTombstone
         )
 
         self.stateMachine.withLockedValue {

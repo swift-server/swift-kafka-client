@@ -185,6 +185,12 @@ public struct KafkaConsumerMessage {
         storage.messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF
     }
 
+    /// If ``true``, means it is not a message but tombstone.
+    @inlinable
+    public var tombstone: Bool {
+        !eof && storage.messagePointer.pointee.payload == nil
+    }
+
     /// The topic that the message was received from.
     @inlinable
     public var topic: String {
@@ -217,10 +223,10 @@ public struct KafkaConsumerMessage {
 
     /// The body of the message.
     @inlinable
-    public var value: ByteBuffer {
-        guard !eof else { return ByteBuffer() }
+    public var value: ByteBuffer? {
+        guard !eof && !tombstone else { return nil }
         let msg = storage.messagePointer.pointee
-        guard let payload = msg.payload else { return ByteBuffer() }
+        guard let payload = msg.payload else { return nil }
         return ByteBuffer(bytes: UnsafeRawBufferPointer(start: payload, count: msg.len))
     }
 
@@ -333,7 +339,7 @@ extension KafkaConsumerMessage {
 
     static func extractContent(
         fromMessage messagePointer: UnsafePointer<rd_kafka_message_t>
-    ) throws -> (key: ByteBuffer?, value: ByteBuffer, headers: [KafkaHeader]) {
+    ) throws -> (key: ByteBuffer?, value: ByteBuffer?, headers: [KafkaHeader]) {
         let rdKafkaMessage = messagePointer.pointee
 
         let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
@@ -392,6 +398,10 @@ extension KafkaConsumerMessage {
             let newIndex = buffer.readerIndex + Int(rdKafkaMessage.key_len).roundUpToMultipleOf(Self.bufferAlignment)
             buffer.moveWriterIndex(to: newIndex)
             buffer.moveReaderIndex(to: newIndex)
+        }
+
+        if rdKafkaMessage.payload == nil {
+            return (key: key, value: nil, headers: headers)
         }
 
         buffer.moveWriterIndex(to: buffer.readerIndex + valueBufferPointer.count)
