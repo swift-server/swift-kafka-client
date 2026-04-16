@@ -188,7 +188,7 @@ public struct KafkaConsumerMessage {
     /// If ``true``, means it is not a message but tombstone.
     @inlinable
     public var tombstone: Bool {
-        storage.messagePointer.pointee.payload == nil
+        !eof && storage.messagePointer.pointee.payload == nil
     }
 
     /// The topic that the message was received from.

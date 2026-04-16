@@ -161,8 +161,7 @@ final class KafkaProducerTests: XCTestCase {
             XCTAssertEqual(messageID, receivedDeliveryReport.id)
 
             guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
-                print("\(receivedDeliveryReport)")
-                XCTFail()
+                XCTFail("receivedDeliveryReport.status = \(receivedDeliveryReport.status), expected .acknowledged")
                 return
             }
 
@@ -216,8 +215,7 @@ final class KafkaProducerTests: XCTestCase {
             XCTAssertEqual(messageID, receivedDeliveryReport.id)
 
             guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
-                print("\(receivedDeliveryReport)")
-                XCTFail()
+                XCTFail("receivedDeliveryReport.status = \(receivedDeliveryReport.status), expected .acknowledged")
                 return
             }
 
