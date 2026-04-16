@@ -220,6 +220,22 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
+    /// How long to postpone the next fetch request for a topic+partition in case the current fetch queue
+    /// thresholds (queued.min.messages or queued.max.messages.kbytes) have been exceeded.
+    /// This property may need to be decreased if the queue thresholds are set low and the application is
+    /// experiencing long (~1s) delays between messages.
+    /// Low values may increase CPU utilization.
+    /// (Lowest granularity is milliseconds)
+    /// Default: `.milliseconds(1000)`
+    public var fetchQueueBackoff: Duration = .milliseconds(1000) {
+        didSet {
+            precondition(
+                fetchQueueBackoff.canBeRepresentedAsMilliseconds,
+                "Lowest granularity is milliseconds"
+            )
+        }
+    }
+
     /// Topic metadata options.
     public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
 
@@ -305,6 +321,7 @@ extension KafkaConsumerConfiguration {
         resultDict["max.in.flight.requests.per.connection"] = String(maximumInFlightRequestsPerConnection)
         resultDict["metadata.max.age.ms"] = String(maximumMetadataAge.inMilliseconds)
         resultDict["fetch.wait.max.ms"] = String(maximumFetchWaitTime.inMilliseconds)
+        resultDict["fetch.queue.backoff.ms"] = String(fetchQueueBackoff.inMilliseconds)
         resultDict["topic.metadata.refresh.interval.ms"] = String(topicMetadata.refreshInterval.rawValue)
         resultDict["topic.metadata.refresh.fast.interval.ms"] = String(topicMetadata.refreshFastInterval.inMilliseconds)
         resultDict["topic.metadata.refresh.sparse"] = String(topicMetadata.isSparseRefreshingEnabled)
