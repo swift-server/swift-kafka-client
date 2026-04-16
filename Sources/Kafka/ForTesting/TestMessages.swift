@@ -97,7 +97,7 @@ public func _sendAndAcknowledgeMessages(
     for message in messages {
         guard acknowledgedMessages.contains(where: { $0.topic == message.topic }),
               acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message.key!) }),
-              acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value) }) else {
+              acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message.value!) }) else {
             throw _TestMessagesError.deliveryReportsIncorrect
         }
     }

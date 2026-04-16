@@ -113,7 +113,7 @@ final class KafkaProducerTests: XCTestCase {
 
             XCTAssertEqual(expectedTopic, receivedMessage.topic)
             XCTAssertEqual(ByteBuffer(string: message.key!), receivedMessage.key)
-            XCTAssertEqual(ByteBuffer(string: message.value), receivedMessage.value)
+            XCTAssertEqual(ByteBuffer(string: message.value!), receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -161,6 +161,62 @@ final class KafkaProducerTests: XCTestCase {
             XCTAssertEqual(messageID, receivedDeliveryReport.id)
 
             guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
+                print("\(receivedDeliveryReport)")
+                XCTFail()
+                return
+            }
+
+            XCTAssertEqual(expectedTopic, receivedMessage.topic)
+            XCTAssertEqual(message.value, receivedMessage.value)
+
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    func testSendTombstoneMessage() async throws {
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            let keyBytes = ByteBuffer(integer: 100)
+            let expectedTopic = "test-topic"
+            let message: KafkaProducerMessage<ByteBuffer, ByteBuffer> = KafkaProducerMessage(
+                topic: expectedTopic,
+                key: keyBytes
+            )
+
+            let messageID = try producer.send(message)
+
+            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
+
+            for await event in events {
+                switch event {
+                case .deliveryReports(let deliveryReports):
+                    for deliveryReport in deliveryReports {
+                        receivedDeliveryReports.insert(deliveryReport)
+                    }
+                default:
+                    break // Ignore any other events
+                }
+
+                if receivedDeliveryReports.count >= 1 {
+                    break
+                }
+            }
+
+            let receivedDeliveryReport = receivedDeliveryReports.first!
+            XCTAssertEqual(messageID, receivedDeliveryReport.id)
+
+            guard case .acknowledged(let receivedMessage) = receivedDeliveryReport.status else {
+                print("\(receivedDeliveryReport)")
                 XCTFail()
                 return
             }
@@ -232,8 +288,8 @@ final class KafkaProducerTests: XCTestCase {
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message1.key!) }))
             XCTAssertTrue(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message2.key!) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message1.value) }))
-            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message2.value) }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message1.value!) }))
+            XCTAssertTrue(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message2.value!) }))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()

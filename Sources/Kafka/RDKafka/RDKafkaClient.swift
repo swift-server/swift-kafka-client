@@ -171,8 +171,8 @@ public final class RDKafkaClient: Sendable {
                         topicHandle,
                         Int32(message.partition.rawValue),
                         RD_KAFKA_MSG_F_COPY,
-                        UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                        valueBuffer.count,
+                        UnsafeMutableRawPointer(mutating: valueBuffer?.baseAddress),
+                        valueBuffer?.count ?? 0,
                         keyBuffer?.baseAddress,
                         keyBuffer?.count ?? 0,
                         UnsafeMutableRawPointer(bitPattern: newMessageID)
@@ -213,7 +213,7 @@ public final class RDKafkaClient: Sendable {
         partition: Int32,
         messageFlags: Int32,
         key: UnsafeRawBufferPointer?,
-        value: UnsafeRawBufferPointer,
+        value: UnsafeRawBufferPointer?,
         opaque: UnsafeMutableRawPointer?,
         cHeaders: [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]
     ) throws -> OpaquePointer? {
@@ -241,10 +241,12 @@ public final class RDKafkaClient: Sendable {
             index += 1
         }
 
-        arguments[index].vtype = RD_KAFKA_VTYPE_VALUE
-        arguments[index].u.mem.ptr = UnsafeMutableRawPointer(mutating: value.baseAddress)
-        arguments[index].u.mem.size = value.count
-        index += 1
+        if let value {
+            arguments[index].vtype = RD_KAFKA_VTYPE_VALUE
+            arguments[index].u.mem.ptr = UnsafeMutableRawPointer(mutating: value.baseAddress)
+            arguments[index].u.mem.size = value.count
+            index += 1
+        }
 
         arguments[index].vtype = RD_KAFKA_VTYPE_OPAQUE
         arguments[index].u.ptr = opaque
@@ -275,15 +277,25 @@ public final class RDKafkaClient: Sendable {
     @discardableResult
     private static func withMessageKeyAndValueBuffer<T, Key, Value>(
         for message: KafkaProducerMessage<Key, Value>,
-        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T // (keyBuffer, valueBuffer)
+        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer?) throws -> T // (keyBuffer, valueBuffer)
     ) rethrows -> T {
-        return try message.value.withUnsafeBytes { valueBuffer in
+        if let value = message.value {
+            return try value.withUnsafeBytes { valueBuffer in
+                if let key = message.key {
+                    return try key.withUnsafeBytes { keyBuffer in
+                        return try body(keyBuffer, valueBuffer)
+                    }
+                } else {
+                    return try body(nil, valueBuffer)
+                }
+            }
+        } else {
             if let key = message.key {
                 return try key.withUnsafeBytes { keyBuffer in
-                    return try body(keyBuffer, valueBuffer)
+                    return try body(keyBuffer, nil)
                 }
             } else {
-                return try body(nil, valueBuffer)
+                return try body(nil, nil)
             }
         }
     }

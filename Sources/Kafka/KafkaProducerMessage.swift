@@ -34,7 +34,7 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     public var key: Key?
 
     /// The value of the message to be sent.
-    public var value: Value
+    public var value: Value?
 
     /// Create a new `KafkaProducerMessage` with a ``KafkaContiguousBytes`` key and value.
     ///
@@ -78,6 +78,28 @@ extension KafkaProducerMessage where Key == Never {
         self.headers = headers
         self.key = nil
         self.value = value
+    }
+}
+
+extension KafkaProducerMessage {
+    /// Create a new `KafkaProducerMessage` which represents a tombstone.
+    ///
+    /// - Parameters:
+    ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
+    ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
+    ///     - headers: The headers of the message.
+    ///     - key: Key for a tombstone message.
+    public init(
+        topic: String,
+        partition: KafkaPartition = .unassigned,
+        headers: [KafkaHeader] = [],
+        key: Key
+    ) {
+        self.topic = topic
+        self.partition = partition
+        self.headers = headers
+        self.key = key
+        self.value = nil
     }
 }
 

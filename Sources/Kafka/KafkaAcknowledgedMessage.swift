@@ -26,7 +26,7 @@ public struct KafkaAcknowledgedMessage {
     /// The key of the message.
     public var key: ByteBuffer?
     /// The body of the message.
-    public var value: ByteBuffer
+    public var value: ByteBuffer?
     /// The offset of the message in its partition.
     public var offset: KafkaOffset
 

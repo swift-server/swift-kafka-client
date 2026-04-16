@@ -26,6 +26,8 @@ public struct KafkaConsumerConfiguration {
 
     public var enablePartitionEof: Bool = false
 
+    public var enableTombstone: Bool = false
+
     /// A struct representing the different Kafka message consumption strategies.
     public struct ConsumptionStrategy: Sendable, Hashable {
         public struct TopicPartition: Sendable, Hashable {

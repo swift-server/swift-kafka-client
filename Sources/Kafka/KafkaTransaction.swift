@@ -41,7 +41,7 @@ public final class KafkaTransaction {
     public func send<Key, Value>(_ message: KafkaProducerMessage<Key, Value>) throws -> KafkaProducerMessageID {
         sendTries += 1
         let id = try self.producer.send(message)
-        totalBytes += message.value.withUnsafeBytes({ $0.count })
+        totalBytes += message.value?.withUnsafeBytes({ $0.count }) ?? 0
         msgNum += 1
         return id
     }
