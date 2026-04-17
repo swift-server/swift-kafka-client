@@ -435,4 +435,69 @@ import Foundation
             _ = try await producer.sendAndAwait(message)
         }
     }
+
+    @Test func sendAndAwaitCancellation() async throws {
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: self.config,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try? await serviceGroup.run()
+            }
+
+            group.addTask {
+                for await _ in events {}
+            }
+
+            let message = KafkaProducerMessage(
+                topic: "test-topic",
+                value: "test-value"
+            )
+
+            let task = Task {
+                try await producer.sendAndAwait(message)
+            }
+
+            // Cancel the task immediately
+            task.cancel()
+
+            await #expect(throws: CancellationError.self) {
+                try await task.value
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func sendAndAwaitFailsOnShutdown() async throws {
+        var config = KafkaProducerConfig()
+        config.bootstrapServers = ["127.0.0.1:9092"]
+        let producer = try KafkaProducer(config: config, logger: .kafkaTest)
+
+        let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+
+            // Send a message and immediately trigger shutdown.
+            // The sendAndAwait continuation should be resumed with connectionClosed
+            // by failPendingContinuations when the event loop terminates.
+            async let result = producer.sendAndAwait(KafkaProducerMessage(topic: "test", value: "test"))
+            await Task.yield()
+            await serviceGroup.triggerGracefulShutdown()
+
+            do {
+                _ = try await result
+                Issue.record("Should have thrown connectionClosed error")
+            } catch _ as KafkaError {
+                // Expected: connection closed
+            }
+        }
+    }
 }
