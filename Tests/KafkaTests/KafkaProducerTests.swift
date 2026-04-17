@@ -386,4 +386,18 @@ import Foundation
             await serviceGroup.triggerGracefulShutdown()
         }
     }
+
+    // MARK: - KafkaProducerEvent.error Tests
+
+    @Test func producerEventErrorPatternMatch() {
+        let error = KafkaError.config(reason: "Authentication failed")
+        let event = KafkaProducerEvent.error(error)
+
+        switch event {
+        case .error(let e):
+            #expect(e.description.contains("Authentication failed"))
+        default:
+            Issue.record("Expected .error event")
+        }
+    }
 }

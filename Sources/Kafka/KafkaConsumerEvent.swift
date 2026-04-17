@@ -22,6 +22,9 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
     /// or initializing state on assign.
     case rebalance(KafkaConsumerRebalance)
 
+    /// An error reported by the Kafka client (e.g., broker disconnection, authentication failure).
+    case error(KafkaError)
+
     /// - Important: Always provide a `default` case when switching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 }

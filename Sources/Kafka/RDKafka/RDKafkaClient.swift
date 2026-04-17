@@ -316,12 +316,14 @@ public final class RDKafkaClient: Sendable {
     enum ProducerPollEvent {
         case deliveryReport(results: [KafkaDeliveryReport])
         case statistics(RDKafkaStatistics)
+        case error(KafkaError)
     }
 
     /// Typed event returned by ``consumerEventPoll(maxEvents:)``.
     /// Contains only events relevant to a Kafka consumer.
     enum ConsumerPollEvent {
         case statistics(RDKafkaStatistics)
+        case error(KafkaError)
     }
 
     /// Poll for producer-relevant events from the `librdkafka` event queue.
@@ -350,6 +352,10 @@ public final class RDKafkaClient: Sendable {
             case .statistics:
                 if let statistics = self.handleStatistics(event) {
                     events.append(.statistics(statistics))
+                }
+            case .error:
+                if let error = self.handleErrorEvent(event) {
+                    events.append(.error(error))
                 }
             case .log:
                 self.handleLogEvent(event)
@@ -389,6 +395,10 @@ public final class RDKafkaClient: Sendable {
             case .statistics:
                 if let statistics = self.handleStatistics(event) {
                     events.append(.statistics(statistics))
+                }
+            case .error:
+                if let error = self.handleErrorEvent(event) {
+                    events.append(.error(error))
                 }
             case .log:
                 self.handleLogEvent(event)
@@ -442,6 +452,22 @@ public final class RDKafkaClient: Sendable {
 
         // The returned message(s) MUST NOT be freed with rd_kafka_message_destroy().
         return deliveryReportResults
+    }
+
+    /// Handle event of type `RDKafkaEvent.error`.
+    ///
+    /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
+    /// - Returns: A ``KafkaError`` if the event carries a non-zero error code, or `nil` otherwise.
+    private func handleErrorEvent(_ event: OpaquePointer?) -> KafkaError? {
+        let code = rd_kafka_event_error(event)
+        guard code != RD_KAFKA_RESP_ERR_NO_ERROR else {
+            return nil
+        }
+        let reasonCString = rd_kafka_event_error_string(event)
+        let reason =
+            reasonCString.flatMap { String(cString: $0) }
+            ?? String(cString: rd_kafka_err2str(code))
+        return KafkaError.rdKafkaError(wrapping: code, reason: reason)
     }
 
     /// Handle event of type `RDKafkaEvent.statistics`.

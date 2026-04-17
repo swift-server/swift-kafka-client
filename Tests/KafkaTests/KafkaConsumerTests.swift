@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
 import Logging
 import ServiceLifecycle
 import Testing
@@ -799,6 +800,95 @@ import Foundation
                 "Event at index \(index) has partition \(event.partitions[0].partition), expected \(index)"
             )
         }
+    }
+
+    // MARK: - KafkaConsumerEvent.error Tests
+
+    @Test func consumerEventErrorPatternMatch() {
+        let error = KafkaError.config(reason: "All brokers are down")
+        let event = KafkaConsumerEvent.error(error)
+
+        switch event {
+        case .error(let e):
+            #expect(e.description.contains("All brokers are down"))
+        default:
+            Issue.record("Expected .error event")
+        }
+    }
+
+    @Test func consumerEventErrorEquality() {
+        let error1 = KafkaError.config(reason: "All brokers are down")
+        let error2 = KafkaError.config(reason: "Authentication failed")
+
+        let event1 = KafkaConsumerEvent.error(error1)
+        let event2 = KafkaConsumerEvent.error(error2)
+
+        // Same error code (.config), so they are equal per current Equatable (known limitation)
+        #expect(event1 == event2)
+    }
+
+    // MARK: - KafkaError.RDKafkaCode Tests
+
+    @Test func rdKafkaCodeStaticConstants() {
+        #expect(KafkaError.RDKafkaCode.allBrokersDown.rawValue == -187)
+        #expect(KafkaError.RDKafkaCode.authentication.rawValue == -169)
+        #expect(KafkaError.RDKafkaCode.transport.rawValue == -195)
+        #expect(KafkaError.RDKafkaCode.timedOut.rawValue == -185)
+        #expect(KafkaError.RDKafkaCode.ssl.rawValue == -181)
+        #expect(KafkaError.RDKafkaCode.fatal.rawValue == -150)
+        #expect(KafkaError.RDKafkaCode.noError.rawValue == 0)
+    }
+
+    @Test func rdKafkaCodeEquality() {
+        #expect(KafkaError.RDKafkaCode.allBrokersDown == KafkaError.RDKafkaCode(rawValue: -187))
+        #expect(KafkaError.RDKafkaCode.allBrokersDown != KafkaError.RDKafkaCode.transport)
+    }
+
+    @Test func rdKafkaCodeHashable() {
+        var set = Set<KafkaError.RDKafkaCode>()
+        set.insert(.allBrokersDown)
+        set.insert(KafkaError.RDKafkaCode(rawValue: -187))
+        set.insert(.authentication)
+        #expect(set.count == 2)
+    }
+
+    @Test func rdKafkaCodeDescription() {
+        let code = KafkaError.RDKafkaCode.allBrokersDown
+        #expect(code.description.contains("-187"))
+        #expect(code.description.contains("broker"))
+    }
+
+    // MARK: - KafkaError Error Code Preservation Tests
+
+    @Test func kafkaErrorPreservesRDKafkaCode() {
+        let error = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        #expect(error.rdKafkaCode == .allBrokersDown)
+        #expect(error.code == .underlying)
+    }
+
+    @Test func kafkaErrorPreservesRDKafkaCodeWithReason() {
+        let error = KafkaError.rdKafkaError(
+            wrapping: rd_kafka_resp_err_t(rawValue: -185),
+            reason: "custom reason"
+        )
+        #expect(error.rdKafkaCode == .timedOut)
+    }
+
+    @Test func kafkaErrorNonRDKafkaErrorHasNilCode() {
+        let error = KafkaError.config(reason: "bad config")
+        #expect(error.rdKafkaCode == nil)
+    }
+
+    @Test func kafkaErrorEqualityDistinguishesDifferentRDKafkaCodes() {
+        let err1 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        let err2 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -169))
+        #expect(err1 != err2)
+    }
+
+    @Test func kafkaErrorEqualitySameRDKafkaCode() {
+        let err1 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        let err2 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        #expect(err1 == err2)
     }
 
 }

@@ -1,1 +1,3 @@
 API breakage: enumelement KafkaConsumerEvent.rebalance has been added as a new enum case
+API breakage: enumelement KafkaConsumerEvent.error has been added as a new enum case
+API breakage: enumelement KafkaProducerEvent.error has been added as a new enum case
