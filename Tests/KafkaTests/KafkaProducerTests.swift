@@ -30,7 +30,7 @@ import Foundation
 
     init() throws {
         self.config = KafkaProducerConfig()
-        MockBrokerConfig.apply(to: &self.config, brokerCount: 1)
+        self.config.useMockBroker()
         self.config.brokerAddressFamily = .v4
     }
 

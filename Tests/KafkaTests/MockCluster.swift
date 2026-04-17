@@ -14,19 +14,21 @@
 
 @testable import Kafka
 
-/// Helpers for configuring librdkafka's built-in mock cluster.
+/// Extensions for configuring librdkafka's built-in mock cluster.
 ///
 /// Setting `test.mock.num.brokers` causes librdkafka to create an in-process
 /// mock Kafka cluster, eliminating the need for a real broker in unit tests.
-enum MockBrokerConfig {
 
-    /// Apply mock broker configuration to a ``KafkaProducerConfig``.
-    static func apply(to config: inout KafkaProducerConfig, brokerCount: Int) {
-        config.additionalConfig["test.mock.num.brokers"] = "\(brokerCount)"
+extension KafkaProducerConfig {
+    /// Configure this producer to use librdkafka's in-process mock broker.
+    mutating func useMockBroker(count: Int = 1) {
+        self.additionalConfig["test.mock.num.brokers"] = "\(count)"
     }
+}
 
-    /// Apply mock broker configuration to a ``KafkaConsumerConfig``.
-    static func apply(to config: inout KafkaConsumerConfig, brokerCount: Int) {
-        config.additionalConfig["test.mock.num.brokers"] = "\(brokerCount)"
+extension KafkaConsumerConfig {
+    /// Configure this consumer to use librdkafka's in-process mock broker.
+    mutating func useMockBroker(count: Int = 1) {
+        self.additionalConfig["test.mock.num.brokers"] = "\(count)"
     }
 }

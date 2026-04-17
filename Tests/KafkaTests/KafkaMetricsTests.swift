@@ -49,7 +49,7 @@ final class KafkaMetricsTests {
         )
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
-        MockBrokerConfig.apply(to: &config, brokerCount: 1)
+        config.useMockBroker()
         config.brokerAddressFamily = .v4
 
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
@@ -75,7 +75,7 @@ final class KafkaMetricsTests {
 
     @Test func producerStatistics() async throws {
         var config = KafkaProducerConfig()
-        MockBrokerConfig.apply(to: &config, brokerCount: 1)
+        config.useMockBroker()
         config.brokerAddressFamily = .v4
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
