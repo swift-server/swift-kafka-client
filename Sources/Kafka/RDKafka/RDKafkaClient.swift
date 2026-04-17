@@ -217,7 +217,7 @@ public final class RDKafkaClient: Sendable {
         opaque: UnsafeMutableRawPointer?,
         cHeaders: [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]
     ) throws -> OpaquePointer? {
-        let sizeWithoutHeaders = (key != nil) ? 6 : 5
+        let sizeWithoutHeaders = 4 + (key != nil ? 1 : 0) + (value != nil ? 1 : 0)
         let size = sizeWithoutHeaders + cHeaders.count
         var arguments = Array(repeating: rd_kafka_vu_t(), count: size)
         var index = 0
