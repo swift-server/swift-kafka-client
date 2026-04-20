@@ -167,13 +167,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         // After shutdown, all withClient()-based methods should throw connectionClosed
@@ -383,13 +384,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         await #expect(throws: KafkaError.self) {
@@ -407,13 +409,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         #expect(throws: KafkaError.self) {
@@ -432,13 +435,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         #expect(throws: KafkaError.self) {
@@ -477,13 +481,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         await #expect(throws: KafkaError.self) {
