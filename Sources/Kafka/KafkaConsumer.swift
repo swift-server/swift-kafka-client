@@ -339,18 +339,11 @@ public final class KafkaConsumer: Sendable, Service {
     /// Subscribe to the given list of topics.
     ///
     /// This replaces any previous subscription. The partition assignment happens
-    /// automatically using the consumer's consumer group. Can be called at any time
-    /// after consumer creation — before or after ``run()``.
+    /// automatically using the consumer's consumer group.
     ///
-    /// This method supports Regex patterns. Topic names prefixed with `^` will be treated
-    /// as regular expressions (e.g. `^my-topic-.*`).
-    ///
-    /// Calling this with an empty array is equivalent to calling ``unsubscribe()``.
-    ///
-    /// - Note: Changing the subscription triggers a rebalance event which will be
-    /// yielded to the consumer's events sequence.
-    ///
-    /// - Parameter topics: An array of topic names or regex patterns to subscribe to.
+    /// - Parameter topics: An array of topic names to subscribe to.
+    ///   Topic names prefixed with `^` are treated as regular expressions.
+    ///   An empty array is equivalent to calling ``unsubscribe()``.
     /// - Throws: A ``KafkaError`` if the consumer is closed or subscribing failed.
     public func subscribe(topics: [String]) throws {
         guard !topics.isEmpty else {
@@ -1044,8 +1037,9 @@ extension KafkaConsumer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .initializing:
-                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .initializing(let client, let rebalanceContext):
+                self.state = .finishing(client: client, rebalanceContext: rebalanceContext)
+                return .triggerGracefulShutdown(client: client)
             case .running(let client, let rebalanceContext):
                 self.state = .finishing(client: client, rebalanceContext: rebalanceContext)
                 return .triggerGracefulShutdown(client: client)

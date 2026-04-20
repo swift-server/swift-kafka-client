@@ -450,17 +450,18 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
 
-            let lost = try! consumer.isAssignmentLost
+            let lost = try consumer.isAssignmentLost
             #expect(lost == false)
 
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
     }
 
