@@ -981,19 +981,13 @@ extension KafkaConsumer {
 
         /// Get the running client for performing an operation that requires an active consumer.
         ///
-        /// This is a general-purpose accessor used by methods that need the underlying
-        /// `RDKafkaClient` while the consumer is running (e.g., commit, storeOffset,
-        /// committed, position, seek, isAssignmentLost).
-        ///
         /// - Returns: The action to be taken.
-        ///
-        /// - Important: This function calls `fatalError` if called while in the `.initializing` state.
         func withClient() -> ClientAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+                return .throwClosedError
             case .running(let client, _):
                 return .client(client)
             case .finishing, .finished:
@@ -1028,10 +1022,8 @@ extension KafkaConsumer {
             case triggerGracefulShutdown(client: RDKafkaClient)
         }
 
-        /// Get action to be taken when wanting to do close the consumer.
-        /// - Returns: The action to be taken,  or `nil` if there is no action to be taken.
-        ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        /// Get action to be taken when wanting to close the consumer.
+        /// - Returns: The action to be taken, or `nil` if there is no action to be taken.
         mutating func finish() -> FinishAction? {
             switch self.state {
             case .uninitialized:

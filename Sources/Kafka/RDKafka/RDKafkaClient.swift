@@ -614,10 +614,11 @@ public final class RDKafkaClient: Sendable {
         if result != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: result)
         }
-        defer { rd_kafka_topic_partition_list_destroy(tpl) }
+
+        guard let list = tpl else { return [] }
+        defer { rd_kafka_topic_partition_list_destroy(list) }
 
         var topics: [String] = []
-        guard let list = tpl else { return topics }
         for i in 0..<Int(list.pointee.cnt) {
             let element = list.pointee.elems[i]
             if let topicCString = element.topic {

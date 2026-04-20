@@ -464,10 +464,17 @@ import Foundation
                 try await serviceGroup.run()
             }
 
-            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-
-            let lost = try consumer.isAssignmentLost
-            #expect(lost == false)
+            // Wait until the consumer is in .running state
+            for _ in 0..<20 {
+                do {
+                    let lost = try consumer.isAssignmentLost
+                    #expect(lost == false)
+                    break
+                } catch {
+                    // Consumer not yet running, retry
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            }
 
             await serviceGroup.triggerGracefulShutdown()
             try await group.waitForAll()
