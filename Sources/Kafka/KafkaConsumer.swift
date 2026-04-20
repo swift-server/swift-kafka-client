@@ -334,11 +334,80 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
-    /// Subscribe to the given list of `topics`.
-    /// The partition assignment happens automatically using `KafkaConsumer`'s consumer group.
-    /// - Parameter topics: An array of topic names to subscribe to.
-    /// - Throws: A ``KafkaError`` if subscribing to the topic list failed.
-    private func subscribe(topics: [String]) throws {
+    // MARK: - Subscription Management
+
+    /// Subscribe to the given list of topics.
+    ///
+    /// This replaces any previous subscription. The partition assignment happens
+    /// automatically using the consumer's consumer group. Can be called at any time
+    /// after consumer creation — before or after ``run()``.
+    ///
+    /// This method supports Regex patterns. Topic names prefixed with `^` will be treated
+    /// as regular expressions (e.g. `^my-topic-.*`).
+    ///
+    /// Calling this with an empty array is equivalent to calling ``unsubscribe()``.
+    ///
+    /// - Note: Changing the subscription triggers a rebalance event which will be
+    /// yielded to the consumer's events sequence.
+    ///
+    /// - Parameter topics: An array of topic names or regex patterns to subscribe to.
+    /// - Throws: A ``KafkaError`` if the consumer is closed or subscribing failed.
+    public func subscribe(topics: [String]) throws {
+        guard !topics.isEmpty else {
+            try self.unsubscribe()
+            return
+        }
+
+        let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
+        switch action {
+        case .client(let client):
+            let subscription = RDKafkaTopicPartitionList()
+            for topic in topics {
+                subscription.add(
+                    topic: topic,
+                    partition: KafkaPartition.unassigned
+                )
+            }
+            try client.subscribe(topicPartitionList: subscription)
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Consumer is closed")
+        }
+    }
+
+    /// Unsubscribe from the current subscription.
+    ///
+    /// Clears all topic subscriptions. The consumer leaves the consumer group
+    /// and stops receiving messages. This triggers a rebalance event.
+    /// Can re-subscribe later with ``subscribe(topics:)``.
+    ///
+    /// - Throws: A ``KafkaError`` if the consumer is closed or unsubscribing failed.
+    public func unsubscribe() throws {
+        let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
+        switch action {
+        case .client(let client):
+            try client.unsubscribe()
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Consumer is closed")
+        }
+    }
+
+    /// Get the current topic subscription.
+    ///
+    /// - Returns: An array of topic names or patterns the consumer is currently subscribed to.
+    /// - Throws: A ``KafkaError`` if the consumer is closed or the query failed.
+    public func subscription() throws -> [String] {
+        let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
+        switch action {
+        case .client(let client):
+            return try client.subscription()
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Consumer is closed")
+        }
+    }
+
+    /// Internal startup subscription that transitions the state machine from `.initializing` to `.running`.
+    /// Called once during `_run()` to set up the initial subscription from `consumptionStrategy`.
+    private func initialSubscribe(topics: [String]) throws {
         let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
         switch action {
         case .setUpConnection(let client):
@@ -389,11 +458,23 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     private func _run() async throws {
-        switch self.config.consumptionStrategy!._internal {
-        case .partition(groupID: _, let topic, let partition, let offset):
-            try self.assign(topic: topic, partition: partition, offset: offset)
-        case .group(groupID: _, let topics):
-            try self.subscribe(topics: topics)
+        if let strategy = self.config.consumptionStrategy?._internal {
+            switch strategy {
+            case .partition(groupID: _, let topic, let partition, let offset):
+                try self.assign(topic: topic, partition: partition, offset: offset)
+            case .group(groupID: _, let topics):
+                try self.initialSubscribe(topics: topics)
+            }
+        } else {
+            // No consumptionStrategy set — user will call subscribe(topics:) manually.
+            // Transition state machine to .running so the event loop can start.
+            let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+            switch action {
+            case .setUpConnection:
+                break
+            case .consumerClosed:
+                throw KafkaError.connectionClosed(reason: "Consumer closed before run")
+            }
         }
         try await self.eventRunLoop()
     }
@@ -920,6 +1001,26 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
+            case .running(let client, _):
+                return .client(client)
+            case .finishing, .finished:
+                return .throwClosedError
+            }
+        }
+
+        /// Get the client for subscription management operations.
+        ///
+        /// Unlike ``withClient()``, this accessor works in both `.initializing` and `.running`
+        /// states — matching the behavior of Rust, Go, Python, and Java Kafka clients where
+        /// subscribe/unsubscribe can be called at any time after consumer creation.
+        ///
+        /// - Returns: The action to be taken.
+        func withClientForSubscription() -> ClientAction {
+            switch self.state {
+            case .uninitialized:
+                fatalError("\(#function) invoked while still in state \(self.state)")
+            case .initializing(let client, _):
+                return .client(client)
             case .running(let client, _):
                 return .client(client)
             case .finishing, .finished:
