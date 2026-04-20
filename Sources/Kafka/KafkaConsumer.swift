@@ -1037,9 +1037,9 @@ extension KafkaConsumer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
-                // If we haven't started running yet, we haven't polled the consumer queue.
-                // Calling consumerClose() without an active poll loop will hang librdkafka indefinitely.
-                // We can safely transition straight to .finished.
+                // No poll loop is active in .initializing state. Since consumerClose()
+                // requires an active poll loop to process broker responses, we skip it
+                // and transition straight to .finished.
                 self.state = .finished
                 return nil
             case .running(let client, let rebalanceContext):

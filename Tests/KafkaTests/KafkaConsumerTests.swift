@@ -313,6 +313,7 @@ import Foundation
 
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
         // No crash = test passes
     }
@@ -337,6 +338,7 @@ import Foundation
 
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
     }
 
@@ -1093,9 +1095,8 @@ import Foundation
         config.brokerAddressFamily = .v4
 
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
-        
-        // This used to cause a fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-        // when consumer was in the .initializing state
+
+        // This used to cause a fatalError when consumer was in the .initializing state
         consumer.triggerGracefulShutdown()
     }
 
