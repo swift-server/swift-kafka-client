@@ -647,6 +647,9 @@ public final class RDKafkaClient: Sendable {
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)
             }
+            if let error = topicPartitionList.firstError() {
+                throw KafkaError.rdKafkaError(wrapping: error)
+            }
         }
     }
 
@@ -657,6 +660,9 @@ public final class RDKafkaClient: Sendable {
             let result = rd_kafka_resume_partitions(self.kafkaHandle.pointer, pointer)
             if result != RD_KAFKA_RESP_ERR_NO_ERROR {
                 throw KafkaError.rdKafkaError(wrapping: result)
+            }
+            if let error = topicPartitionList.firstError() {
+                throw KafkaError.rdKafkaError(wrapping: error)
             }
         }
     }

@@ -381,6 +381,27 @@ import Foundation
 
     // MARK: - Pause/Resume Tests
 
+    @Test func pauseFailsOnUnknownPartition() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            
+            #expect(throws: KafkaError.self) {
+                try consumer.pause(
+                    topicPartitions: [KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))]
+                )
+            }
+            
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
     @Test func pauseFailsOnClosedConsumer() async throws {
         let config = makeConfig()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
