@@ -388,7 +388,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Returns: An array of topic names or patterns the consumer is currently subscribed to.
     /// - Throws: A ``KafkaError`` if the consumer is closed or the query failed.
-    public func subscription() throws -> [String] {
+    public func subscribedTopics() throws -> [String] {
         let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
         switch action {
         case .client(let client):

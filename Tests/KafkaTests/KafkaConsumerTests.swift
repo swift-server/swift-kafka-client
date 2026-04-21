@@ -187,7 +187,7 @@ import Foundation
 
     // MARK: - Subscription Management Tests
 
-    @Test func subscriptionFailsOnClosedConsumer() async throws {
+    @Test func subscribedTopicsFailsOnClosedConsumer() async throws {
         let config = makeConfig()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
@@ -204,7 +204,7 @@ import Foundation
         }
 
         #expect(throws: KafkaError.self) {
-            try consumer.subscription()
+            try consumer.subscribedTopics()
         }
     }
 
@@ -283,7 +283,7 @@ import Foundation
         try consumer.subscribe(topics: ["test-topic"])
     }
 
-    @Test func subscriptionReturnsEmptyBeforeSubscribing() throws {
+    @Test func subscribedTopicsReturnsEmptyBeforeSubscribing() throws {
         var config = KafkaConsumerConfig()
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
@@ -291,7 +291,7 @@ import Foundation
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         // No subscription set — should return empty
-        let topics = try consumer.subscription()
+        let topics = try consumer.subscribedTopics()
         #expect(topics.isEmpty)
     }
 

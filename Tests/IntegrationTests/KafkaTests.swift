@@ -1724,7 +1724,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 try consumer.subscribe(topics: [testTopic])
 
                 // 4. Verify subscription contains our topic
-                let currentSubscription = try consumer.subscription()
+                let currentSubscription = try consumer.subscribedTopics()
                 #expect(
                     currentSubscription.contains(testTopic),
                     "Expected subscription to contain \(testTopic), got \(currentSubscription)"
@@ -1750,7 +1750,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 try consumer.unsubscribe()
 
                 // 7. Verify subscription is now empty
-                let emptySubscription = try consumer.subscription()
+                let emptySubscription = try consumer.subscribedTopics()
                 #expect(
                     emptySubscription.isEmpty,
                     "Expected empty subscription after unsubscribe, got \(emptySubscription)"
@@ -1758,11 +1758,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
                 // 8. Dynamically subscribe again
                 try consumer.subscribe(topics: [testTopic])
-                #expect(try consumer.subscription().contains(testTopic))
+                #expect(try consumer.subscribedTopics().contains(testTopic))
 
                 // 9. Verify passing empty array to subscribe is equivalent to unsubscribe
                 try consumer.subscribe(topics: [])
-                let emptySub = try consumer.subscription()
+                let emptySub = try consumer.subscribedTopics()
                 #expect(
                     emptySub.isEmpty,
                     "Expected empty subscription after subscribe(topics: []), got \(emptySub)"
@@ -1860,12 +1860,12 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
             // Subscribe to topic-a
             try consumer.subscribe(topics: ["topic-a"])
-            let sub1 = try consumer.subscription()
+            let sub1 = try consumer.subscribedTopics()
             #expect(sub1 == ["topic-a"])
 
             // Re-subscribe to topic-b — should replace, not append
             try consumer.subscribe(topics: ["topic-b"])
-            let sub2 = try consumer.subscription()
+            let sub2 = try consumer.subscribedTopics()
             #expect(sub2 == ["topic-b"])
             #expect(!sub2.contains("topic-a"))
 
@@ -1892,11 +1892,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
 
             try consumer.subscribe(topics: ["topic-a", "topic-b"])
-            let subBefore = try consumer.subscription()
+            let subBefore = try consumer.subscribedTopics()
             #expect(subBefore.count == 2)
 
             try consumer.unsubscribe()
-            let subAfter = try consumer.subscription()
+            let subAfter = try consumer.subscribedTopics()
             #expect(subAfter.isEmpty)
 
             await serviceGroup.triggerGracefulShutdown()
@@ -1926,7 +1926,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             try consumer.unsubscribe()
             try consumer.subscribe(topics: ["topic-b"])
 
-            let sub = try consumer.subscription()
+            let sub = try consumer.subscribedTopics()
             #expect(sub == ["topic-b"])
 
             await serviceGroup.triggerGracefulShutdown()
@@ -1960,12 +1960,12 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 try await Task.sleep(for: .seconds(2), tolerance: .zero)
 
                 // Verify initial subscription
-                let initialSub = try consumer.subscription()
+                let initialSub = try consumer.subscribedTopics()
                 #expect(initialSub.contains(testTopic))
 
                 // Re-subscribe to a different topic while running
                 try consumer.subscribe(topics: ["other-topic"])
-                let newSub = try consumer.subscription()
+                let newSub = try consumer.subscribedTopics()
                 #expect(newSub == ["other-topic"])
                 #expect(!newSub.contains(testTopic))
 
