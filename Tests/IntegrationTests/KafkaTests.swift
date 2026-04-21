@@ -2046,4 +2046,112 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             }
         }
     }
+
+    // MARK: - Timestamp Tests
+
+    @Test func consumedMessageHasTimestamp() async throws {
+        try await withTestTopic { testTopic in
+            let _ = try await self.produceMessages(topic: testTopic, count: 1)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                for try await message in consumer.messages {
+                    // Timestamp should be set (broker assigns it)
+                    #expect(message.timestamp != nil)
+                    #expect(
+                        message.timestampType == .createTime
+                            || message.timestampType == .logAppendTime
+                    )
+                    // Timestamp should be a reasonable epoch (after year 2020)
+                    if let ts = message.timestamp {
+                        #expect(ts > 1_577_836_800_000)  // 2020-01-01 in ms
+                    }
+                    break
+                }
+
+                await serviceGroup.triggerGracefulShutdown()
+                try await group.waitForAll()
+            }
+        }
+    }
+
+    // MARK: - Pause/Resume Tests
+
+    @Test func pauseAndResumePartitions() async throws {
+        try await withTestTopic { testTopic in
+            let _ = try await self.produceMessages(topic: testTopic, count: 3)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
+                config: consumerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    for await _ in events {}
+                }
+
+                // Wait for assignment
+                try await Task.sleep(for: .seconds(2), tolerance: .zero)
+
+                let partition = KafkaTopicPartition(
+                    topic: testTopic,
+                    partition: KafkaPartition(rawValue: 0)
+                )
+
+                // Pause — should not throw
+                try consumer.pause(topicPartitions: [partition])
+
+                // Resume — should not throw
+                try consumer.resume(topicPartitions: [partition])
+
+                // Consume all messages after resume
+                var consumedCount = 0
+                for try await _ in consumer.messages {
+                    consumedCount += 1
+                    if consumedCount >= 3 {
+                        break
+                    }
+                }
+
+                #expect(consumedCount >= 3)
+
+                await serviceGroup.triggerGracefulShutdown()
+                try await group.waitForAll()
+            }
+        }
+    }
 }
