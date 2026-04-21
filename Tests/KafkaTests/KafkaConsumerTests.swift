@@ -391,13 +391,15 @@ import Foundation
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { try await serviceGroup.run() }
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-            
+
             #expect(throws: KafkaError.self) {
                 try consumer.pause(
-                    topicPartitions: [KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))]
+                    topicPartitions: [
+                        KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))
+                    ]
                 )
             }
-            
+
             await serviceGroup.triggerGracefulShutdown()
         }
     }
@@ -415,7 +417,9 @@ import Foundation
 
             #expect(throws: KafkaError.self) {
                 try consumer.resume(
-                    topicPartitions: [KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))]
+                    topicPartitions: [
+                        KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))
+                    ]
                 )
             }
 
