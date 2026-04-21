@@ -47,6 +47,8 @@ import Foundation
         if let enableAutoOffsetStore {
             config.enableAutoOffsetStore = enableAutoOffsetStore
         }
+        config.useMockBroker()
+        config.brokerAddressFamily = .v4
         return config
     }
 
