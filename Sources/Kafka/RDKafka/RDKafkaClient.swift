@@ -639,6 +639,34 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
+    /// Pause consumption for the given partitions.
+    /// - Parameter topicPartitionList: Partitions to pause.
+    func pausePartitions(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_pause_partitions(self.kafkaHandle.pointer, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+            if let error = topicPartitionList.firstError() {
+                throw KafkaError.rdKafkaError(wrapping: error)
+            }
+        }
+    }
+
+    /// Resume consumption for the given partitions.
+    /// - Parameter topicPartitionList: Partitions to resume.
+    func resumePartitions(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_resume_partitions(self.kafkaHandle.pointer, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+            if let error = topicPartitionList.firstError() {
+                throw KafkaError.rdKafkaError(wrapping: error)
+            }
+        }
+    }
+
     /// Wraps a Swift closure inside of a class to be able to pass it to `librdkafka` as an `OpaquePointer`.
     /// This is specifically used to pass a Swift closure as a commit callback for the ``KafkaConsumer``.
     final class CapturedCommitCallback {

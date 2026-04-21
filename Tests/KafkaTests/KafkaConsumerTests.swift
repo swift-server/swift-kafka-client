@@ -379,6 +379,119 @@ import Foundation
         try consumer.subscribe(topics: ["^test-.*"])
     }
 
+    // MARK: - Pause/Resume Tests
+
+    @Test func pauseFailsOnUnknownPartition() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            #expect(throws: KafkaError.self) {
+                try consumer.pause(
+                    topicPartitions: [
+                        KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))
+                    ]
+                )
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func resumeFailsOnUnknownPartition() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            #expect(throws: KafkaError.self) {
+                try consumer.resume(
+                    topicPartitions: [
+                        KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))
+                    ]
+                )
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func pauseFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.pause(
+                topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))]
+            )
+        }
+    }
+
+    @Test func resumeFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.resume(
+                topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))]
+            )
+        }
+    }
+
+    // MARK: - KafkaTimestampType Tests
+
+    @Test func timestampTypeStaticConstants() {
+        #expect(KafkaTimestampType.notAvailable.rawValue == 0)
+        #expect(KafkaTimestampType.createTime.rawValue == 1)
+        #expect(KafkaTimestampType.logAppendTime.rawValue == 2)
+    }
+
+    @Test func timestampTypeEquality() {
+        #expect(KafkaTimestampType.createTime == KafkaTimestampType(rawValue: 1))
+        #expect(KafkaTimestampType.createTime != KafkaTimestampType.logAppendTime)
+    }
+
+    @Test func timestampTypeDescription() {
+        #expect(KafkaTimestampType.createTime.description == "createTime")
+        #expect(KafkaTimestampType.logAppendTime.description == "logAppendTime")
+        #expect(KafkaTimestampType.notAvailable.description == "notAvailable")
+    }
+
     // MARK: - committed / position Tests
 
     @Test func committedFailsOnClosedConsumer() async throws {
