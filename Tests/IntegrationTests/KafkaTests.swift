@@ -2096,7 +2096,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func pauseAndResumePartitions() async throws {
         try await withTestTopic { testTopic in
-            let _ = try await self.produceMessages(topic: testTopic, count: 3)
+            let _ = try await self.produceMessages(topic: testTopic, count: 5)
 
             var consumerConfig = KafkaConsumerConfig()
             consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
@@ -2124,30 +2124,46 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     for await _ in events {}
                 }
 
-                // Wait for assignment
-                try await Task.sleep(for: .seconds(2), tolerance: .zero)
+                // Consume messages in a background task, track count atomically
+                let consumedCount = ManagedAtomic<Int>(0)
+                let firstPartition = ManagedAtomic<Int32>(-1)
+                group.addTask {
+                    for try await message in consumer.messages {
+                        if firstPartition.load(ordering: .relaxed) == -1 {
+                            firstPartition.store(
+                                Int32(message.partition.rawValue),
+                                ordering: .relaxed
+                            )
+                        }
+                        consumedCount.wrappingIncrement(ordering: .relaxed)
+                    }
+                }
 
+                // Wait for first message to confirm assignment
+                for _ in 0..<100 {
+                    if consumedCount.load(ordering: .relaxed) >= 1 { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                #expect(consumedCount.load(ordering: .relaxed) >= 1)
+
+                let partitionId = firstPartition.load(ordering: .relaxed)
                 let partition = KafkaTopicPartition(
                     topic: testTopic,
-                    partition: KafkaPartition(rawValue: 0)
+                    partition: KafkaPartition(rawValue: Int(partitionId))
                 )
 
-                // Pause — should not throw
+                // Pause — should not throw on assigned partition
                 try consumer.pause(topicPartitions: [partition])
 
                 // Resume — should not throw
                 try consumer.resume(topicPartitions: [partition])
 
-                // Consume all messages after resume
-                var consumedCount = 0
-                for try await _ in consumer.messages {
-                    consumedCount += 1
-                    if consumedCount >= 3 {
-                        break
-                    }
+                // Wait for remaining messages
+                for _ in 0..<100 {
+                    if consumedCount.load(ordering: .relaxed) >= 5 { break }
+                    try await Task.sleep(for: .milliseconds(100))
                 }
-
-                #expect(consumedCount >= 3)
+                #expect(consumedCount.load(ordering: .relaxed) >= 5)
 
                 await serviceGroup.triggerGracefulShutdown()
                 try await group.waitForAll()
