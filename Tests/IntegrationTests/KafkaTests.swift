@@ -1682,6 +1682,97 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         }
     }
 
+    @Test func dynamicSubscribeAndUnsubscribe() async throws {
+        try await withTestTopic { testTopic in
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.groupId = UUID().uuidString
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .earliest  // Make sure we get all produced messages
+            consumerConfig.brokerAddressFamily = .v4
+
+            // Important: we leave `consumptionStrategy` nil to test the dynamic subscribe path.
+            let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
+                config: consumerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroup = ServiceGroup(
+                configuration: ServiceGroupConfiguration(
+                    services: [consumer],
+                    gracefulShutdownSignals: [.sigterm, .sigint],
+                    logger: .kafkaTest
+                )
+            )
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                // 1. Start the service group
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                // 2. Consume events (like rebalances) in background
+                group.addTask {
+                    for await _ in events {}
+                }
+
+                // 3. Wait for the consumer to start running
+                try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+                // 4. Dynamically subscribe (after creation!)
+                try consumer.subscribe(topics: [testTopic])
+
+                // 4. Verify subscription contains our topic
+                let currentSubscription = try consumer.subscribedTopics()
+                #expect(
+                    currentSubscription.contains(testTopic),
+                    "Expected subscription to contain \(testTopic), got \(currentSubscription)"
+                )
+
+                // 5. Consume the test messages in a background task to keep consumer alive
+                let consumedCount = ManagedAtomic<Int>(0)
+                group.addTask {
+                    for try await _ in consumer.messages {
+                        consumedCount.wrappingIncrement(ordering: .relaxed)
+                    }
+                }
+
+                // Wait for all messages to be consumed
+                for _ in 0..<100 {
+                    if consumedCount.load(ordering: .relaxed) >= testMessages.count { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+
+                #expect(consumedCount.load(ordering: .relaxed) >= testMessages.count)
+
+                // 6. Dynamically unsubscribe
+                try consumer.unsubscribe()
+
+                // 7. Verify subscription is now empty
+                let emptySubscription = try consumer.subscribedTopics()
+                #expect(
+                    emptySubscription.isEmpty,
+                    "Expected empty subscription after unsubscribe, got \(emptySubscription)"
+                )
+
+                // 8. Dynamically subscribe again
+                try consumer.subscribe(topics: [testTopic])
+                #expect(try consumer.subscribedTopics().contains(testTopic))
+
+                // 9. Verify passing empty array to subscribe is equivalent to unsubscribe
+                try consumer.subscribe(topics: [])
+                let emptySub = try consumer.subscribedTopics()
+                #expect(
+                    emptySub.isEmpty,
+                    "Expected empty subscription after subscribe(topics: []), got \(emptySub)"
+                )
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     func produceMessages(topic: String, count: UInt) async throws -> [KafkaProducerMessage<String, String>] {
@@ -1745,5 +1836,214 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             messages: messages,
             skipConsistencyCheck: skipConsistencyCheck
         )
+    }
+
+    // MARK: - Subscribe/Unsubscribe Integration Tests
+
+    @Test func subscribeReplacesCurrentSubscription() async throws {
+        var consumerConfig = KafkaConsumerConfig()
+        consumerConfig.groupId = UUID().uuidString
+        consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+        consumerConfig.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            // Subscribe to topic-a
+            try consumer.subscribe(topics: ["topic-a"])
+            let sub1 = try consumer.subscribedTopics()
+            #expect(sub1 == ["topic-a"])
+
+            // Re-subscribe to topic-b — should replace, not append
+            try consumer.subscribe(topics: ["topic-b"])
+            let sub2 = try consumer.subscribedTopics()
+            #expect(sub2 == ["topic-b"])
+            #expect(!sub2.contains("topic-a"))
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func unsubscribeClearsSubscription() async throws {
+        var consumerConfig = KafkaConsumerConfig()
+        consumerConfig.groupId = UUID().uuidString
+        consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+        consumerConfig.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            try consumer.subscribe(topics: ["topic-a", "topic-b"])
+            let subBefore = try consumer.subscribedTopics()
+            #expect(subBefore.count == 2)
+
+            try consumer.unsubscribe()
+            let subAfter = try consumer.subscribedTopics()
+            #expect(subAfter.isEmpty)
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func resubscribeAfterUnsubscribeSucceeds() async throws {
+        var consumerConfig = KafkaConsumerConfig()
+        consumerConfig.groupId = UUID().uuidString
+        consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+        consumerConfig.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            // Subscribe → unsubscribe → re-subscribe
+            try consumer.subscribe(topics: ["topic-a"])
+            try consumer.unsubscribe()
+            try consumer.subscribe(topics: ["topic-b"])
+
+            let sub = try consumer.subscribedTopics()
+            #expect(sub == ["topic-b"])
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func subscribeWhileRunningWithConsumptionStrategySucceeds() async throws {
+        try await withTestTopic { testTopic in
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: UUID().uuidString,
+                topics: [testTopic]
+            )
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.brokerAddressFamily = .v4
+
+            let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                // Wait for initial subscription to be established
+                try await Task.sleep(for: .seconds(2), tolerance: .zero)
+
+                // Verify initial subscription
+                let initialSub = try consumer.subscribedTopics()
+                #expect(initialSub.contains(testTopic))
+
+                // Re-subscribe to a different topic while running
+                try consumer.subscribe(topics: ["other-topic"])
+                let newSub = try consumer.subscribedTopics()
+                #expect(newSub == ["other-topic"])
+                #expect(!newSub.contains(testTopic))
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func subscribeMultipleTopicsThenConsumeFromAll() async throws {
+        try await withTestTopic { testTopic1 in
+            try await withTestTopic { testTopic2 in
+                // Produce a message to each topic
+                let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+                    config: self.producerConfig,
+                    logger: .kafkaTest
+                )
+
+                let serviceGroupConfiguration = ServiceGroupConfiguration(
+                    services: [producer],
+                    logger: .kafkaTest
+                )
+                let producerServiceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        try await producerServiceGroup.run()
+                    }
+
+                    group.addTask {
+                        for await _ in events {}
+                    }
+
+                    let msg1 = KafkaProducerMessage(topic: testTopic1, value: "msg1")
+                    let msg2 = KafkaProducerMessage(topic: testTopic2, value: "msg2")
+                    try producer.send(msg1)
+                    try producer.send(msg2)
+
+                    try await Task.sleep(for: .seconds(1))
+                    await producerServiceGroup.triggerGracefulShutdown()
+                }
+
+                // Now consume from both topics using dynamic subscribe
+                var consumerConfig = KafkaConsumerConfig()
+                consumerConfig.groupId = UUID().uuidString
+                consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+                consumerConfig.autoOffsetReset = .beginning
+                consumerConfig.brokerAddressFamily = .v4
+
+                let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+                let consumerServiceGroupConfig = ServiceGroupConfiguration(
+                    services: [consumer],
+                    logger: .kafkaTest
+                )
+                let consumerServiceGroup = ServiceGroup(configuration: consumerServiceGroupConfig)
+
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    group.addTask {
+                        try await consumerServiceGroup.run()
+                    }
+
+                    // Subscribe dynamically to both topics
+                    try consumer.subscribe(topics: [testTopic1, testTopic2])
+
+                    var receivedTopics: Set<String> = []
+                    for try await message in consumer.messages {
+                        receivedTopics.insert(message.topic)
+                        if receivedTopics.count >= 2 {
+                            break
+                        }
+                    }
+
+                    #expect(receivedTopics.contains(testTopic1))
+                    #expect(receivedTopics.contains(testTopic2))
+
+                    await consumerServiceGroup.triggerGracefulShutdown()
+                }
+            }
+        }
     }
 }
