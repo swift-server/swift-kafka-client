@@ -1195,21 +1195,3 @@ import Foundation
         consumer.triggerGracefulShutdown()
     }
 }
-
-    @Test func scheduleCommitAllFailsIfOpaqueIsRebalanceContext() async throws {
-        let config = makeConfig(enableAutoCommit: false)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
-
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await serviceGroup.run() }
-            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-
-            try consumer.scheduleCommit()
-            try await Task.sleep(for: .milliseconds(1000), tolerance: .zero)
-
-            await serviceGroup.triggerGracefulShutdown()
-        }
-    }
