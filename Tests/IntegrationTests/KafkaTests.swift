@@ -2046,4 +2046,41 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             }
         }
     }
+
+    // MARK: - Iterator Drop Shutdown Tests
+
+    @Test func gracefulShutdownAfterIteratorBreak() async throws {
+        try await withTestTopic { testTopic in
+            let _ = try await self.produceMessages(topic: testTopic, count: 3)
+
+            let groupId = UUID().uuidString
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: groupId, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                // Consume one message then break
+                for try await _ in consumer.messages {
+                    break
+                }
+
+                // Graceful shutdown — this triggers the async close path
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
 }

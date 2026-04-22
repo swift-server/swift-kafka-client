@@ -52,6 +52,16 @@ import Foundation
         return config
     }
 
+    /// Create a consumer config without subscription — for tests that only need
+    /// start/stop lifecycle without subscribing to any topic.
+    private func makeConfigWithoutSubscription() -> KafkaConsumerConfig {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.useMockBroker()
+        config.brokerAddressFamily = .v4
+        return config
+    }
+
     // MARK: - Lifecycle Tests
 
     @Test func consumerLog() async throws {
@@ -60,13 +70,11 @@ import Foundation
             _ in MockLogHandler(recorder: recorder)
         }
 
-        // Set no bootstrap servers to trigger librdkafka configuration warning
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfig()
-        config.consumptionStrategy = .group(
-            id: uniqueGroupID,
-            topics: ["this-topic-does-not-exist"]
-        )
+        config.groupId = uniqueGroupID
+        config.useMockBroker()
+        config.brokerAddressFamily = .v4
         config.debug = [.all]
 
         let consumer = try KafkaConsumer(config: config, logger: mockLogger)
@@ -104,25 +112,14 @@ import Foundation
     }
 
     @Test func consumerConstructDeinit() async throws {
-        let uniqueGroupID = UUID().uuidString
-        var config = KafkaConsumerConfig()
-        config.groupId = uniqueGroupID
-        config.consumptionStrategy = .group(
-            id: uniqueGroupID,
-            topics: ["this-topic-does-not-exist"]
-        )
+        let config = makeConfigWithoutSubscription()
 
         _ = try KafkaConsumer(config: config, logger: .kafkaTest)  // deinit called before run
         _ = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: .kafkaTest)
     }
 
     @Test func consumerMessagesReadCancelledBeforeRun() async throws {
-        let uniqueGroupID = UUID().uuidString
-        var config = KafkaConsumerConfig()
-        config.consumptionStrategy = .group(
-            id: uniqueGroupID,
-            topics: ["this-topic-does-not-exist"]
-        )
+        let config = makeConfigWithoutSubscription()
 
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
@@ -154,6 +151,66 @@ import Foundation
         }
     }
 
+    // MARK: - Uninitialized Consumer Safety Tests
+    //
+    // These verify that calling public APIs before run() throws instead of crashing.
+
+    @Test func positionBeforeRunThrowsInsteadOfCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        #expect(throws: KafkaError.self) {
+            _ = try consumer.position(
+                topicPartitions: [KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))]
+            )
+        }
+    }
+
+    @Test func committedBeforeRunThrowsInsteadOfCrash() async throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        await #expect(throws: KafkaError.self) {
+            _ = try await consumer.committed(
+                topicPartitions: [KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))]
+            )
+        }
+    }
+
+    @Test func seekBeforeRunThrowsInsteadOfCrash() async throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        await #expect(throws: KafkaError.self) {
+            try await consumer.seek(
+                topicPartitionOffsets: [
+                    KafkaTopicPartitionOffset(topic: "t", partition: KafkaPartition(rawValue: 0), offset: .beginning)
+                ]
+            )
+        }
+    }
+
+    @Test func isAssignmentLostBeforeRunThrowsInsteadOfCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        #expect(throws: KafkaError.self) {
+            _ = try consumer.isAssignmentLost
+        }
+    }
+
     // MARK: - Closed Consumer State Machine Tests
     //
     // storeOffset(_:) cannot be unit-tested directly because KafkaConsumerMessage
@@ -163,7 +220,8 @@ import Foundation
     // path through the methods that don't require a KafkaConsumerMessage.
 
     @Test func positionFailsOnClosedConsumerViaStateMachine() async throws {
-        let config = makeConfig(enableAutoOffsetStore: false)
+        var config = makeConfigWithoutSubscription()
+        config.enableAutoOffsetStore = false
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -190,7 +248,7 @@ import Foundation
     // MARK: - Subscription Management Tests
 
     @Test func subscribedTopicsFailsOnClosedConsumer() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -211,7 +269,7 @@ import Foundation
     }
 
     @Test func subscribeFailsOnClosedConsumer() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -232,7 +290,7 @@ import Foundation
     }
 
     @Test func unsubscribeFailsOnClosedConsumer() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -253,7 +311,7 @@ import Foundation
     }
 
     @Test func subscribeWithEmptyTopicsCallsUnsubscribe() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -382,7 +440,7 @@ import Foundation
     // MARK: - committed / position Tests
 
     @Test func committedFailsOnClosedConsumer() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -407,7 +465,7 @@ import Foundation
     }
 
     @Test func positionFailsOnClosedConsumer() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -433,7 +491,7 @@ import Foundation
     // MARK: - isAssignmentLost Tests
 
     @Test func isAssignmentLostFailsOnClosedConsumer() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -455,7 +513,7 @@ import Foundation
     }
 
     @Test func isAssignmentLostReturnsFalseWhenRunning() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -486,7 +544,7 @@ import Foundation
     // MARK: - seek Tests
 
     @Test func seekFailsOnClosedConsumer() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
@@ -522,7 +580,7 @@ import Foundation
     // MARK: - makeConsumerWithEvents Tests
 
     @Test func makeConsumerWithEventsConstructDeinit() async throws {
-        let config = makeConfig()
+        let config = makeConfigWithoutSubscription()
         let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
             config: config,
             logger: .kafkaTest

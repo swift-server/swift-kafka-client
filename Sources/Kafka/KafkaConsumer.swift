@@ -926,8 +926,6 @@ extension KafkaConsumer {
 
         /// Returns the next action to be taken when wanting to poll.
         /// - Returns: The next action to be taken when wanting to poll, or `nil` if there is no action to be taken.
-        ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
         mutating func nextConsumerPollLoopAction() -> ConsumerPollLoopAction {
             switch self.state {
             case .uninitialized:
@@ -956,15 +954,13 @@ extension KafkaConsumer {
         mutating func setUpConnection() -> SetUpConnectionAction {
             switch self.state {
             case .uninitialized:
-                fatalError("\(#function) invoked while still in state \(self.state)")
+                return .consumerClosed
             case .initializing(let client, let rebalanceContext):
                 self.state = .running(client: client, rebalanceContext: rebalanceContext)
                 return .setUpConnection(client: client)
-            case .running:
-                fatalError("\(#function) should not be invoked more than once")
-            case .finishing:
-                fatalError("\(#function) should only be invoked when KafkaConsumer is running")
-            case .finished:
+            case .running(let client, _):
+                return .setUpConnection(client: client)
+            case .finishing, .finished:
                 return .consumerClosed
             }
         }
@@ -984,9 +980,7 @@ extension KafkaConsumer {
         /// - Returns: The action to be taken.
         func withClient() -> ClientAction {
             switch self.state {
-            case .uninitialized:
-                fatalError("\(#function) invoked while still in state \(self.state)")
-            case .initializing:
+            case .uninitialized, .initializing:
                 return .throwClosedError
             case .running(let client, _):
                 return .client(client)
@@ -1004,7 +998,7 @@ extension KafkaConsumer {
         func withClientForSubscription() -> ClientAction {
             switch self.state {
             case .uninitialized:
-                fatalError("\(#function) invoked while still in state \(self.state)")
+                return .throwClosedError
             case .initializing(let client, _):
                 return .client(client)
             case .running(let client, _):
@@ -1027,7 +1021,8 @@ extension KafkaConsumer {
         mutating func finish() -> FinishAction? {
             switch self.state {
             case .uninitialized:
-                fatalError("\(#function) invoked while still in state \(self.state)")
+                self.state = .finished
+                return nil
             case .initializing:
                 // No poll loop is active in .initializing state. Since consumerClose()
                 // requires an active poll loop to process broker responses, we skip it

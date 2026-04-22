@@ -500,13 +500,11 @@ extension KafkaProducer {
             return nil
         }
 
-        /// Get action to be taken when wanting to do close the producer.
-        ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        /// Get action to be taken when wanting to close the producer.
         mutating func finish() {
             switch self.state {
             case .uninitialized:
-                fatalError("\(#function) invoked while still in state \(self.state)")
+                self.state = .finished
             case .started(let client, _, let source, _):
                 self.state = .finishing(client: client, source: source)
             case .eventConsumptionFinished(let client):

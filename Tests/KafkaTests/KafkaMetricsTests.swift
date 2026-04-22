@@ -41,12 +41,8 @@ final class KafkaMetricsTests {
         MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
     @Test func consumerStatistics() async throws {
-        let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfig()
-        config.consumptionStrategy = .group(
-            id: uniqueGroupID,
-            topics: ["this-topic-does-not-exist"]
-        )
+        config.groupId = UUID().uuidString
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
         config.useMockBroker()

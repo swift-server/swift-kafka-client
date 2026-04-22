@@ -378,6 +378,16 @@ import Foundation
         }
     }
 
+    // MARK: - Uninitialized Producer Safety Tests
+
+    @Test func triggerGracefulShutdownBeforeRunDoesNotCrash() throws {
+        let config = KafkaProducerConfig()
+        let producer = try KafkaProducer(config: config, logger: .kafkaTest)
+
+        // Should not crash — finish() handles .started state gracefully
+        producer.triggerGracefulShutdown()
+    }
+
     // MARK: - KafkaProducerEvent.error Tests
 
     @Test func producerEventErrorPatternMatch() {
