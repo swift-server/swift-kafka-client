@@ -519,6 +519,82 @@ import Foundation
     // throw a config error. The closed-consumer path is the same as other withClient()
     // methods, already tested above.
 
+    // MARK: - Commit All Tests
+
+    @Test func scheduleCommitAllFailsWithAutoCommitEnabled() async throws {
+        let config = makeConfig(enableAutoCommit: true)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            #expect(throws: KafkaError.self) {
+                try consumer.scheduleCommit()
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func commitAllFailsWithAutoCommitEnabled() async throws {
+        let config = makeConfig(enableAutoCommit: true)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            await #expect(throws: KafkaError.self) {
+                try await consumer.commit()
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func scheduleCommitAllFailsOnClosedConsumer() async throws {
+        let config = makeConfig(enableAutoCommit: false)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.scheduleCommit()
+        }
+    }
+
+    @Test func commitAllFailsOnClosedConsumer() async throws {
+        let config = makeConfig(enableAutoCommit: false)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+        }
+
+        await #expect(throws: KafkaError.self) {
+            try await consumer.commit()
+        }
+    }
+
     // MARK: - makeConsumerWithEvents Tests
 
     @Test func makeConsumerWithEventsConstructDeinit() async throws {
@@ -1119,3 +1195,21 @@ import Foundation
         consumer.triggerGracefulShutdown()
     }
 }
+
+    @Test func scheduleCommitAllFailsIfOpaqueIsRebalanceContext() async throws {
+        let config = makeConfig(enableAutoCommit: false)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            try consumer.scheduleCommit()
+            try await Task.sleep(for: .milliseconds(1000), tolerance: .zero)
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }

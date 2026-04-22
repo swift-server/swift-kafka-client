@@ -715,6 +715,44 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
+    /// Schedule an async commit of all stored offsets.
+    /// Returns immediately. Any errors after scheduling are discarded.
+    ///
+    /// Equivalent to `rd_kafka_commit(rk, NULL, async=1)`.
+    func scheduleCommitAll() throws {
+        let error = rd_kafka_commit(
+            self.kafkaHandle.pointer,
+            nil,
+            1  // async = true
+        )
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
+    }
+
+    /// Non-blocking **awaitable** commit of all stored offsets.
+    ///
+    /// Equivalent to `rd_kafka_commit_queue(rk, NULL, ...)`.
+    func commitAll() async throws {
+        var capturedClosure: CapturedCommitCallback!
+        try await withCheckedThrowingContinuation { continuation in
+            capturedClosure = CapturedCommitCallback { result in
+                continuation.resume(with: result)
+            }
+
+            let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
+
+            rd_kafka_commit_queue(
+                self.kafkaHandle.pointer,
+                nil,  // NULL = commit all stored offsets
+                self.queueHandle.pointer,
+                nil,
+                opaquePointer
+            )
+        }
+    }
+
     /// Non-blocking **awaitable** commit of a `message`'s offset to Kafka.
     ///
     /// - Parameter message: Last received message that shall be marked as read.
