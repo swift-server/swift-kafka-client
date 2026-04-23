@@ -401,7 +401,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// Internal startup subscription that transitions the state machine from `.initializing` to `.running`.
     /// Called once during `_run()` to set up the initial subscription from `consumptionStrategy`.
     private func initialSubscribe(topics: [String]) throws {
-        let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+        let action = self.stateMachine.withLockedValue { $0.transitionToRunning() }
         switch action {
         case .setUpConnection(let client):
             let subscription = RDKafkaTopicPartitionList()
@@ -428,7 +428,7 @@ public final class KafkaConsumer: Sendable, Service {
         partition: KafkaPartition,
         offset: KafkaOffset
     ) throws {
-        let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+        let action = self.stateMachine.withLockedValue { $0.transitionToRunning() }
         switch action {
         case .setUpConnection(let client):
             let assignment = RDKafkaTopicPartitionList()
@@ -461,7 +461,7 @@ public final class KafkaConsumer: Sendable, Service {
         } else {
             // No consumptionStrategy set — user will call subscribe(topics:) manually.
             // Transition state machine to .running so the event loop can start.
-            let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+            let action = self.stateMachine.withLockedValue { $0.transitionToRunning() }
             switch action {
             case .setUpConnection:
                 break
@@ -988,10 +988,10 @@ extension KafkaConsumer {
             case consumerClosed
         }
 
-        /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
+        /// Transition the state machine from `.initializing` to `.running`.
         ///
         /// - Returns: The action to be taken.
-        mutating func setUpConnection() -> SetUpConnectionAction {
+        mutating func transitionToRunning() -> SetUpConnectionAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")

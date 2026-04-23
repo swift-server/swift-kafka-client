@@ -467,16 +467,19 @@ import Foundation
             }
 
             // Wait until the consumer is in .running state
+            var success = false
             for _ in 0..<20 {
                 do {
                     let lost = try consumer.isAssignmentLost
                     #expect(lost == false)
+                    success = true
                     break
                 } catch {
-                    // Consumer not yet running, retry
+                    // Consumer not yet running (still initializing), retry
                     try await Task.sleep(for: .milliseconds(100))
                 }
             }
+            #expect(success, "Consumer never entered running state")
 
             await serviceGroup.triggerGracefulShutdown()
             try await group.waitForAll()
@@ -570,6 +573,7 @@ import Foundation
             group.addTask { try await serviceGroup.run() }
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         #expect(throws: KafkaError.self) {
@@ -588,6 +592,7 @@ import Foundation
             group.addTask { try await serviceGroup.run() }
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         await #expect(throws: KafkaError.self) {
@@ -1193,5 +1198,23 @@ import Foundation
         let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
         try consumer.subscribe(topics: ["test-topic"])
         consumer.triggerGracefulShutdown()
+    }
+
+    @Test func scheduleCommitAllSucceeds() async throws {
+        let config = self.makeConfig(enableAutoCommit: false)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            try consumer.scheduleCommit()
+            try await Task.sleep(for: .milliseconds(1000), tolerance: .zero)
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
     }
 }
