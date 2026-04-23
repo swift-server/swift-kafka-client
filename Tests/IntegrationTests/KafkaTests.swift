@@ -1092,6 +1092,161 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         }
     }
 
+    // MARK: - commitAll (commit-all stored offsets) integration
+
+    @Test func commitAllCommitsStoredOffsets() async throws {
+        try await withTestTopic { testTopic in
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 5)
+
+            let uniqueGroupID = UUID().uuidString
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: uniqueGroupID,
+                topics: [testTopic]
+            )
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+            // Manual commit + manual offset store = full at-least-once control
+            consumerConfig.enableAutoCommit = false
+            consumerConfig.enableAutoOffsetStore = false
+
+            let consumer = try KafkaConsumer(
+                config: consumerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    var lastMessage: KafkaConsumerMessage?
+                    var consumedCount = 0
+                    for try await message in consumer.messages {
+                        try consumer.storeOffset(message)
+                        lastMessage = message
+                        consumedCount += 1
+                        if consumedCount >= testMessages.count {
+                            break
+                        }
+                    }
+
+                    let message = try #require(lastMessage)
+                    #expect(consumedCount == testMessages.count)
+
+                    // Commit ALL stored offsets in one call (the method under test)
+                    try await consumer.commit()
+
+                    // Verify the committed offset matches what we stored
+                    let tp = KafkaTopicPartition(
+                        topic: message.topic,
+                        partition: message.partition
+                    )
+                    let committedOffsets = try await consumer.committed(
+                        topicPartitions: [tp],
+                        timeout: .milliseconds(5000)
+                    )
+
+                    let committedOffset = try #require(committedOffsets.first)
+                    #expect(committedOffset.topic == message.topic)
+                    #expect(committedOffset.partition == message.partition)
+                    // storeOffset stores message.offset + 1 internally
+                    let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
+                    #expect(committedOffset.offset == expectedOffset)
+                }
+
+                try await group.next()
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func scheduleCommitAllCommitsStoredOffsets() async throws {
+        try await withTestTopic { testTopic in
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 5)
+
+            let uniqueGroupID = UUID().uuidString
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: uniqueGroupID,
+                topics: [testTopic]
+            )
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+            consumerConfig.enableAutoCommit = false
+            consumerConfig.enableAutoOffsetStore = false
+
+            let consumer = try KafkaConsumer(
+                config: consumerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    var lastMessage: KafkaConsumerMessage?
+                    var consumedCount = 0
+                    for try await message in consumer.messages {
+                        try consumer.storeOffset(message)
+                        lastMessage = message
+                        consumedCount += 1
+                        if consumedCount >= testMessages.count {
+                            break
+                        }
+                    }
+
+                    let message = try #require(lastMessage)
+                    #expect(consumedCount == testMessages.count)
+
+                    // Fire-and-forget commit of all stored offsets
+                    try consumer.scheduleCommit()
+
+                    // Wait for the async commit to complete on the broker
+                    try await Task.sleep(for: .seconds(2))
+
+                    // Verify the committed offset
+                    let tp = KafkaTopicPartition(
+                        topic: message.topic,
+                        partition: message.partition
+                    )
+                    let committedOffsets = try await consumer.committed(
+                        topicPartitions: [tp],
+                        timeout: .milliseconds(5000)
+                    )
+
+                    let committedOffset = try #require(committedOffsets.first)
+                    #expect(committedOffset.topic == message.topic)
+                    #expect(committedOffset.partition == message.partition)
+                    let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
+                    #expect(committedOffset.offset == expectedOffset)
+                }
+
+                try await group.next()
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
     // MARK: - Rebalance Event Delivery Tests
 
     @Test func rebalanceEventsDeliveredThroughConsumerEvents() async throws {
