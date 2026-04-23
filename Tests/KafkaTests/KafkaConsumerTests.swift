@@ -47,6 +47,8 @@ import Foundation
         if let enableAutoOffsetStore {
             config.enableAutoOffsetStore = enableAutoOffsetStore
         }
+        config.useMockBroker()
+        config.brokerAddressFamily = .v4
         return config
     }
 
@@ -167,13 +169,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         // After shutdown, all withClient()-based methods should throw connectionClosed
@@ -182,6 +185,198 @@ import Foundation
                 topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))]
             )
         }
+    }
+
+    // MARK: - Subscription Management Tests
+
+    @Test func subscribedTopicsFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.subscribedTopics()
+        }
+    }
+
+    @Test func subscribeFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.subscribe(topics: ["new-topic"])
+        }
+    }
+
+    @Test func unsubscribeFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.unsubscribe()
+        }
+    }
+
+    @Test func subscribeWithEmptyTopicsCallsUnsubscribe() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            // Empty topics should not crash — delegates to unsubscribe()
+            try consumer.subscribe(topics: [])
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func subscribeBeforeRunSucceeds() throws {
+        // Consumer without consumptionStrategy — user subscribes manually
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // subscribe() in .initializing state should not crash
+        try consumer.subscribe(topics: ["test-topic"])
+    }
+
+    @Test func subscribedTopicsReturnsEmptyBeforeSubscribing() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // No subscription set — should return empty
+        let topics = try consumer.subscribedTopics()
+        #expect(topics.isEmpty)
+    }
+
+    @Test func runWithoutConsumptionStrategyDoesNotCrash() async throws {
+        // Consumer with nil consumptionStrategy — should start and shut down cleanly
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+        // No crash = test passes
+    }
+
+    @Test func subscribeBeforeRunThenRunSucceeds() async throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // Subscribe before run
+        try consumer.subscribe(topics: ["test-topic"])
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+    }
+
+    @Test func unsubscribeBeforeSubscribeDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // Unsubscribe when never subscribed — should not crash
+        try consumer.unsubscribe()
+    }
+
+    @Test func subscribeDuplicateTopicsThrows() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // librdkafka rejects duplicate topics with "Invalid argument"
+        #expect(throws: KafkaError.self) {
+            try consumer.subscribe(topics: ["topic-a", "topic-a", "topic-a"])
+        }
+    }
+
+    @Test func subscribeWithRegexPatternDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // Regex pattern subscription — librdkafka supports ^-prefixed patterns
+        try consumer.subscribe(topics: ["^test-.*"])
     }
 
     // MARK: - committed / position Tests
@@ -193,13 +388,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         await #expect(throws: KafkaError.self) {
@@ -217,13 +413,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         #expect(throws: KafkaError.self) {
@@ -242,13 +439,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         #expect(throws: KafkaError.self) {
@@ -263,17 +461,25 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-
-            let lost = try! consumer.isAssignmentLost
-            #expect(lost == false)
+            // Wait until the consumer is in .running state
+            for _ in 0..<20 {
+                do {
+                    let lost = try consumer.isAssignmentLost
+                    #expect(lost == false)
+                    break
+                } catch {
+                    // Consumer not yet running, retry
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            }
 
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
     }
 
@@ -286,13 +492,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         await #expect(throws: KafkaError.self) {
@@ -891,4 +1098,24 @@ import Foundation
         #expect(err1 == err2)
     }
 
+    @Test func triggerGracefulShutdownBeforeRunDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = "test-group"
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // This used to cause a fatalError when consumer was in the .initializing state
+        consumer.triggerGracefulShutdown()
+    }
+
+    @Test func triggerGracefulShutdownAfterSubscribeButBeforeRunDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = "test-group"
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        try consumer.subscribe(topics: ["test-topic"])
+        consumer.triggerGracefulShutdown()
+    }
 }

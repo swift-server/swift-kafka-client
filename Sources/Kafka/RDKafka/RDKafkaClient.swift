@@ -598,6 +598,36 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
+    /// Unsubscribe from the current subscription set.
+    func unsubscribe() throws {
+        let result = rd_kafka_unsubscribe(self.kafkaHandle.pointer)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
+    }
+
+    /// Get the current topic subscription.
+    /// - Returns: An array of topic names the consumer is subscribed to.
+    func subscription() throws -> [String] {
+        var tpl: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>?
+        let result = rd_kafka_subscription(self.kafkaHandle.pointer, &tpl)
+        if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: result)
+        }
+
+        guard let list = tpl else { return [] }
+        defer { rd_kafka_topic_partition_list_destroy(list) }
+
+        var topics: [String] = []
+        for i in 0..<Int(list.pointee.cnt) {
+            let element = list.pointee.elems[i]
+            if let topicCString = element.topic {
+                topics.append(String(cString: topicCString))
+            }
+        }
+        return topics
+    }
+
     /// Atomic assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func assign(topicPartitionList: RDKafkaTopicPartitionList) throws {
