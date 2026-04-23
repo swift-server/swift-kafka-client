@@ -1129,39 +1129,35 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 }
 
                 group.addTask {
-                    var lastMessage: KafkaConsumerMessage?
                     var consumedCount = 0
                     for try await message in consumer.messages {
                         try consumer.storeOffset(message)
-                        lastMessage = message
                         consumedCount += 1
                         if consumedCount >= testMessages.count {
+                            // Commit and verify BEFORE breaking — breaking drops the
+                            // iterator which triggers consumer shutdown.
+                            try await consumer.commit()
+
+                            let tp = KafkaTopicPartition(
+                                topic: message.topic,
+                                partition: message.partition
+                            )
+                            let committedOffsets = try await consumer.committed(
+                                topicPartitions: [tp],
+                                timeout: .milliseconds(5000)
+                            )
+
+                            let committedOffset = try #require(committedOffsets.first)
+                            #expect(committedOffset.topic == message.topic)
+                            #expect(committedOffset.partition == message.partition)
+                            // storeOffset stores message.offset + 1 internally
+                            let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
+                            #expect(committedOffset.offset == expectedOffset)
                             break
                         }
                     }
 
-                    let message = try #require(lastMessage)
                     #expect(consumedCount == testMessages.count)
-
-                    // Commit ALL stored offsets in one call (the method under test)
-                    try await consumer.commit()
-
-                    // Verify the committed offset matches what we stored
-                    let tp = KafkaTopicPartition(
-                        topic: message.topic,
-                        partition: message.partition
-                    )
-                    let committedOffsets = try await consumer.committed(
-                        topicPartitions: [tp],
-                        timeout: .milliseconds(5000)
-                    )
-
-                    let committedOffset = try #require(committedOffsets.first)
-                    #expect(committedOffset.topic == message.topic)
-                    #expect(committedOffset.partition == message.partition)
-                    // storeOffset stores message.offset + 1 internally
-                    let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
-                    #expect(committedOffset.offset == expectedOffset)
                 }
 
                 try await group.next()
@@ -1204,41 +1200,37 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 }
 
                 group.addTask {
-                    var lastMessage: KafkaConsumerMessage?
                     var consumedCount = 0
                     for try await message in consumer.messages {
                         try consumer.storeOffset(message)
-                        lastMessage = message
                         consumedCount += 1
                         if consumedCount >= testMessages.count {
+                            // Schedule commit and verify BEFORE breaking — breaking
+                            // drops the iterator which triggers consumer shutdown.
+                            try consumer.scheduleCommit()
+
+                            // Wait for the async commit to complete on the broker
+                            try await Task.sleep(for: .seconds(2))
+
+                            let tp = KafkaTopicPartition(
+                                topic: message.topic,
+                                partition: message.partition
+                            )
+                            let committedOffsets = try await consumer.committed(
+                                topicPartitions: [tp],
+                                timeout: .milliseconds(5000)
+                            )
+
+                            let committedOffset = try #require(committedOffsets.first)
+                            #expect(committedOffset.topic == message.topic)
+                            #expect(committedOffset.partition == message.partition)
+                            let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
+                            #expect(committedOffset.offset == expectedOffset)
                             break
                         }
                     }
 
-                    let message = try #require(lastMessage)
                     #expect(consumedCount == testMessages.count)
-
-                    // Fire-and-forget commit of all stored offsets
-                    try consumer.scheduleCommit()
-
-                    // Wait for the async commit to complete on the broker
-                    try await Task.sleep(for: .seconds(2))
-
-                    // Verify the committed offset
-                    let tp = KafkaTopicPartition(
-                        topic: message.topic,
-                        partition: message.partition
-                    )
-                    let committedOffsets = try await consumer.committed(
-                        topicPartitions: [tp],
-                        timeout: .milliseconds(5000)
-                    )
-
-                    let committedOffset = try #require(committedOffsets.first)
-                    #expect(committedOffset.topic == message.topic)
-                    #expect(committedOffset.partition == message.partition)
-                    let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
-                    #expect(committedOffset.offset == expectedOffset)
                 }
 
                 try await group.next()
