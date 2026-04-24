@@ -360,10 +360,6 @@ public final class KafkaProducer: Service, Sendable {
     public func sendAndAwait<Key, Value>(
         _ message: KafkaProducerMessage<Key, Value>
     ) async throws -> KafkaDeliveryReport {
-        // if the task is already cancelled, bail out immediately
-        // without enqueuing the message in librdkafka.
-        try Task.checkCancellation()
-
         // Get the message ID and produce BEFORE entering the continuation,
         // so we have the ID available for the cancellation handler.
         let action = try self.stateMachine.withLockedValue { try $0.send() }
@@ -393,9 +389,10 @@ public final class KafkaProducer: Service, Sendable {
                     $0.registerContinuation(continuation, for: newMessageID)
                 }
 
-                // If the task was cancelled before we registered, the state machine
-                // already transitioned to .cancelled. Resume immediately.
-                if case .alreadyCancelled = result {
+                switch result {
+                case .registered:
+                    break
+                case .alreadyCancelled:
                     continuation.resume(throwing: CancellationError())
                     return
                 }
@@ -665,8 +662,7 @@ extension KafkaProducer {
             for messageID: UInt
         ) -> RegisterContinuationResult {
             guard let existing = self.pendingContinuations[messageID] else {
-                self.pendingContinuations[messageID] = .pending(continuation)
-                return .registered
+                fatalError("registerContinuation called without prior initializeContinuation for messageID \(messageID)")
             }
             switch existing {
             case .cancelled:
