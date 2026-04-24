@@ -690,60 +690,6 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Schedule an async commit of all stored offsets.
-    /// Returns immediately. Any errors encountered after scheduling will be discarded.
-    ///
-    /// This is useful when using the at-least-once pattern with `storeOffset(_:)`:
-    /// after storing offsets for a batch of messages, call this to trigger an
-    /// immediate commit of all stored offsets rather than waiting for the
-    /// auto-commit timer.
-    ///
-    /// This method is only used for manual offset management.
-    ///
-    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
-    ///
-    /// - Throws: A ``KafkaError`` if scheduling the commit failed or the consumer is closed.
-    public func scheduleCommit() throws {
-        let action = self.stateMachine.withLockedValue { $0.withClient() }
-        switch action {
-        case .throwClosedError:
-            throw KafkaError.connectionClosed(reason: "Tried to commit offsets on a closed consumer")
-        case .client(let client):
-            guard (self.config.enableAutoCommit ?? true) == false else {
-                throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
-            }
-
-            try client.scheduleCommitAll()
-        }
-    }
-
-    /// Commit all stored offsets to the broker.
-    /// Awaits until the commit succeeds or an error is encountered.
-    ///
-    /// This is useful when using the at-least-once pattern with `storeOffset(_:)`:
-    /// after storing offsets for a batch of messages, call this to trigger an
-    /// immediate commit of all stored offsets rather than waiting for the
-    /// auto-commit timer.
-    ///
-    /// This method is only used for manual offset management.
-    ///
-    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
-    ///
-    /// - Throws: A ``KafkaError`` if the commit failed or the consumer is closed.
-    public func commit() async throws {
-        let action = self.stateMachine.withLockedValue { $0.withClient() }
-        switch action {
-        case .throwClosedError:
-            throw KafkaError.connectionClosed(reason: "Tried to commit offsets on a closed consumer")
-        case .client(let client):
-            guard (self.config.enableAutoCommit ?? true) == false else {
-                throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
-            }
-
-            try await client.commitAll()
-        }
-    }
-
     /// Retrieve the last-committed offsets for the given topic+partition pairs from the broker.
     ///
     /// This is useful for monitoring consumer lag and verifying that offsets have been
@@ -1016,7 +962,9 @@ extension KafkaConsumer {
                 return .setUpConnection(client: client)
             case .running:
                 fatalError("\(#function) should not be invoked more than once")
-            case .finishing, .finished:
+            case .finishing:
+                fatalError("\(#function) should only be invoked when KafkaConsumer is running")
+            case .finished:
                 return .consumerClosed
             }
         }
