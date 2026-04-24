@@ -662,7 +662,9 @@ extension KafkaProducer {
             for messageID: UInt
         ) -> RegisterContinuationResult {
             guard let existing = self.pendingContinuations[messageID] else {
-                fatalError("registerContinuation called without prior initializeContinuation for messageID \(messageID)")
+                fatalError(
+                    "registerContinuation called without prior initializeContinuation for messageID \(messageID)"
+                )
             }
             switch existing {
             case .cancelled:
@@ -672,7 +674,9 @@ extension KafkaProducer {
                 self.pendingContinuations[messageID] = .pending(continuation)
                 return .registered
             case .pending:
-                fatalError("registerContinuation called with already-pending continuation for messageID \(messageID)")
+                fatalError(
+                    "registerContinuation called with already-pending continuation for messageID \(messageID)"
+                )
             }
         }
 
