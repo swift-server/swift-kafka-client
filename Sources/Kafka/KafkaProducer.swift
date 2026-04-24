@@ -672,9 +672,7 @@ extension KafkaProducer {
                 self.pendingContinuations[messageID] = .pending(continuation)
                 return .registered
             case .pending:
-                // Should not happen — duplicate registration for the same ID.
-                self.pendingContinuations[messageID] = .pending(continuation)
-                return .registered
+                fatalError("registerContinuation called with already-pending continuation for messageID \(messageID)")
             }
         }
 
