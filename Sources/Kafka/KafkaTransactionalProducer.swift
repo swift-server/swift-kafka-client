@@ -62,8 +62,8 @@ public final class KafkaTransactionalProducer: Service, Sendable {
     //
     public func withTransaction(_ body: @Sendable (KafkaTransaction) async throws -> Void) async throws {
         let id = id.loadThenWrappingIncrement(ordering: .relaxed)
-        var logger = Logger(label: "Transaction \(id)")
-        logger.logLevel = self.logger.logLevel
+        var logger = self.logger
+        logger[metadataKey: "transaction-id"] = "\(id)"
 
         logger.debug("Begin txn \(id)")
         defer {
