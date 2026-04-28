@@ -136,34 +136,18 @@ public final class RDKafkaClient: Sendable {
             topic: message.topic
         ) { topicHandle in
             try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
-                if message.headers.isEmpty {
-                    // No message headers set, normal produce method can be used.
-                    rd_kafka_produce(
-                        topicHandle,
-                        Int32(message.partition.rawValue),
-                        RD_KAFKA_MSG_F_COPY,
-                        UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                        valueBuffer.count,
-                        keyBuffer?.baseAddress,
-                        keyBuffer?.count ?? 0,
-                        UnsafeMutableRawPointer(bitPattern: newMessageID)
+                let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
+                    try self._produceVariadic(
+                        topicHandle: topicHandle,
+                        partition: Int32(message.partition.rawValue),
+                        messageFlags: RD_KAFKA_MSG_F_COPY,
+                        key: keyBuffer,
+                        value: valueBuffer,
+                        opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
+                        cHeaders: cHeaders
                     )
-                    return rd_kafka_last_error()
-                } else {
-                    let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
-                        // Setting message headers only works with `rd_kafka_produceva` (variadic arguments).
-                        try self._produceVariadic(
-                            topicHandle: topicHandle,
-                            partition: Int32(message.partition.rawValue),
-                            messageFlags: RD_KAFKA_MSG_F_COPY,
-                            key: keyBuffer,
-                            value: valueBuffer,
-                            opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
-                            cHeaders: cHeaders
-                        )
-                    }
-                    return rd_kafka_error_code(errorPointer)
                 }
+                return rd_kafka_error_code(errorPointer)
             }
         }
 

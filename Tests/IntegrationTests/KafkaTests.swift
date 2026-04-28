@@ -647,6 +647,78 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         }
     }
 
+    // MARK: - Concurrent Produce Tests
+
+    @Test func concurrentSendsDoNotLoseMessages() async throws {
+        try await withTestTopic(partitions: 4) { testTopic in
+            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+                config: self.producerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [producer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                // Drain events to collect delivery reports
+                let acknowledgedCount = ManagedAtomic<Int>(0)
+                group.addTask {
+                    for await event in events {
+                        switch event {
+                        case .deliveryReports(let reports):
+                            for report in reports {
+                                if case .acknowledged = report.status {
+                                    acknowledgedCount.wrappingIncrement(ordering: .relaxed)
+                                }
+                            }
+                        default:
+                            break
+                        }
+                    }
+                }
+
+                // Send 100 messages concurrently from multiple tasks — exercises the
+                // rd_kafka_produceva path under contention. Before the fix, the old
+                // rd_kafka_produce + rd_kafka_last_error() path could return wrong
+                // error codes when tasks shared a cooperative thread pool thread.
+                let messageCount = 100
+                try await withThrowingTaskGroup(of: Void.self) { sendGroup in
+                    for i in 0..<messageCount {
+                        sendGroup.addTask {
+                            let message = KafkaProducerMessage(
+                                topic: testTopic,
+                                key: "key-\(i)",
+                                value: "value-\(i)"
+                            )
+                            try producer.send(message)
+                        }
+                    }
+                    try await sendGroup.waitForAll()
+                }
+
+                // Wait for delivery reports
+                for _ in 0..<100 {
+                    if acknowledgedCount.load(ordering: .relaxed) >= messageCount { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+
+                #expect(
+                    acknowledgedCount.load(ordering: .relaxed) >= messageCount,
+                    "Expected \(messageCount) acknowledged, got \(acknowledgedCount.load(ordering: .relaxed))"
+                )
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
     // MARK: - storeOffset Tests
 
     @Test func produceAndConsumeWithStoreOffset() async throws {
