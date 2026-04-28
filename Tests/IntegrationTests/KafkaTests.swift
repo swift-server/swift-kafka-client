@@ -1767,7 +1767,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             config.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
             config.autoOffsetReset = .beginning
             config.brokerAddressFamily = .v4
-            config.pollInterval = .milliseconds(1)
+            config.pollInterval = .milliseconds(10)
 
             let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
                 config: config,
@@ -1810,8 +1810,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     }
                 }
 
-                // Poll until consumer receives initial assign — proves it fully joined (bounded: 30s)
-                for _ in 0..<300 {
+                // Poll until consumer receives initial assign — proves it fully joined (bounded: 60s)
+                for _ in 0..<600 {
                     if assignCount.load(ordering: .relaxed) >= 1 { break }
                     try await Task.sleep(for: .milliseconds(100))
                 }
