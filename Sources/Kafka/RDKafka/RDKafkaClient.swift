@@ -783,9 +783,12 @@ public final class RDKafkaClient: Sendable {
     /// Make sure to run poll loop until ``RDKafkaClient/consumerIsClosed`` returns `true`.
     func consumerClose() throws {
         let result = rd_kafka_consumer_close_queue(self.kafkaHandle.pointer, self.queueHandle.pointer)
-        let kafkaError = rd_kafka_error_code(result)
-        if kafkaError != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: kafkaError)
+        if let result {
+            let code = rd_kafka_error_code(result)
+            if code != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+            rd_kafka_error_destroy(result)
         }
     }
 
@@ -949,10 +952,10 @@ public final class RDKafkaClient: Sendable {
 
                 if let error {
                     let code = rd_kafka_error_code(error)
-                    rd_kafka_error_destroy(error)
                     if code != RD_KAFKA_RESP_ERR_NO_ERROR {
-                        continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: code))
+                        continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
                     } else {
+                        rd_kafka_error_destroy(error)
                         continuation.resume()
                     }
                 } else {

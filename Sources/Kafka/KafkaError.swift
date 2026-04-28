@@ -91,6 +91,24 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         self.backing.rdKafkaCode
     }
 
+    /// Whether this error is fatal to the client instance.
+    ///
+    /// A fatal error means the client instance is no longer usable and must be
+    /// destroyed and re-created. Always `false` for errors that do not originate
+    /// from librdkafka's rich error type (`rd_kafka_error_t`).
+    public var isFatal: Bool {
+        self.backing.isFatal
+    }
+
+    /// Whether this error is retriable.
+    ///
+    /// A retriable error indicates the operation may succeed if retried.
+    /// Always `false` for errors that do not originate from librdkafka's
+    /// rich error type (`rd_kafka_error_t`).
+    public var isRetriable: Bool {
+        self.backing.isRetriable
+    }
+
     private var reason: String {
         self.backing.reason
     }
@@ -143,6 +161,37 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
                 file: file,
                 line: line,
                 rdKafkaCode: RDKafkaCode(rawValue: error.rawValue)
+            )
+        )
+    }
+
+    /// Create a ``KafkaError`` from a rich `rd_kafka_error_t*` error.
+    ///
+    /// Extracts the error code, reason string, isFatal, and isRetriable flags
+    /// before destroying the error object. This preserves the full error metadata
+    /// that is only available on the rich error type.
+    ///
+    /// - Parameter error: A non-nil `rd_kafka_error_t*` pointer. Will be destroyed after extraction.
+    static func rdKafkaError(
+        wrapping error: OpaquePointer,
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> KafkaError {
+        let code = rd_kafka_error_code(error)
+        let reason = String(cString: rd_kafka_error_string(error))
+        let isFatal = rd_kafka_error_is_fatal(error) == 1
+        let isRetriable = rd_kafka_error_is_retriable(error) == 1
+        rd_kafka_error_destroy(error)
+
+        return KafkaError(
+            backing: .init(
+                code: .underlying,
+                reason: reason,
+                file: file,
+                line: line,
+                rdKafkaCode: RDKafkaCode(rawValue: code.rawValue),
+                isFatal: isFatal,
+                isRetriable: isRetriable
             )
         )
     }
@@ -314,18 +363,26 @@ extension KafkaError {
 
         let rdKafkaCode: RDKafkaCode?
 
+        let isFatal: Bool
+
+        let isRetriable: Bool
+
         fileprivate init(
             code: KafkaError.ErrorCode,
             reason: String,
             file: String,
             line: UInt,
-            rdKafkaCode: RDKafkaCode? = nil
+            rdKafkaCode: RDKafkaCode? = nil,
+            isFatal: Bool = false,
+            isRetriable: Bool = false
         ) {
             self.code = code
             self.reason = reason
             self.file = file
             self.line = line
             self.rdKafkaCode = rdKafkaCode
+            self.isFatal = isFatal
+            self.isRetriable = isRetriable
         }
 
         static func == (lhs: Backing, rhs: Backing) -> Bool {
@@ -343,7 +400,9 @@ extension KafkaError {
                 reason: self.reason,
                 file: self.file,
                 line: self.line,
-                rdKafkaCode: self.rdKafkaCode
+                rdKafkaCode: self.rdKafkaCode,
+                isFatal: self.isFatal,
+                isRetriable: self.isRetriable
             )
         }
     }

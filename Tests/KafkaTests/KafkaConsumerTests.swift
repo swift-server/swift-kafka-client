@@ -1098,6 +1098,35 @@ import Foundation
         #expect(err1 == err2)
     }
 
+    // MARK: - KafkaError isFatal / isRetriable Tests
+
+    @Test func rdKafkaErrorFromSimpleCodeHasFalseFlags() {
+        let error = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
+    @Test func rdKafkaErrorWithReasonHasFalseFlags() {
+        let error = KafkaError.rdKafkaError(
+            wrapping: rd_kafka_resp_err_t(rawValue: -185),
+            reason: "Operation timed out"
+        )
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
+    @Test func configErrorHasFalseFlags() {
+        let error = KafkaError.config(reason: "Invalid setting")
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
+    @Test func connectionClosedErrorHasFalseFlags() {
+        let error = KafkaError.connectionClosed(reason: "Consumer closed")
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
     @Test func triggerGracefulShutdownBeforeRunDoesNotCrash() throws {
         var config = KafkaConsumerConfig()
         config.groupId = "test-group"
