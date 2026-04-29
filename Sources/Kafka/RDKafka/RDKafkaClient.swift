@@ -15,6 +15,7 @@
 import Crdkafka
 import Dispatch
 import Logging
+import NIOConcurrencyHelpers
 import NIOCore
 
 import class Foundation.JSONDecoder
@@ -549,16 +550,15 @@ public final class RDKafkaClient: Sendable {
             }
             return
         }
-        let opaque = Unmanaged<CapturedCommitCallback>.fromOpaque(opaquePointer).takeUnretainedValue()
-        let actualCallback = opaque.closure
+        let promise = Unmanaged<CommitPromise>.fromOpaque(opaquePointer).takeRetainedValue()
 
         let error = rd_kafka_event_error(event)
         guard error == RD_KAFKA_RESP_ERR_NO_ERROR else {
             let kafkaError = KafkaError.rdKafkaError(wrapping: error)
-            actualCallback(.failure(kafkaError))
+            promise.resume(with: .failure(kafkaError))
             return
         }
-        actualCallback(.success(()))
+        promise.resume(with: .success(()))
     }
 
     /// Request a new message from the Kafka cluster.
@@ -667,14 +667,48 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
-    /// Wraps a Swift closure inside of a class to be able to pass it to `librdkafka` as an `OpaquePointer`.
-    /// This is specifically used to pass a Swift closure as a commit callback for the ``KafkaConsumer``.
-    final class CapturedCommitCallback {
-        typealias Closure = (Result<Void, KafkaError>) -> Void
-        let closure: Closure
+    /// A thread-safe promise to bridge `librdkafka`'s async C callbacks with Swift's continuations.
+    /// This prevents Use-After-Free crashes and orphaned continuations on task cancellation.
+    final class CommitPromise: Sendable {
+        private enum State {
+            case initial
+            case waiting(CheckedContinuation<Void, Error>)
+            case completed(Result<Void, Error>)
+        }
+        private let state = NIOLockedValueBox<State>(.initial)
 
-        init(_ closure: @escaping Closure) {
-            self.closure = closure
+        func set(_ continuation: CheckedContinuation<Void, Error>) {
+            let resultToResume: Result<Void, Error>? = self.state.withLockedValue { state in
+                switch state {
+                case .initial:
+                    state = .waiting(continuation)
+                    return nil
+                case .completed(let result):
+                    return result
+                case .waiting:
+                    fatalError("Promise already has a continuation")
+                }
+            }
+            if let result = resultToResume {
+                continuation.resume(with: result)
+            }
+        }
+
+        func resume(with result: Result<Void, Error>) {
+            let cont: CheckedContinuation<Void, Error>? = self.state.withLockedValue { state in
+                switch state {
+                case .initial:
+                    state = .completed(result)
+                    return nil
+                case .waiting(let continuation):
+                    state = .completed(result)
+                    return continuation
+                case .completed:
+                    // Already completed (e.g. cancelled then regular callback)
+                    return nil
+                }
+            }
+            cont?.resume(with: result)
         }
     }
 
@@ -743,45 +777,92 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
+    /// Schedule an async commit of all stored offsets.
+    /// Returns immediately. Any errors after scheduling are discarded.
+    ///
+    /// Equivalent to `rd_kafka_commit(rk, NULL, async=1)`.
+    func scheduleCommitAll() throws {
+        let error = rd_kafka_commit(
+            self.kafkaHandle.pointer,
+            nil,
+            1  // async = true
+        )
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
+    }
+
+    /// Non-blocking **awaitable** commit of all stored offsets.
+    ///
+    /// Equivalent to `rd_kafka_commit_queue(rk, NULL, ...)`.
+    func commitAll() async throws {
+        let promise = CommitPromise()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                promise.set(continuation)
+
+                let opaquePointer: UnsafeMutableRawPointer = Unmanaged.passRetained(promise).toOpaque()
+
+                let error = rd_kafka_commit_queue(
+                    self.kafkaHandle.pointer,
+                    nil,  // NULL = commit all stored offsets
+                    self.queueHandle.pointer,
+                    nil,
+                    opaquePointer
+                )
+
+                if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    // librdkafka will NOT enqueue an event, so we must consume the +1 retain count ourselves
+                    Unmanaged<CommitPromise>.fromOpaque(opaquePointer).release()
+                    promise.resume(with: .failure(KafkaError.rdKafkaError(wrapping: error)))
+                }
+            }
+        } onCancel: {
+            promise.resume(with: .failure(CancellationError()))
+        }
+    }
+
     /// Non-blocking **awaitable** commit of a `message`'s offset to Kafka.
     ///
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if the commit failed.
     func commit(_ message: KafkaConsumerMessage) async throws {
-        // Declare captured closure outside of withCheckedContinuation.
-        // We do that because do an unretained pass of the captured closure to
-        // librdkafka which means we have to keep a reference to the closure
-        // ourselves to make sure it does not get deallocated before
-        // commit returns.
-        var capturedClosure: CapturedCommitCallback!
-        try await withCheckedThrowingContinuation { continuation in
-            capturedClosure = CapturedCommitCallback { result in
-                continuation.resume(with: result)
-            }
+        let promise = CommitPromise()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                promise.set(continuation)
 
-            // The offset committed is always the offset of the next requested message.
-            // Thus, we increase the offset of the current message by one before committing it.
-            // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-            let changesList = RDKafkaTopicPartitionList()
-            changesList.setOffset(
-                topic: message.topic,
-                partition: message.partition,
-                offset: Int64(message.offset.rawValue + 1)
-            )
-
-            // Unretained pass because the reference that librdkafka holds to capturedClosure
-            // should not be counted in ARC as this can lead to memory leaks.
-            let opaquePointer: UnsafeMutableRawPointer? = Unmanaged.passUnretained(capturedClosure).toOpaque()
-
-            changesList.withListPointer { listPointer in
-                rd_kafka_commit_queue(
-                    self.kafkaHandle.pointer,
-                    listPointer,
-                    self.queueHandle.pointer,
-                    nil,
-                    opaquePointer
+                // The offset committed is always the offset of the next requested message.
+                // Thus, we increase the offset of the current message by one before committing it.
+                // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+                let changesList = RDKafkaTopicPartitionList()
+                changesList.setOffset(
+                    topic: message.topic,
+                    partition: message.partition,
+                    offset: Int64(message.offset.rawValue + 1)
                 )
+
+                let opaquePointer: UnsafeMutableRawPointer = Unmanaged.passRetained(promise).toOpaque()
+
+                changesList.withListPointer { listPointer in
+                    let error = rd_kafka_commit_queue(
+                        self.kafkaHandle.pointer,
+                        listPointer,
+                        self.queueHandle.pointer,
+                        nil,
+                        opaquePointer
+                    )
+
+                    if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                        // librdkafka will NOT enqueue an event, so we must consume the +1 retain count ourselves
+                        Unmanaged<CommitPromise>.fromOpaque(opaquePointer).release()
+                        promise.resume(with: .failure(KafkaError.rdKafkaError(wrapping: error)))
+                    }
+                }
             }
+        } onCancel: {
+            promise.resume(with: .failure(CancellationError()))
         }
     }
 

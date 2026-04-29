@@ -440,7 +440,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// Internal startup subscription that transitions the state machine from `.initializing` to `.running`.
     /// Called once during `_run()` to set up the initial subscription from `consumptionStrategy`.
     private func initialSubscribe(topics: [String]) throws {
-        let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+        let action = self.stateMachine.withLockedValue { $0.transitionToRunning() }
         switch action {
         case .setUpConnection(let client):
             let subscription = RDKafkaTopicPartitionList()
@@ -467,7 +467,7 @@ public final class KafkaConsumer: Sendable, Service {
         partition: KafkaPartition,
         offset: KafkaOffset
     ) throws {
-        let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+        let action = self.stateMachine.withLockedValue { $0.transitionToRunning() }
         switch action {
         case .setUpConnection(let client):
             let assignment = RDKafkaTopicPartitionList()
@@ -500,7 +500,7 @@ public final class KafkaConsumer: Sendable, Service {
         } else {
             // No consumptionStrategy set — user will call subscribe(topics:) manually.
             // Transition state machine to .running so the event loop can start.
-            let action = self.stateMachine.withLockedValue { $0.setUpConnection() }
+            let action = self.stateMachine.withLockedValue { $0.transitionToRunning() }
             switch action {
             case .setUpConnection:
                 break
@@ -726,6 +726,44 @@ public final class KafkaConsumer: Sendable, Service {
             }
 
             try await client.commit(message)
+        }
+    }
+
+    /// Schedule an async commit of all stored offsets.
+    /// Returns immediately. Any errors after scheduling are discarded.
+    ///
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
+    /// - Throws: A ``KafkaError`` if scheduling the commit failed or the consumer is closed.
+    public func scheduleCommit() throws {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to commit offsets on a closed consumer")
+        case .client(let client):
+            guard (self.config.enableAutoCommit ?? true) == false else {
+                throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
+            }
+
+            try client.scheduleCommitAll()
+        }
+    }
+
+    /// Commit all stored offsets to the broker.
+    /// Awaits until the commit succeeds or an error is encountered.
+    ///
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
+    /// - Throws: A ``KafkaError`` if the commit failed or the consumer is closed.
+    public func commit() async throws {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to commit offsets on a closed consumer")
+        case .client(let client):
+            guard (self.config.enableAutoCommit ?? true) == false else {
+                throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
+            }
+
+            try await client.commitAll()
         }
     }
 
@@ -989,10 +1027,10 @@ extension KafkaConsumer {
             case consumerClosed
         }
 
-        /// Get action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
+        /// Transition the state machine from `.initializing` to `.running`.
         ///
         /// - Returns: The action to be taken.
-        mutating func setUpConnection() -> SetUpConnectionAction {
+        mutating func transitionToRunning() -> SetUpConnectionAction {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
