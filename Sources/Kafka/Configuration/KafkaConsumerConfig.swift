@@ -1048,6 +1048,10 @@ public struct KafkaConsumerConfig: Sendable {
 
     /// Additional librdkafka configuration properties not covered by typed properties.
     /// Keys and values are passed directly to librdkafka.
+    ///
+    /// - Warning: Properties set here override typed properties above.
+    /// Intended for testing (e.g. `test.mock.num.brokers`) or advanced configurations
+    /// not explicitly supported by this library.
     internal var additionalConfig: [String: String] = [:]
 
     public init() {}
