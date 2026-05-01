@@ -1115,6 +1115,64 @@ import Foundation
         #expect(event1 == event2)
     }
 
+    // MARK: - Iterator Drop Shutdown Tests
+
+    @Test func iteratorDropDoesNotCrashServiceGroup() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Start consuming messages in a separate task, then drop the iterator
+            group.addTask {
+                for try await _ in consumer.messages {
+                    break  // immediately drop the iterator
+                }
+            }
+
+            // Wait for iterator drop to take effect
+            try await Task.sleep(for: .seconds(1))
+
+            // If we get here, run() did NOT exit early — ServiceGroup is still alive.
+            // Now shut down cleanly.
+            await serviceGroup.triggerGracefulShutdown()
+        }
+        // Test passes if no ServiceGroupError was thrown
+    }
+
+    @Test func iteratorDropThenGracefulShutdownSucceeds() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            // Drop the iterator by creating and immediately discarding it
+            var iterator: KafkaConsumerMessages.AsyncIterator? = consumer.messages.makeAsyncIterator()
+            _ = iterator
+            iterator = nil
+
+            // Wait for state transition
+            try await Task.sleep(for: .seconds(1))
+
+            // Graceful shutdown should succeed without error
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
     // MARK: - KafkaError.RDKafkaCode Tests
 
     @Test func rdKafkaCodeStaticConstants() {
