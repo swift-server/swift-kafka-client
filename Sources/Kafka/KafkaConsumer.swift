@@ -484,64 +484,17 @@ public final class KafkaConsumer: Sendable, Service {
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextEventPollLoopAction() }
             switch nextAction {
-            case .initiateCloseAndPoll(let client), .pollForEvents(let client):
-                if case .initiateCloseAndPoll = nextAction {
-                    do {
-                        try client.consumerClose()
-                    } catch {
-                        self.logger.error("Closing KafkaConsumer failed", metadata: ["error": "\(error)"])
-                        self.stateMachine.withLockedValue { $0.closeFailed() }
-                    }
+            case .initiateCloseAndPoll(let client):
+                do {
+                    try client.consumerClose()
+                } catch {
+                    self.logger.error("Closing KafkaConsumer failed", metadata: ["error": "\(error)"])
+                    self.stateMachine.withLockedValue { $0.closeFailed() }
                 }
-                // Event poll to serve any events queued inside of `librdkafka` (statistics, logs, offset commits).
-                let events = client.consumerEventPoll()
-                for event in events {
-                    switch event {
-                    case .statistics(let statistics):
-                        self.config.metrics.update(with: statistics)
-                    case .error(let kafkaError):
-                        if let source = self.eventsSource {
-                            _ = source.yield(.error(kafkaError))
-                        }
-                        self.logger.error(
-                            "Kafka client error",
-                            metadata: ["error": "\(kafkaError)"]
-                        )
-                    }
-                }
-
-                // Drain rebalance events from the callback context.
-                // These were buffered by the C rebalance callback during rd_kafka_consumer_poll().
-                let rebalanceEvents = self.rebalanceContext.drainEvents()
-                for event in rebalanceEvents {
-                    let kind: KafkaConsumerRebalance.Kind
-                    switch event.kind {
-                    case .assign:
-                        kind = .assign
-                    case .revoke:
-                        kind = .revoke
-                    case .error(let description):
-                        kind = .error(description)
-                    }
-
-                    let rebalance = KafkaConsumerRebalance(
-                        kind: kind,
-                        partitions: event.partitions.map {
-                            KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
-                        }
-                    )
-                    if let source = self.eventsSource {
-                        _ = source.yield(.rebalance(rebalance))
-                    }
-                    self.logger.info(
-                        "Consumer rebalance",
-                        metadata: [
-                            "kind": "\(rebalance.kind)",
-                            "partitions": "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
-                        ]
-                    )
-                }
-
+                self.pollAndDrainEvents(client: client)
+                try await Task.sleep(for: self.config.pollInterval)
+            case .pollForEvents(let client):
+                self.pollAndDrainEvents(client: client)
                 try await Task.sleep(for: self.config.pollInterval)
             case .suspendPollLoop:
                 try await Task.sleep(for: self.config.pollInterval)
@@ -554,6 +507,55 @@ public final class KafkaConsumer: Sendable, Service {
                 }
                 return
             }
+        }
+    }
+
+    /// Poll librdkafka event queue and drain buffered rebalance events.
+    private func pollAndDrainEvents(client: RDKafkaClient) {
+        let events = client.consumerEventPoll()
+        for event in events {
+            switch event {
+            case .statistics(let statistics):
+                self.config.metrics.update(with: statistics)
+            case .error(let kafkaError):
+                if let source = self.eventsSource {
+                    _ = source.yield(.error(kafkaError))
+                }
+                self.logger.error(
+                    "Kafka client error",
+                    metadata: ["error": "\(kafkaError)"]
+                )
+            }
+        }
+
+        let rebalanceEvents = self.rebalanceContext.drainEvents()
+        for event in rebalanceEvents {
+            let kind: KafkaConsumerRebalance.Kind
+            switch event.kind {
+            case .assign:
+                kind = .assign
+            case .revoke:
+                kind = .revoke
+            case .error(let description):
+                kind = .error(description)
+            }
+
+            let rebalance = KafkaConsumerRebalance(
+                kind: kind,
+                partitions: event.partitions.map {
+                    KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
+                }
+            )
+            if let source = self.eventsSource {
+                _ = source.yield(.rebalance(rebalance))
+            }
+            self.logger.info(
+                "Consumer rebalance",
+                metadata: [
+                    "kind": "\(rebalance.kind)",
+                    "partitions": "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
+                ]
+            )
         }
     }
 
