@@ -398,6 +398,45 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
+    /// Pause consumption for the given partitions.
+    ///
+    /// Paused partitions remain in the consumer group and continue heartbeating
+    /// but will not return messages from ``messages``.
+    ///
+    /// - Parameter topicPartitions: The partitions to pause.
+    /// - Throws: A ``KafkaError`` if the consumer is closed or pausing failed.
+    public func pause(topicPartitions: [KafkaTopicPartition]) throws {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .client(let client):
+            let tpl = RDKafkaTopicPartitionList()
+            for tp in topicPartitions {
+                tpl.add(topic: tp.topic, partition: tp.partition)
+            }
+            try client.pausePartitions(topicPartitionList: tpl)
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Consumer is closed")
+        }
+    }
+
+    /// Resume consumption for the given partitions.
+    ///
+    /// - Parameter topicPartitions: The partitions to resume.
+    /// - Throws: A ``KafkaError`` if the consumer is closed or resuming failed.
+    public func resume(topicPartitions: [KafkaTopicPartition]) throws {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .client(let client):
+            let tpl = RDKafkaTopicPartitionList()
+            for tp in topicPartitions {
+                tpl.add(topic: tp.topic, partition: tp.partition)
+            }
+            try client.resumePartitions(topicPartitionList: tpl)
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Consumer is closed")
+        }
+    }
+
     /// Internal startup subscription that transitions the state machine from `.initializing` to `.running`.
     /// Called once during `_run()` to set up the initial subscription from `consumptionStrategy`.
     private func initialSubscribe(topics: [String]) throws {
