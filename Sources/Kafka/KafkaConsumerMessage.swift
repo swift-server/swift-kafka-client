@@ -15,6 +15,38 @@
 import Crdkafka
 import NIOCore
 
+/// The type of timestamp on a Kafka message.
+public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
+    /// The raw value corresponding to the librdkafka timestamp type.
+    public let rawValue: Int32
+
+    public init(rawValue: Int32) {
+        self.rawValue = rawValue
+    }
+
+    /// Timestamp not available.
+    public static let notAvailable = KafkaTimestampType(
+        rawValue: Int32(RD_KAFKA_TIMESTAMP_NOT_AVAILABLE.rawValue)
+    )
+    /// Timestamp set by the producer (message creation time).
+    public static let createTime = KafkaTimestampType(
+        rawValue: Int32(RD_KAFKA_TIMESTAMP_CREATE_TIME.rawValue)
+    )
+    /// Timestamp set by the broker (log append time).
+    public static let logAppendTime = KafkaTimestampType(
+        rawValue: Int32(RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME.rawValue)
+    )
+
+    public var description: String {
+        switch self {
+        case .createTime: return "createTime"
+        case .logAppendTime: return "logAppendTime"
+        case .notAvailable: return "notAvailable"
+        default: return "unknown(\(self.rawValue))"
+        }
+    }
+}
+
 /// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage {
     /// The topic that the message was received from.
@@ -29,6 +61,10 @@ public struct KafkaConsumerMessage {
     public var value: ByteBuffer
     /// The offset of the message in its partition.
     public var offset: KafkaOffset
+    /// The timestamp of the message in milliseconds since epoch, or `nil` if not available.
+    public var timestamp: Int64?
+    /// The type of timestamp on this message.
+    public var timestampType: KafkaTimestampType
 
     /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
@@ -75,6 +111,12 @@ public struct KafkaConsumerMessage {
         self.value = ByteBuffer(bytes: valueBufferPointer)
 
         self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
+
+        // Extract timestamp and type
+        var tsType = rd_kafka_timestamp_type_t(rawValue: 0)
+        let tsValue = rd_kafka_message_timestamp(messagePointer, &tsType)
+        self.timestampType = KafkaTimestampType(rawValue: Int32(tsType.rawValue))
+        self.timestamp = tsValue != -1 ? tsValue : nil
     }
 }
 
