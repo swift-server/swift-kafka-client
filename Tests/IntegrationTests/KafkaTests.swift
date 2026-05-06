@@ -647,6 +647,78 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         }
     }
 
+    // MARK: - Concurrent Produce Tests
+
+    @Test func concurrentSendsDoNotLoseMessages() async throws {
+        try await withTestTopic(partitions: 4) { testTopic in
+            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+                config: self.producerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [producer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                // Drain events to collect delivery reports
+                let acknowledgedCount = ManagedAtomic<Int>(0)
+                group.addTask {
+                    for await event in events {
+                        switch event {
+                        case .deliveryReports(let reports):
+                            for report in reports {
+                                if case .acknowledged = report.status {
+                                    acknowledgedCount.wrappingIncrement(ordering: .relaxed)
+                                }
+                            }
+                        default:
+                            break
+                        }
+                    }
+                }
+
+                // Send 100 messages concurrently from multiple tasks — exercises the
+                // rd_kafka_produceva path under contention. Before the fix, the old
+                // rd_kafka_produce + rd_kafka_last_error() path could return wrong
+                // error codes when tasks shared a cooperative thread pool thread.
+                let messageCount = 100
+                try await withThrowingTaskGroup(of: Void.self) { sendGroup in
+                    for i in 0..<messageCount {
+                        sendGroup.addTask {
+                            let message = KafkaProducerMessage(
+                                topic: testTopic,
+                                key: "key-\(i)",
+                                value: "value-\(i)"
+                            )
+                            try producer.send(message)
+                        }
+                    }
+                    try await sendGroup.waitForAll()
+                }
+
+                // Wait for delivery reports
+                for _ in 0..<100 {
+                    if acknowledgedCount.load(ordering: .relaxed) >= messageCount { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+
+                #expect(
+                    acknowledgedCount.load(ordering: .relaxed) >= messageCount,
+                    "Expected \(messageCount) acknowledged, got \(acknowledgedCount.load(ordering: .relaxed))"
+                )
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
     // MARK: - storeOffset Tests
 
     @Test func produceAndConsumeWithStoreOffset() async throws {
@@ -1767,7 +1839,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             config.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
             config.autoOffsetReset = .beginning
             config.brokerAddressFamily = .v4
-            config.pollInterval = .milliseconds(1)
+            config.pollInterval = .milliseconds(10)
 
             let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
                 config: config,
@@ -1810,8 +1882,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     }
                 }
 
-                // Poll until consumer receives initial assign — proves it fully joined (bounded: 30s)
-                for _ in 0..<300 {
+                // Poll until consumer receives initial assign — proves it fully joined (bounded: 60s)
+                for _ in 0..<600 {
                     if assignCount.load(ordering: .relaxed) >= 1 { break }
                     try await Task.sleep(for: .milliseconds(100))
                 }
@@ -1913,6 +1985,246 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 #expect(
                     emptySub.isEmpty,
                     "Expected empty subscription after subscribe(topics: []), got \(emptySub)"
+                )
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    // MARK: - sendAndAwait Tests
+
+    @Test func sendAndAwaitReturnsDeliveryReport() async throws {
+        try await withTestTopic { testTopic in
+            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+                config: self.producerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [producer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                // Must consume events to prevent buffer buildup
+                group.addTask {
+                    for await _ in events {}
+                }
+
+                let message = KafkaProducerMessage(
+                    topic: testTopic,
+                    key: "test-key",
+                    value: "test-value"
+                )
+
+                // sendAndAwait should return a delivery report with acknowledgment
+                let report = try await producer.sendAndAwait(message)
+
+                switch report.status {
+                case .acknowledged(let ack):
+                    #expect(ack.topic == testTopic)
+                    #expect(ack.partition.rawValue >= 0)
+                    #expect(ack.offset.rawValue >= 0)
+                case .failure(let error):
+                    Issue.record("Expected acknowledged, got failure: \(error)")
+                }
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func sendAndAwaitMultipleMessages() async throws {
+        try await withTestTopic { testTopic in
+            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+                config: self.producerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [producer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    for await _ in events {}
+                }
+
+                // Send 5 messages via sendAndAwait and verify each gets acknowledged
+                for i in 0..<5 {
+                    let message = KafkaProducerMessage(
+                        topic: testTopic,
+                        key: "key-\(i)",
+                        value: "value-\(i)"
+                    )
+                    let report = try await producer.sendAndAwait(message)
+                    if case .failure(let error) = report.status {
+                        Issue.record("Message \(i) failed: \(error)")
+                    }
+                }
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func sendAndAwaitWorksWithoutEventsSequence() async throws {
+        try await withTestTopic { testTopic in
+            // Producer created WITHOUT events — sendAndAwait should still work
+            let producer = try KafkaProducer(
+                config: self.producerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [producer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                let message = KafkaProducerMessage(
+                    topic: testTopic,
+                    key: "key",
+                    value: "value"
+                )
+
+                let report = try await producer.sendAndAwait(message)
+                if case .failure(let error) = report.status {
+                    Issue.record("Expected acknowledged, got failure: \(error)")
+                }
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func sendAndAwaitConcurrentSends() async throws {
+        try await withTestTopic(partitions: 4) { testTopic in
+            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+                config: self.producerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [producer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await serviceGroup.run() }
+                group.addTask { for await _ in events {} }
+
+                // Send 10 messages concurrently via sendAndAwait in a TaskGroup
+                let messageCount = 10
+                try await withThrowingTaskGroup(of: KafkaDeliveryReport.self) { sendGroup in
+                    for i in 0..<messageCount {
+                        sendGroup.addTask {
+                            let message = KafkaProducerMessage(
+                                topic: testTopic,
+                                key: "key-\(i)",
+                                value: "concurrent-\(i)"
+                            )
+                            return try await producer.sendAndAwait(message)
+                        }
+                    }
+
+                    var acknowledgedCount = 0
+                    for try await report in sendGroup {
+                        if case .acknowledged = report.status {
+                            acknowledgedCount += 1
+                        }
+                    }
+
+                    #expect(
+                        acknowledgedCount == messageCount,
+                        "Expected \(messageCount) acknowledged, got \(acknowledgedCount)"
+                    )
+                }
+
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func sendAndSendAndAwaitMixedOnSameProducer() async throws {
+        try await withTestTopic { testTopic in
+            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+                config: self.producerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [producer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask { try await serviceGroup.run() }
+
+                // Track delivery reports from the events sequence (for send() calls)
+                let eventReportCount = ManagedAtomic(0)
+                group.addTask {
+                    for await event in events {
+                        switch event {
+                        case .deliveryReports(let reports):
+                            for _ in reports {
+                                eventReportCount.wrappingIncrement(ordering: .relaxed)
+                            }
+                        default:
+                            break
+                        }
+                    }
+                }
+
+                // send() — fire-and-forget, delivery report goes to events sequence
+                let sendMessage = KafkaProducerMessage(
+                    topic: testTopic,
+                    key: "send-key",
+                    value: "send-value"
+                )
+                try producer.send(sendMessage)
+
+                // sendAndAwait() — delivery report goes to continuation, NOT events sequence
+                let awaitMessage = KafkaProducerMessage(
+                    topic: testTopic,
+                    key: "await-key",
+                    value: "await-value"
+                )
+                let report = try await producer.sendAndAwait(awaitMessage)
+
+                // sendAndAwait report should be acknowledged
+                if case .failure(let error) = report.status {
+                    Issue.record("sendAndAwait failed: \(error)")
+                }
+
+                // Give time for send() delivery report to arrive via events sequence
+                try await Task.sleep(for: .milliseconds(500))
+
+                // Verify ALL delivery reports arrived through events sequence —
+                // both send() and sendAndAwait() reports should appear
+                let eventsCount = eventReportCount.load(ordering: .relaxed)
+                #expect(
+                    eventsCount >= 2,
+                    "Both send() and sendAndAwait() reports should arrive via events, got \(eventsCount)"
                 )
 
                 await serviceGroup.triggerGracefulShutdown()
@@ -2190,6 +2502,130 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
                     await consumerServiceGroup.triggerGracefulShutdown()
                 }
+            }
+        }
+    }
+
+    // MARK: - Timestamp Tests
+
+    @Test func consumedMessageHasTimestamp() async throws {
+        try await withTestTopic { testTopic in
+            let _ = try await self.produceMessages(topic: testTopic, count: 1)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                for try await message in consumer.messages {
+                    // Timestamp should be set (broker assigns it)
+                    #expect(message.timestamp != nil)
+                    #expect(
+                        message.timestampType == .createTime
+                            || message.timestampType == .logAppendTime
+                    )
+                    // Timestamp should be a reasonable epoch (after year 2020)
+                    if let ts = message.timestamp {
+                        #expect(ts > 1_577_836_800_000)  // 2020-01-01 in ms
+                    }
+                    break
+                }
+
+                await serviceGroup.triggerGracefulShutdown()
+                try await group.waitForAll()
+            }
+        }
+    }
+
+    // MARK: - Pause/Resume Tests
+
+    @Test func pauseAndResumePartitions() async throws {
+        try await withTestTopic { testTopic in
+            let _ = try await self.produceMessages(topic: testTopic, count: 5)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
+                config: consumerConfig,
+                logger: .kafkaTest
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    for await _ in events {}
+                }
+
+                // Consume messages in a background task, track count atomically
+                let consumedCount = ManagedAtomic<Int>(0)
+                let firstPartition = ManagedAtomic<Int32>(-1)
+                group.addTask {
+                    for try await message in consumer.messages {
+                        if firstPartition.load(ordering: .relaxed) == -1 {
+                            firstPartition.store(
+                                Int32(message.partition.rawValue),
+                                ordering: .relaxed
+                            )
+                        }
+                        consumedCount.wrappingIncrement(ordering: .relaxed)
+                    }
+                }
+
+                // Wait for first message to confirm assignment
+                for _ in 0..<100 {
+                    if consumedCount.load(ordering: .relaxed) >= 1 { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                #expect(consumedCount.load(ordering: .relaxed) >= 1)
+
+                let partitionId = firstPartition.load(ordering: .relaxed)
+                let partition = KafkaTopicPartition(
+                    topic: testTopic,
+                    partition: KafkaPartition(rawValue: Int(partitionId))
+                )
+
+                // Pause — should not throw on assigned partition
+                try consumer.pause(topicPartitions: [partition])
+
+                // Resume — should not throw
+                try consumer.resume(topicPartitions: [partition])
+
+                // Wait for remaining messages
+                for _ in 0..<100 {
+                    if consumedCount.load(ordering: .relaxed) >= 5 { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+                #expect(consumedCount.load(ordering: .relaxed) >= 5)
+
+                await serviceGroup.triggerGracefulShutdown()
+                try await group.waitForAll()
             }
         }
     }

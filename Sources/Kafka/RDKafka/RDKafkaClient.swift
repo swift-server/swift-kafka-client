@@ -136,34 +136,18 @@ public final class RDKafkaClient: Sendable {
             topic: message.topic
         ) { topicHandle in
             try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
-                if message.headers.isEmpty {
-                    // No message headers set, normal produce method can be used.
-                    rd_kafka_produce(
-                        topicHandle,
-                        Int32(message.partition.rawValue),
-                        RD_KAFKA_MSG_F_COPY,
-                        UnsafeMutableRawPointer(mutating: valueBuffer.baseAddress),
-                        valueBuffer.count,
-                        keyBuffer?.baseAddress,
-                        keyBuffer?.count ?? 0,
-                        UnsafeMutableRawPointer(bitPattern: newMessageID)
+                let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
+                    try self._produceVariadic(
+                        topicHandle: topicHandle,
+                        partition: Int32(message.partition.rawValue),
+                        messageFlags: RD_KAFKA_MSG_F_COPY,
+                        key: keyBuffer,
+                        value: valueBuffer,
+                        opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
+                        cHeaders: cHeaders
                     )
-                    return rd_kafka_last_error()
-                } else {
-                    let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
-                        // Setting message headers only works with `rd_kafka_produceva` (variadic arguments).
-                        try self._produceVariadic(
-                            topicHandle: topicHandle,
-                            partition: Int32(message.partition.rawValue),
-                            messageFlags: RD_KAFKA_MSG_F_COPY,
-                            key: keyBuffer,
-                            value: valueBuffer,
-                            opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
-                            cHeaders: cHeaders
-                        )
-                    }
-                    return rd_kafka_error_code(errorPointer)
                 }
+                return rd_kafka_error_code(errorPointer)
             }
         }
 
@@ -639,6 +623,34 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
+    /// Pause consumption for the given partitions.
+    /// - Parameter topicPartitionList: Partitions to pause.
+    func pausePartitions(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_pause_partitions(self.kafkaHandle.pointer, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+            if let error = topicPartitionList.firstError() {
+                throw KafkaError.rdKafkaError(wrapping: error)
+            }
+        }
+    }
+
+    /// Resume consumption for the given partitions.
+    /// - Parameter topicPartitionList: Partitions to resume.
+    func resumePartitions(topicPartitionList: RDKafkaTopicPartitionList) throws {
+        try topicPartitionList.withListPointer { pointer in
+            let result = rd_kafka_resume_partitions(self.kafkaHandle.pointer, pointer)
+            if result != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+            if let error = topicPartitionList.firstError() {
+                throw KafkaError.rdKafkaError(wrapping: error)
+            }
+        }
+    }
+
     /// A thread-safe promise to bridge `librdkafka`'s async C callbacks with Swift's continuations.
     /// This prevents Use-After-Free crashes and orphaned continuations on task cancellation.
     final class CommitPromise: Sendable {
@@ -864,9 +876,12 @@ public final class RDKafkaClient: Sendable {
     /// Make sure to run poll loop until ``RDKafkaClient/consumerIsClosed`` returns `true`.
     func consumerClose() throws {
         let result = rd_kafka_consumer_close_queue(self.kafkaHandle.pointer, self.queueHandle.pointer)
-        let kafkaError = rd_kafka_error_code(result)
-        if kafkaError != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: kafkaError)
+        if let result {
+            let code = rd_kafka_error_code(result)
+            if code != RD_KAFKA_RESP_ERR_NO_ERROR {
+                throw KafkaError.rdKafkaError(wrapping: result)
+            }
+            rd_kafka_error_destroy(result)
         }
     }
 
@@ -1030,10 +1045,10 @@ public final class RDKafkaClient: Sendable {
 
                 if let error {
                     let code = rd_kafka_error_code(error)
-                    rd_kafka_error_destroy(error)
                     if code != RD_KAFKA_RESP_ERR_NO_ERROR {
-                        continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: code))
+                        continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
                     } else {
+                        rd_kafka_error_destroy(error)
                         continuation.resume()
                     }
                 } else {
