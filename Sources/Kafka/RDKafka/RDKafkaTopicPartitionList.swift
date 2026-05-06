@@ -74,4 +74,15 @@ final class RDKafkaTopicPartitionList: @unchecked Sendable {
     func withListPointer<T>(_ body: (UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws -> T) rethrows -> T {
         try body(self._internal)
     }
+
+    /// Returns the first error encountered in the list of partitions, if any.
+    func firstError() -> rd_kafka_resp_err_t? {
+        for i in 0..<Int(self._internal.pointee.cnt) {
+            let element = self._internal.pointee.elems[i]
+            if element.err != RD_KAFKA_RESP_ERR_NO_ERROR {
+                return element.err
+            }
+        }
+        return nil
+    }
 }
