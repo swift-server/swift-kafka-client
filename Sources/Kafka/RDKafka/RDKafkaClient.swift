@@ -131,12 +131,12 @@ public final class RDKafkaClient: Sendable {
         )
 
         // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
-        // Returns 0 on success, error code otherwise.
-        let error = try topicHandles.withTopicHandlePointer(
+        // Returns an error object on failure or nil on success.
+        let errorPointer = try topicHandles.withTopicHandlePointer(
             topic: message.topic
         ) { topicHandle in
             try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
-                let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
+                try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
                     try self._produceVariadic(
                         topicHandle: topicHandle,
                         partition: Int32(message.partition.rawValue),
@@ -147,12 +147,11 @@ public final class RDKafkaClient: Sendable {
                         cHeaders: cHeaders
                     )
                 }
-                return rd_kafka_error_code(errorPointer)
             }
         }
 
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
+        if let errorPointer {
+            throw KafkaError.rdKafkaError(wrapping: errorPointer)
         }
     }
 
@@ -173,7 +172,7 @@ public final class RDKafkaClient: Sendable {
         cHeaders: [(key: UnsafePointer<CChar>, value: UnsafeRawBufferPointer?)]
     ) throws -> OpaquePointer? {
         let sizeWithoutHeaders = (key != nil) ? 6 : 5
-        let size = sizeWithoutHeaders + cHeaders.count
+        let size = sizeWithoutHeaders + (cHeaders.isEmpty ? 0 : 1)
         var arguments = Array(repeating: rd_kafka_vu_t(), count: size)
         var index = 0
 
@@ -205,23 +204,41 @@ public final class RDKafkaClient: Sendable {
         arguments[index].u.ptr = opaque
         index += 1
 
-        for cHeader in cHeaders {
-            arguments[index].vtype = RD_KAFKA_VTYPE_HEADER
+        var hdrs: OpaquePointer? = nil
+        if !cHeaders.isEmpty {
+            hdrs = rd_kafka_headers_new(cHeaders.count)
+            for cHeader in cHeaders {
+                let addError = rd_kafka_header_add(
+                    hdrs,
+                    cHeader.key,
+                    -1,
+                    cHeader.value?.baseAddress,
+                    cHeader.value?.count ?? 0
+                )
+                if addError != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    rd_kafka_headers_destroy(hdrs)
+                    throw KafkaError.rdKafkaError(wrapping: addError)
+                }
+            }
 
-            arguments[index].u.header.name = cHeader.key
-            arguments[index].u.header.val = cHeader.value?.baseAddress
-            arguments[index].u.header.size = cHeader.value?.count ?? 0
-
+            arguments[index].vtype = RD_KAFKA_VTYPE_HEADERS
+            arguments[index].u.headers = hdrs
             index += 1
         }
 
         assert(arguments.count == size)
 
-        return rd_kafka_produceva(
+        let result = rd_kafka_produceva(
             self.kafkaHandle.pointer,
             arguments,
             arguments.count
         )
+
+        if result != nil, let hdrs {
+            rd_kafka_headers_destroy(hdrs)
+        }
+
+        return result
     }
 
     /// Scoped accessor that enables safe access to a ``KafkaProducerMessage``'s key and value raw buffers.
