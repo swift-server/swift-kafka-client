@@ -27,7 +27,7 @@ internal struct KafkaProducerCloseOnTerminate: Sendable {
 
 extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        return  // No back pressure
+        self.stateMachine.withLockedValue { $0.resumeYielding() }
     }
 
     func didTerminate() {
@@ -46,7 +46,7 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 /// `AsyncSequence` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
 public struct KafkaProducerEvents: Sendable, AsyncSequence {
     public typealias Element = KafkaProducerEvent
-    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
@@ -72,7 +72,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
         KafkaProducerEvent,
-        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
+        NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
         KafkaProducerCloseOnTerminate
     >
 
@@ -188,7 +188,10 @@ public final class KafkaProducer: Service, Sendable {
         // it leads to a call to `stateMachine.stopConsuming()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaProducerEvent.self,
-            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(
+                lowWatermark: config.eventsBackpressureLowWatermark,
+                highWatermark: config.eventsBackpressureHighWatermark
+            ),
             finishOnDeinit: true,
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
         )
@@ -257,23 +260,41 @@ public final class KafkaProducer: Service, Sendable {
                     }
                 }
                 try await Task.sleep(for: self.config.pollInterval)
-            case .pollAndYield(let client, let source):
+            case .pollAndYield(let client, let source, let yieldToSequence):
                 let events = client.producerEventPoll()
+                var hitHighWatermark = false
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
+                        // Always resume continuations (sendAndAwait)
                         self.resumeContinuations(for: reports)
-                        _ = source?.yield(.deliveryReports(reports))
+
+                        if yieldToSequence {
+                            if source?.yield(.deliveryReports(reports)) == .stopProducing {
+                                hitHighWatermark = true
+                            }
+                        }
                     case .error(let kafkaError):
-                        _ = source?.yield(.error(kafkaError))
+                        if yieldToSequence {
+                            if source?.yield(.error(kafkaError)) == .stopProducing {
+                                hitHighWatermark = true
+                            }
+                        }
                         self.logger.error(
                             "Kafka client error",
                             metadata: ["error": "\(kafkaError)"]
                         )
                     }
                 }
+
+                if hitHighWatermark {
+                    self.stateMachine.withLockedValue { $0.pauseYielding() }
+                    // Re-evaluate next action immediately without sleeping (Fixes Double Sleep)
+                    continue
+                }
+
                 try await Task.sleep(for: self.config.pollInterval)
             case .flushFinishSourceAndTerminatePollLoop(let client, let source):
                 precondition(
@@ -464,11 +485,13 @@ extension KafkaProducer {
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
+            /// - Parameter isYieldingPaused: Whether the events sequence buffer is full and yielding is temporarily suspended.
             case started(
                 client: RDKafkaClient,
                 messageIDCounter: UInt,
                 source: Producer.Source?,
-                topicHandles: RDKafkaTopicHandles
+                topicHandles: RDKafkaTopicHandles,
+                isYieldingPaused: Bool
             )
             /// Producer is still running but the event asynchronous sequence was terminated.
             /// All incoming events will be dropped.
@@ -480,9 +503,11 @@ extension KafkaProducer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
+            /// - Parameter isYieldingPaused: Whether the events sequence buffer is full and yielding is temporarily suspended.
             case finishing(
                 client: RDKafkaClient,
-                source: Producer.Source?
+                source: Producer.Source?,
+                isYieldingPaused: Bool
             )
             /// The ``KafkaProducer`` has been shut down and cannot be used anymore.
             case finished
@@ -506,7 +531,8 @@ extension KafkaProducer {
                 client: client,
                 messageIDCounter: 0,
                 source: source,
-                topicHandles: RDKafkaTopicHandles(client: client)
+                topicHandles: RDKafkaTopicHandles(client: client),
+                isYieldingPaused: false
             )
         }
 
@@ -520,7 +546,8 @@ extension KafkaProducer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
-            case pollAndYield(client: RDKafkaClient, source: Producer.Source?)
+            /// - Parameter yieldToSequence: Whether to yield events to the `source`.
+            case pollAndYield(client: RDKafkaClient, source: Producer.Source?, yieldToSequence: Bool)
             /// Flush any outstanding producer messages.
             /// Then terminate the poll loop and finish the given `NIOAsyncSequenceProducerSource`.
             ///
@@ -539,11 +566,11 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, let source, _):
-                return .pollAndYield(client: client, source: source)
+            case .started(let client, _, let source, _, let isYieldingPaused):
+                return .pollAndYield(client: client, source: source, yieldToSequence: !isYieldingPaused)
             case .eventConsumptionFinished(let client):
                 return .pollWithoutYield(client: client)
-            case .finishing(let client, let source):
+            case .finishing(let client, let source, _):
                 return .flushFinishSourceAndTerminatePollLoop(client: client, source: source)
             case .finished:
                 return .terminatePollLoop
@@ -569,13 +596,14 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, let messageIDCounter, let source, let topicHandles):
+            case .started(let client, let messageIDCounter, let source, let topicHandles, let isYieldingPaused):
                 let newMessageID = messageIDCounter + 1
                 self.state = .started(
                     client: client,
                     messageIDCounter: newMessageID,
                     source: source,
-                    topicHandles: topicHandles
+                    topicHandles: topicHandles,
+                    isYieldingPaused: isYieldingPaused
                 )
                 return .send(
                     client: client,
@@ -609,17 +637,61 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .eventConsumptionFinished:
                 fatalError("messageSequenceTerminated() must not be invoked more than once")
-            case .started(let client, _, let source, _):
+            case .started(let client, _, let source, _, _):
                 self.state = .eventConsumptionFinished(client: client)
                 return .finishSource(source: source)
-            case .finishing(let client, let source):
+            case .finishing(let client, let source, _):
                 // Setting source to nil to prevent incoming events from buffering in `source`
-                self.state = .finishing(client: client, source: nil)
+                self.state = .finishing(client: client, source: nil, isYieldingPaused: false)
                 return .finishSource(source: source)
             case .finished:
                 break
             }
             return nil
+        }
+
+        /// Stop yielding events to the events asynchronous sequence (backpressure).
+        mutating func pauseYielding() {
+            switch self.state {
+            case .started(let client, let messageIDCounter, let source, let topicHandles, _):
+                self.state = .started(
+                    client: client,
+                    messageIDCounter: messageIDCounter,
+                    source: source,
+                    topicHandles: topicHandles,
+                    isYieldingPaused: true
+                )
+            case .finishing(let client, let source, _):
+                self.state = .finishing(
+                    client: client,
+                    source: source,
+                    isYieldingPaused: true
+                )
+            default:
+                break
+            }
+        }
+
+        /// Resume yielding events to the events asynchronous sequence (relieve backpressure).
+        mutating func resumeYielding() {
+            switch self.state {
+            case .started(let client, let messageIDCounter, let source, let topicHandles, _):
+                self.state = .started(
+                    client: client,
+                    messageIDCounter: messageIDCounter,
+                    source: source,
+                    topicHandles: topicHandles,
+                    isYieldingPaused: false
+                )
+            case .finishing(let client, let source, _):
+                self.state = .finishing(
+                    client: client,
+                    source: source,
+                    isYieldingPaused: false
+                )
+            default:
+                break
+            }
         }
 
         /// Get action to be taken when wanting to do close the producer.
@@ -629,10 +701,10 @@ extension KafkaProducer {
             switch self.state {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
-            case .started(let client, _, let source, _):
-                self.state = .finishing(client: client, source: source)
+            case .started(let client, _, let source, _, let isYieldingPaused):
+                self.state = .finishing(client: client, source: source, isYieldingPaused: isYieldingPaused)
             case .eventConsumptionFinished(let client):
-                self.state = .finishing(client: client, source: nil)
+                self.state = .finishing(client: client, source: nil, isYieldingPaused: false)
             case .finishing, .finished:
                 break
             }

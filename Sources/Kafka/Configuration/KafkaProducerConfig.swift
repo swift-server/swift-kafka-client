@@ -39,6 +39,25 @@ public struct KafkaProducerConfig: Sendable {
     /// Producer metrics configuration.
     public var metrics: KafkaConfiguration.ProducerMetrics = .init()
 
+    /// Low watermark for the ``KafkaProducerEvents`` asynchronous sequence backpressure.
+    /// When the number of buffered events falls below this threshold, the producer
+    /// will resume yielding events to the sequence.
+    /// Default: `1000`
+    public var eventsBackpressureLowWatermark: Int = 1000
+
+    /// High watermark for the ``KafkaProducerEvents`` asynchronous sequence backpressure.
+    /// When the number of buffered events reaches this threshold, the producer
+    /// will temporarily stop yielding events to the sequence to prevent out-of-memory errors.
+    /// Polling of librdkafka continues to process delivery reports for `sendAndAwait`.
+    /// Default: `10000` (corresponds to 1 million messages, matching confluent-kafka-go default)
+    public var eventsBackpressureHighWatermark: Int = 10000
+
+    /// Arbitrary configuration properties passed directly to librdkafka.
+    ///
+    /// - Warning: Properties set here override typed properties.
+    /// Intended for testing or advanced configurations not explicitly supported by this library.
+    internal var additionalConfig: [String: String] = [:]
+
     // MARK: - Properties generated from librdkafka config list
 
     /// Client identifier.
@@ -1035,14 +1054,6 @@ public struct KafkaProducerConfig: Sendable {
     /// Default: -1
     public var compressionLevel: Int?
 
-    /// Additional librdkafka configuration properties not covered by typed properties.
-    /// Keys and values are passed directly to librdkafka.
-    ///
-    /// - Warning: Properties set here override typed properties above.
-    /// Intended for testing (e.g. `test.mock.num.brokers`) or advanced configurations
-    /// not explicitly supported by this library.
-    internal var additionalConfig: [String: String] = [:]
-
     public init() {}
 
     internal var config: [String: String] {
@@ -1162,9 +1173,7 @@ public struct KafkaProducerConfig: Sendable {
             config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 
-        for (key, value) in self.additionalConfig {
-            config[key] = value
-        }
+        config.merge(self.additionalConfig) { _, new in new }
 
         return config
     }

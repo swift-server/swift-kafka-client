@@ -32,6 +32,24 @@ public struct KafkaConsumerConfig: Sendable {
     /// Consumer metrics configuration.
     public var metrics: KafkaConfiguration.ConsumerMetrics = .init()
 
+    /// Low watermark for the ``KafkaConsumerEvents`` asynchronous sequence backpressure.
+    /// When the number of buffered events falls below this threshold, the consumer
+    /// will resume yielding events to the sequence.
+    /// Default: `100`
+    public var eventsBackpressureLowWatermark: Int = 100
+
+    /// High watermark for the ``KafkaConsumerEvents`` asynchronous sequence backpressure.
+    /// When the number of buffered events reaches this threshold, the consumer
+    /// will temporarily stop yielding events to the sequence to prevent out-of-memory errors.
+    /// Default: `1000`
+    public var eventsBackpressureHighWatermark: Int = 1000
+
+    /// Arbitrary configuration properties passed directly to librdkafka.
+    ///
+    /// - Warning: Properties set here override typed properties.
+    /// Intended for testing or advanced configurations not explicitly supported by this library.
+    internal var additionalConfig: [String: String] = [:]
+
     // MARK: - Properties generated from librdkafka config list
 
   % for rdconf in consumer_librdkafka_configs:
@@ -54,7 +72,7 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Default: ${rdconf["defaultValue"]}
     % end
-    public var ${rdconf["swiftName"]}: ${rdconf["swiftType"].replace("enum", f"KafkaConfig.{rdconf["swiftEnumName"]}")}?
+    public var ${rdconf["swiftName"]}: ${rdconf["swiftType"].replace("enum", f"KafkaConfig.{rdconf['swiftEnumName']}")}?
   % end
 
     public init() {}
@@ -98,6 +116,8 @@ public struct KafkaConsumerConfig: Sendable {
             config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 
+        config.merge(self.additionalConfig) { _, new in new }
+
         return config
     }
 
@@ -115,9 +135,9 @@ public struct KafkaConsumerConfig: Sendable {
         % elif rdconf["swiftType"] == "[String]":
         self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",")${" // ignore-unacceptable-language" if rdconf["name"] == "topic.blacklist" else ""}
         % elif rdconf["swiftType"] == "enum":
-        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"].map(KafkaConfig.${rdconf["swiftEnumName"]}.init)
+        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"].map(KafkaConfig.${rdconf['swiftEnumName']}.init)
         % elif rdconf["swiftType"] == "[enum]":
-        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",").map { ${f"KafkaConfig.{rdconf["swiftEnumName"]}"}(description: $0) }
+        self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",").map { ${f"KafkaConfig.{rdconf['swiftEnumName']}"}(description: $0) }
         % end
       % end
     }

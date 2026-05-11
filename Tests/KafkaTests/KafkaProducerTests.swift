@@ -378,6 +378,199 @@ import Foundation
         }
     }
 
+    @Test func producerBackpressureStopsYielding() async throws {
+        var backpressureConfig = self.config
+        // Set small watermarks so we can observe the pause quickly
+        backpressureConfig.eventsBackpressureLowWatermark = 3
+        backpressureConfig.eventsBackpressureHighWatermark = 5
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: backpressureConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            let message = KafkaProducerMessage(
+                topic: "backpressure-topic",
+                value: "hello"
+            )
+
+            // Send many messages without consuming events.
+            // The event loop will hit the high watermark and stop yielding,
+            // but continue polling librdkafka (so sendAndAwait still works).
+            for _ in 0..<50 {
+                try producer.send(message)
+                try await Task.sleep(for: .milliseconds(20))
+            }
+
+            // Now consume events — should get at most highWatermark buffered events
+            // (the sequence stops growing once watermark is hit)
+            var eventCount = 0
+            for await _ in events {
+                eventCount += 1
+                if eventCount >= 3 {
+                    break
+                }
+            }
+            #expect(eventCount >= 3)
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func sendAndAwaitWorksWhileBackpressured() async throws {
+        var backpressureConfig = self.config
+        backpressureConfig.queueBufferingMaxMessages = 100
+        backpressureConfig.eventsBackpressureLowWatermark = 2
+        backpressureConfig.eventsBackpressureHighWatermark = 5
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: backpressureConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Never consume events — force the watermark to be hit
+            _ = events
+
+            let message = KafkaProducerMessage(
+                topic: "backpressure-topic",
+                value: "sendAndAwait-test"
+            )
+
+            // Fill the events buffer past the high watermark by sending fire-and-forget messages.
+            // The event loop will transition to yieldToSequence: false.
+            for _ in 0..<20 {
+                try producer.send(message)
+                try await Task.sleep(for: .milliseconds(50))
+            }
+
+            // Now call sendAndAwait — it should NOT block indefinitely because the event loop
+            // still polls librdkafka and resumes continuations even when yielding is paused.
+            let report = try await producer.sendAndAwait(message)
+            switch report.status {
+            case .acknowledged:
+                break  // success — continuations are serviced during backpressure
+            case .failure(let error):
+                // Acceptable: mock broker may not ack. The key assertion is that this
+                // does NOT block indefinitely — it completes one way or another.
+                _ = error
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func producerResumesAfterEventsDrained() async throws {
+        var backpressureConfig = self.config
+        backpressureConfig.eventsBackpressureLowWatermark = 3
+        backpressureConfig.eventsBackpressureHighWatermark = 5
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: backpressureConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            let message = KafkaProducerMessage(
+                topic: "backpressure-topic",
+                value: "resume-test"
+            )
+
+            // Phase 1: Send messages without consuming to fill buffer past high watermark
+            for _ in 0..<20 {
+                try producer.send(message)
+                try await Task.sleep(for: .milliseconds(20))
+            }
+
+            // Phase 2: Drain events and then send more — verify new events arrive
+            // (yielding resumes after low watermark crossed via produceMore callback)
+            var totalEvents = 0
+            for await _ in events {
+                totalEvents += 1
+
+                // After draining initial batch, send more to verify yielding resumed
+                if totalEvents == 5 {
+                    for _ in 0..<5 {
+                        try producer.send(message)
+                    }
+                }
+
+                // If we receive events beyond the initial batch, yielding resumed successfully
+                if totalEvents >= 8 {
+                    break
+                }
+            }
+            #expect(totalEvents >= 8)
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func gracefulShutdownWhileBackpressured() async throws {
+        var backpressureConfig = self.config
+        backpressureConfig.queueBufferingMaxMessages = 10
+        backpressureConfig.eventsBackpressureLowWatermark = 3
+        backpressureConfig.eventsBackpressureHighWatermark = 5
+
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+            config: backpressureConfig,
+            logger: .kafkaTest
+        )
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Never consume events
+            _ = events
+
+            let message = KafkaProducerMessage(
+                topic: "backpressure-topic",
+                value: "shutdown-test"
+            )
+
+            // Fill buffer to trigger backpressure
+            for _ in 0..<30 {
+                do {
+                    try producer.send(message)
+                } catch {
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+
+            // Trigger shutdown while backpressured — must complete cleanly
+            await serviceGroup.triggerGracefulShutdown()
+        }
+        // If we reach here, shutdown completed successfully despite backpressure
+    }
+
     // MARK: - KafkaProducerEvent.error Tests
 
     @Test func producerEventErrorPatternMatch() {

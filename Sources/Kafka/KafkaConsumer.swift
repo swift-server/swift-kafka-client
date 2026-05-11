@@ -27,7 +27,7 @@ internal struct KafkaConsumerEventsDelegate: Sendable {
 
 extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
     func produceMore() {
-        return  // No back pressure
+        self.stateMachine.withLockedValue { $0.resumeYielding() }
     }
 
     func didTerminate() {
@@ -40,7 +40,7 @@ extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
 /// `AsyncSequence` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
 public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     public typealias Element = KafkaConsumerEvent
-    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
     let wrappedSequence: WrappedSequence
 
@@ -144,7 +144,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 public final class KafkaConsumer: Sendable, Service {
     typealias ConsumerEventsProducer = NIOAsyncSequenceProducer<
         KafkaConsumerEvent,
-        NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
+        NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark,
         KafkaConsumerEventsDelegate
     >
 
@@ -294,7 +294,10 @@ public final class KafkaConsumer: Sendable, Service {
         // it leads to a call to `stateMachine.messageSequenceTerminated()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
             elementType: KafkaConsumerEvent.self,
-            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
+            backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.HighLowWatermark(
+                lowWatermark: config.eventsBackpressureLowWatermark,
+                highWatermark: config.eventsBackpressureHighWatermark
+            ),
             finishOnDeinit: true,
             delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
         )
@@ -530,12 +533,15 @@ public final class KafkaConsumer: Sendable, Service {
                     self.logger.error("Closing KafkaConsumer failed", metadata: ["error": "\(error)"])
                     self.stateMachine.withLockedValue { $0.closeFailed() }
                 }
-                self.pollAndDrainEvents(client: client)
+                self.pollAndDrainEvents(client: client, yieldToSequence: true)
                 try await Task.sleep(for: self.config.pollInterval)
-            case .pollForEvents(let client):
-                self.pollAndDrainEvents(client: client)
-                try await Task.sleep(for: self.config.pollInterval)
-            case .suspendPollLoop:
+            case .pollForEvents(let client, let yieldToSequence):
+                let hitHighWatermark = self.pollAndDrainEvents(client: client, yieldToSequence: yieldToSequence)
+                if hitHighWatermark {
+                    self.stateMachine.withLockedValue { $0.pauseYielding() }
+                    // Re-evaluate next action immediately without sleeping
+                    continue
+                }
                 try await Task.sleep(for: self.config.pollInterval)
             case .terminatePollLoop(let client):
                 // Final drain: the close process may have completed (isConsumerClosed = true)
@@ -550,15 +556,20 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Poll librdkafka event queue and drain buffered rebalance events.
-    private func pollAndDrainEvents(client: RDKafkaClient) {
+    /// - Returns: `true` if hit high watermark backpressure.
+    @discardableResult
+    private func pollAndDrainEvents(client: RDKafkaClient, yieldToSequence: Bool) -> Bool {
         let events = client.consumerEventPoll()
+        var hitHighWatermark = false
         for event in events {
             switch event {
             case .statistics(let statistics):
                 self.config.metrics.update(with: statistics)
             case .error(let kafkaError):
-                if let source = self.eventsSource {
-                    _ = source.yield(.error(kafkaError))
+                if yieldToSequence {
+                    if self.eventsSource?.yield(.error(kafkaError)) == .stopProducing {
+                        hitHighWatermark = true
+                    }
                 }
                 self.logger.error(
                     "Kafka client error",
@@ -585,8 +596,10 @@ public final class KafkaConsumer: Sendable, Service {
                     KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
                 }
             )
-            if let source = self.eventsSource {
-                _ = source.yield(.rebalance(rebalance))
+            if yieldToSequence {
+                if self.eventsSource?.yield(.rebalance(rebalance)) == .stopProducing {
+                    hitHighWatermark = true
+                }
             }
             self.logger.info(
                 "Consumer rebalance",
@@ -596,6 +609,8 @@ public final class KafkaConsumer: Sendable, Service {
                 ]
             )
         }
+
+        return hitHighWatermark
     }
 
     /// Final drain of the event queue and rebalance buffer before shutdown completes.
@@ -934,7 +949,8 @@ extension KafkaConsumer {
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter rebalanceContext: The context for the C rebalance callback.
-            case running(client: RDKafkaClient, rebalanceContext: RebalanceContext)
+            /// - Parameter isYieldingPaused: Whether the events sequence buffer is full and yielding is temporarily suspended.
+            case running(client: RDKafkaClient, rebalanceContext: RebalanceContext, isYieldingPaused: Bool)
             /// The ``KafkaConsumer`` is being closed.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
@@ -943,7 +959,8 @@ extension KafkaConsumer {
                 client: RDKafkaClient,
                 rebalanceContext: RebalanceContext,
                 closeInitiated: Bool,
-                gracefulShutdownRequested: Bool
+                gracefulShutdownRequested: Bool,
+                isYieldingPaused: Bool
             )
             /// The ``KafkaConsumer`` has closed its queue and left the group,
             /// but is waiting for ``KafkaConsumer/triggerGracefulShutdown()`` to be invoked
@@ -978,13 +995,12 @@ extension KafkaConsumer {
             /// Poll for new events.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case pollForEvents(client: RDKafkaClient)
+            /// - Parameter yieldToSequence: Whether to yield events to the `source`.
+            case pollForEvents(client: RDKafkaClient, yieldToSequence: Bool)
             /// Initiate consumer close, then poll for new events.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case initiateCloseAndPoll(client: RDKafkaClient)
-            /// Suspend the poll loop.
-            case suspendPollLoop
             /// Terminate the poll loop.
             ///
             /// - Parameter client: Client for final drain (may be nil if state was already `.finished`).
@@ -1001,16 +1017,23 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 fatalError("Subscribe to consumer group / assign to topic partition pair before reading messages")
-            case .running(let client, _):
-                return .pollForEvents(client: client)
-            case .finishing(let client, let rebalanceContext, let closeInitiated, let gracefulShutdownRequested):
+            case .running(let client, _, let isYieldingPaused):
+                return .pollForEvents(client: client, yieldToSequence: !isYieldingPaused)
+            case .finishing(
+                let client,
+                let rebalanceContext,
+                let closeInitiated,
+                let gracefulShutdownRequested,
+                let isYieldingPaused
+            ):
                 if client.isConsumerClosed {
                     if gracefulShutdownRequested {
                         self.state = .finished
                         return .terminatePollLoop(client: client)
                     } else {
                         self.state = .finishedAwaitingGracefulShutdown(client: client)
-                        return .suspendPollLoop
+                        // During shutdown, we always yield to the sequence to ensure rebalance/close signals are delivered.
+                        return .pollForEvents(client: client, yieldToSequence: true)
                     }
                 } else {
                     if !closeInitiated {
@@ -1018,14 +1041,16 @@ extension KafkaConsumer {
                             client: client,
                             rebalanceContext: rebalanceContext,
                             closeInitiated: true,
-                            gracefulShutdownRequested: gracefulShutdownRequested
+                            gracefulShutdownRequested: gracefulShutdownRequested,
+                            isYieldingPaused: isYieldingPaused
                         )
                         return .initiateCloseAndPoll(client: client)
                     }
-                    return .pollForEvents(client: client)
+                    // During shutdown, we always yield to the sequence to ensure rebalance/close signals are delivered.
+                    return .pollForEvents(client: client, yieldToSequence: true)
                 }
-            case .finishedAwaitingGracefulShutdown:
-                return .suspendPollLoop
+            case .finishedAwaitingGracefulShutdown(let client):
+                return .pollForEvents(client: client, yieldToSequence: false)
             case .finished:
                 return .terminatePollLoop(client: nil)
             }
@@ -1053,7 +1078,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 return .suspendPollLoop
-            case .running(let client, _):
+            case .running(let client, _, _):
                 return .poll(client: client)
             case .finishing, .finishedAwaitingGracefulShutdown, .finished:
                 return .terminatePollLoop
@@ -1077,7 +1102,7 @@ extension KafkaConsumer {
             case .uninitialized:
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing(let client, let rebalanceContext):
-                self.state = .running(client: client, rebalanceContext: rebalanceContext)
+                self.state = .running(client: client, rebalanceContext: rebalanceContext, isYieldingPaused: false)
                 return .setUpConnection(client: client)
             case .running:
                 fatalError("\(#function) should not be invoked more than once")
@@ -1107,7 +1132,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 return .throwClosedError
-            case .running(let client, _):
+            case .running(let client, _, _):
                 return .client(client)
             case .finishing, .finishedAwaitingGracefulShutdown, .finished:
                 return .throwClosedError
@@ -1126,7 +1151,7 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing(let client, _):
                 return .client(client)
-            case .running(let client, _):
+            case .running(let client, _, _):
                 return .client(client)
             case .finishing, .finishedAwaitingGracefulShutdown, .finished:
                 return .throwClosedError
@@ -1153,21 +1178,23 @@ extension KafkaConsumer {
                 // and transition straight to .finished.
                 self.state = .finished
                 return nil
-            case .running(let client, let rebalanceContext):
+            case .running(let client, let rebalanceContext, let isYieldingPaused):
                 self.state = .finishing(
                     client: client,
                     rebalanceContext: rebalanceContext,
                     closeInitiated: true,
-                    gracefulShutdownRequested: true
+                    gracefulShutdownRequested: true,
+                    isYieldingPaused: isYieldingPaused
                 )
                 return .triggerGracefulShutdown(client: client)
-            case .finishing(let client, let rebalanceContext, let closeInitiated, _):
+            case .finishing(let client, let rebalanceContext, let closeInitiated, _, let isYieldingPaused):
                 // Upgrade to graceful shutdown requested
                 self.state = .finishing(
                     client: client,
                     rebalanceContext: rebalanceContext,
                     closeInitiated: closeInitiated,
-                    gracefulShutdownRequested: true
+                    gracefulShutdownRequested: true,
+                    isYieldingPaused: isYieldingPaused
                 )
                 return nil
             case .finishedAwaitingGracefulShutdown:
@@ -1185,12 +1212,13 @@ extension KafkaConsumer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .initializing:
                 self.state = .finished
-            case .running(let client, let rebalanceContext):
+            case .running(let client, let rebalanceContext, let isYieldingPaused):
                 self.state = .finishing(
                     client: client,
                     rebalanceContext: rebalanceContext,
                     closeInitiated: false,
-                    gracefulShutdownRequested: false
+                    gracefulShutdownRequested: false,
+                    isYieldingPaused: isYieldingPaused
                 )
             case .finishing, .finishedAwaitingGracefulShutdown, .finished:
                 break
@@ -1200,12 +1228,56 @@ extension KafkaConsumer {
         /// Called if `consumerClose()` fails to avoid polling forever.
         mutating func closeFailed() {
             switch self.state {
-            case .finishing(let client, _, _, let gracefulShutdownRequested):
+            case .finishing(let client, _, _, let gracefulShutdownRequested, _):
                 if gracefulShutdownRequested {
                     self.state = .finished
                 } else {
                     self.state = .finishedAwaitingGracefulShutdown(client: client)
                 }
+            default:
+                break
+            }
+        }
+
+        /// Stop yielding events to the events asynchronous sequence (backpressure).
+        mutating func pauseYielding() {
+            switch self.state {
+            case .running(let client, let rebalanceContext, _):
+                self.state = .running(
+                    client: client,
+                    rebalanceContext: rebalanceContext,
+                    isYieldingPaused: true
+                )
+            case .finishing(let client, let rebalanceContext, let closeInitiated, let gracefulShutdownRequested, _):
+                self.state = .finishing(
+                    client: client,
+                    rebalanceContext: rebalanceContext,
+                    closeInitiated: closeInitiated,
+                    gracefulShutdownRequested: gracefulShutdownRequested,
+                    isYieldingPaused: true
+                )
+            default:
+                break
+            }
+        }
+
+        /// Resume yielding events to the events asynchronous sequence (relieve backpressure).
+        mutating func resumeYielding() {
+            switch self.state {
+            case .running(let client, let rebalanceContext, _):
+                self.state = .running(
+                    client: client,
+                    rebalanceContext: rebalanceContext,
+                    isYieldingPaused: false
+                )
+            case .finishing(let client, let rebalanceContext, let closeInitiated, let gracefulShutdownRequested, _):
+                self.state = .finishing(
+                    client: client,
+                    rebalanceContext: rebalanceContext,
+                    closeInitiated: closeInitiated,
+                    gracefulShutdownRequested: gracefulShutdownRequested,
+                    isYieldingPaused: false
+                )
             default:
                 break
             }
@@ -1219,8 +1291,8 @@ extension KafkaConsumer {
             case .uninitialized, .finished:
                 return nil
             case .initializing(let client, _),
-                .running(let client, _),
-                .finishing(let client, _, _, _),
+                .running(let client, _, _),
+                .finishing(let client, _, _, _, _),
                 .finishedAwaitingGracefulShutdown(let client):
                 return client
             }

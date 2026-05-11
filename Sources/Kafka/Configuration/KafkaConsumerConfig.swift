@@ -34,6 +34,24 @@ public struct KafkaConsumerConfig: Sendable {
     /// Consumer metrics configuration.
     public var metrics: KafkaConfiguration.ConsumerMetrics = .init()
 
+    /// Low watermark for the ``KafkaConsumerEvents`` asynchronous sequence backpressure.
+    /// When the number of buffered events falls below this threshold, the consumer
+    /// will resume yielding events to the sequence.
+    /// Default: `100`
+    public var eventsBackpressureLowWatermark: Int = 100
+
+    /// High watermark for the ``KafkaConsumerEvents`` asynchronous sequence backpressure.
+    /// When the number of buffered events reaches this threshold, the consumer
+    /// will temporarily stop yielding events to the sequence to prevent out-of-memory errors.
+    /// Default: `1000`
+    public var eventsBackpressureHighWatermark: Int = 1000
+
+    /// Arbitrary configuration properties passed directly to librdkafka.
+    ///
+    /// - Warning: Properties set here override typed properties.
+    /// Intended for testing or advanced configurations not explicitly supported by this library.
+    internal var additionalConfig: [String: String] = [:]
+
     // MARK: - Properties generated from librdkafka config list
 
     /// Client identifier.
@@ -1046,14 +1064,6 @@ public struct KafkaConsumerConfig: Sendable {
     /// librdkafka property name: `"consume.callback.max.messages"`
     public var consumeCallbackMaxMessages: Int?
 
-    /// Additional librdkafka configuration properties not covered by typed properties.
-    /// Keys and values are passed directly to librdkafka.
-    ///
-    /// - Warning: Properties set here override typed properties above.
-    /// Intended for testing (e.g. `test.mock.num.brokers`) or advanced configurations
-    /// not explicitly supported by this library.
-    internal var additionalConfig: [String: String] = [:]
-
     public init() {}
 
     internal var config: [String: String] {
@@ -1193,9 +1203,7 @@ public struct KafkaConsumerConfig: Sendable {
             config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 
-        for (key, value) in self.additionalConfig {
-            config[key] = value
-        }
+        config.merge(self.additionalConfig) { _, new in new }
 
         return config
     }
