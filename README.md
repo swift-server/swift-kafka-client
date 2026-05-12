@@ -2,6 +2,19 @@
 
 The Swift Kafka Client library provides a convenient way to interact with [Apache Kafka](https://kafka.apache.org) by leveraging [Swift's new concurrency features](https://docs.swift.org/swift-book/LanguageGuide/Concurrency.html). This package wraps the native [`librdkafka`](https://github.com/confluentinc/librdkafka) library.
 
+## Features
+
+- Async/await producer with awaitable delivery acknowledgements (`sendAndAwait`)
+- High-throughput fire-and-forget producer with batched delivery reports
+- `AsyncSequence`-based consumer with automatic rebalancing
+- At-least-once delivery semantics via manual offset storage
+- Consumer group support with dynamic subscription management
+- Pause/resume partition consumption
+- Typed error handling with retriable and fatal error classification
+- SASL and TLS authentication
+- Integration with [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle), [swift-log](https://github.com/apple/swift-log), and [swift-metrics](https://github.com/apple/swift-metrics)
+- Full librdkafka configuration exposed as typed Swift properties
+
 ## Adding Kafka as a Dependency
 
 To use the `Kafka` library in a SwiftPM project,
@@ -29,44 +42,68 @@ Both the `KafkaProducer` and the `KafkaConsumer` implement the [`Service`](https
 
 ### Producer API
 
-The `send(_:)` method of `KafkaProducer` returns a message-id that can later be used to identify the corresponding acknowledgement. Acknowledgements are received through the `events` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence). Each acknowledgement indicates that producing a message was successful or returns an error.
+The `sendAndAwait(_:)` method produces a message and asynchronously awaits broker acknowledgement — giving you confirmation of exactly which partition and offset your message landed at, without blocking any threads:
 
 ```swift
-let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
-let configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [brokerAddress])
+var config = KafkaProducerConfig()
+config.bootstrapServers = ["localhost:9092"]
 
-let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-    configuration: configuration,
+let producer = try KafkaProducer(config: config, logger: logger)
+
+let serviceGroup = ServiceGroup(
+    services: [producer],
+    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
     logger: logger
 )
 
-await withThrowingTaskGroup(of: Void.self) { group in
+try await withThrowingTaskGroup(of: Void.self) { group in
+    group.addTask { try await serviceGroup.run() }
 
-    // Run Task
     group.addTask {
-        let serviceGroup = ServiceGroup(
-            services: [producer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: logger
-        )
-        try await serviceGroup.run()
+        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let report = try await producer.sendAndAwait(message)
+        switch report.status {
+        case .acknowledged(let ack):
+            print("Delivered to partition \(ack.partition) at offset \(ack.offset)")
+        case .failure(let error):
+            print("Delivery failed: \(error)")
+        }
     }
+}
+```
 
-    // Task sending message and receiving events
+For high-throughput pipelines where you need to maximize send rate, use the fire-and-forget `send(_:)` method and process delivery reports in batches through the events sequence:
+
+```swift
+var config = KafkaProducerConfig()
+config.bootstrapServers = ["localhost:9092"]
+
+let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+    config: config,
+    logger: logger
+)
+
+let serviceGroup = ServiceGroup(
+    services: [producer],
+    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
+    logger: logger
+)
+
+try await withThrowingTaskGroup(of: Void.self) { group in
+    group.addTask { try await serviceGroup.run() }
+
     group.addTask {
-        let messageID = try producer.send(
-            KafkaProducerMessage(
-                topic: "topic-name",
-                value: "Hello, World!"
-            )
-        )
+        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        try producer.send(message)
 
         for await event in events {
             switch event {
-            case .deliveryReports(let deliveryReports):
-                // Check what messages the delivery reports belong to
+            case .deliveryReports(let reports):
+                for report in reports {
+                    // Handle delivery acknowledgement
+                }
             default:
-                break // Ignore any other events
+                break
             }
         }
     }
@@ -75,164 +112,189 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 ### Consumer API
 
-After initializing the `KafkaConsumer` with a topic-partition pair to read from, messages can be consumed using the `messages` [`AsyncSequence`](https://developer.apple.com/documentation/swift/asyncsequence).
-
-```swift
-let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
-let configuration = KafkaConsumerConfiguration(
-    consumptionStrategy: .partition(
-        KafkaPartition(rawValue: 0),
-        topic: "topic-name"
-    ),
-    bootstrapBrokerAddresses: [brokerAddress]
-)
-
-let consumer = try KafkaConsumer(
-    configuration: configuration,
-    logger: logger
-)
-
-await withThrowingTaskGroup(of: Void.self) { group in
-
-    // Run Task
-    group.addTask {
-        let serviceGroup = ServiceGroup(
-            services: [consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: logger
-        )
-        try await serviceGroup.run()
-    }
-
-    // Task receiving messages
-    group.addTask {
-        for try await message in consumer.messages {
-            // Do something with message
-        }
-    }
-}
-```
+Messages are delivered as an `AsyncSequence` — consume them with a standard `for try await` loop that integrates naturally with Swift concurrency, structured tasks, and cancellation:
 
 #### Consumer Groups
 
-Kafka also allows users to subscribe to an array of topics as part of a consumer group.
-
 ```swift
-let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
-let configuration = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"]),
-    bootstrapBrokerAddresses: [brokerAddress]
-)
+var config = KafkaConsumerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 
-let consumer = try KafkaConsumer(
-    configuration: configuration,
+let consumer = try KafkaConsumer(config: config, logger: logger)
+
+let serviceGroup = ServiceGroup(
+    services: [consumer],
+    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
     logger: logger
 )
 
-await withThrowingTaskGroup(of: Void.self) { group in
+try await withThrowingTaskGroup(of: Void.self) { group in
+    group.addTask { try await serviceGroup.run() }
 
-    // Run Task
-    group.addTask {
-        let serviceGroup = ServiceGroup(
-            services: [consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: logger
-        )
-        try await serviceGroup.run()
-    }
-
-    // Task receiving messages
     group.addTask {
         for try await message in consumer.messages {
-            // Do something with message
+            print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
         }
     }
 }
 ```
 
-#### Manual commits
+#### At-Least-Once Processing
 
-By default, the `KafkaConsumer` automatically commits message offsets after receiving the corresponding message. However, we allow users to disable this setting and commit message offsets manually.
+For at-least-once delivery semantics, disable automatic offset storage and manually store offsets after processing:
 
 ```swift
-let brokerAddress = KafkaConfiguration.BrokerAddress(host: "localhost", port: 9092)
-var configuration = KafkaConsumerConfiguration(
-    consumptionStrategy: .group(id: "example-group", topics: ["topic-name"]),
-    bootstrapBrokerAddresses: [brokerAddress]
-)
-configuration.isAutoCommitEnabled = false
+var config = KafkaConsumerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
+config.enableAutoOffsetStore = false
 
-let consumer = try KafkaConsumer(
-    configuration: configuration,
+let consumer = try KafkaConsumer(config: config, logger: logger)
+
+let serviceGroup = ServiceGroup(
+    services: [consumer],
+    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
     logger: logger
 )
 
-await withThrowingTaskGroup(of: Void.self) { group in
+try await withThrowingTaskGroup(of: Void.self) { group in
+    group.addTask { try await serviceGroup.run() }
 
-    // Run Task
-    group.addTask {
-        let serviceGroup = ServiceGroup(
-            services: [consumer],
-            configuration: ServiceGroupConfiguration(gracefulShutdownSignals: []),
-            logger: logger
-        )
-        try await serviceGroup.run()
-    }
-
-    // Task receiving messages
     group.addTask {
         for try await message in consumer.messages {
-            // Do something with message
-            // ...
-            try await consumer.commitSync(message)
+            // Process message...
+            try consumer.storeOffset(message)
+            // Offset will be committed automatically by the background auto-commit timer
         }
     }
 }
+```
+
+#### Manual Commits
+
+To control exactly when offsets are committed to the broker:
+
+```swift
+var config = KafkaConsumerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
+config.enableAutoCommit = false
+
+let consumer = try KafkaConsumer(config: config, logger: logger)
+
+let serviceGroup = ServiceGroup(
+    services: [consumer],
+    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
+    logger: logger
+)
+
+try await withThrowingTaskGroup(of: Void.self) { group in
+    group.addTask { try await serviceGroup.run() }
+
+    group.addTask {
+        for try await message in consumer.messages {
+            // Process message...
+            try await consumer.commit(message)
+        }
+    }
+}
+```
+
+To commit all previously stored offsets at once:
+
+```swift
+try await consumer.commit()
+```
+
+#### Dynamic Subscription Management
+
+Topics can be changed at runtime:
+
+```swift
+// Subscribe to additional topics
+try consumer.subscribe(topics: ["topic-a", "topic-b"])
+
+// Query current subscription
+let topics = try consumer.subscribedTopics()
+
+// Unsubscribe from all topics
+try consumer.unsubscribe()
+```
+
+#### Pause and Resume
+
+Partition consumption can be temporarily paused and resumed, useful for applying backpressure or performing maintenance without leaving the consumer group:
+
+```swift
+let partition = KafkaTopicPartition(topic: "topic-name", partition: KafkaPartition(rawValue: 0))
+try consumer.pause(topicPartitions: [partition])
+// ... later
+try consumer.resume(topicPartitions: [partition])
 ```
 
 ### Security Mechanisms
 
-Both the `KafkaProducer` and the `KafkaConsumer` can be configured to use different security mechanisms.
+Both the `KafkaProducer` and the `KafkaConsumer` can be configured to use different security mechanisms via the `securityProtocol` property.
 
 #### Plaintext
 
 ```swift
-var configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
-configuration.securityProtocol = .plaintext
+var config = KafkaProducerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.securityProtocol = .plaintext
 ```
 
-#### TLS
+#### TLS (SSL)
 
 ```swift
-var configuration = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
-configuration.securityProtocol = .tls()
+var config = KafkaProducerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.securityProtocol = .ssl
 ```
 
-#### SASL
+#### SASL + Plaintext
 
 ```swift
-let kerberosConfiguration = KafkaConfiguration.SASLMechanism.KerberosConfiguration(
-    keytab: "KEYTAB_FILE"
-)
-
-var config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
-config.securityProtocol = .saslPlaintext(
-    mechanism: .gssapi(kerberosConfiguration: kerberosConfiguration)
-)
+var config = KafkaProducerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.securityProtocol = .sasl_plaintext
+config.saslMechanisms = "PLAIN"
+config.saslUsername = "user"
+config.saslPassword = "password"
 ```
 
 #### SASL + TLS
 
 ```swift
-let saslMechanism = KafkaConfiguration.SASLMechanism.scramSHA256(
-    username: "USERNAME",
-    password: "PASSWORD"
-)
+var config = KafkaProducerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.securityProtocol = .sasl_ssl
+config.saslMechanisms = "SCRAM-SHA-256"
+config.saslUsername = "user"
+config.saslPassword = "password"
+```
 
-var config = KafkaProducerConfiguration(bootstrapBrokerAddresses: [])
-config.securityProtocol = .saslTLS(
-    saslMechanism: saslMechanism
-)
+### Error Handling
+
+Errors from librdkafka are surfaced through the events sequence with typed error codes:
+
+```swift
+let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: logger)
+
+for await event in events {
+    switch event {
+    case .error(let error):
+        if error.isFatal {
+            // Client is irrecoverable — initiate shutdown
+        } else if error.isRetriable {
+            // Transient error — will likely resolve
+        }
+        print("Error: \(error.rdKafkaCode)")
+    default:
+        break
+    }
+}
 ```
 
 ## librdkafka
@@ -242,8 +304,8 @@ It has source files that are excluded in `Package.swift`.
 
 ### Dependencies
 
-`librdkafka` depends on `openssl`, meaning that `libssl-dev` must be present at build time.
-`openssl@3` can be installed on macOS, among others, through `brew`.
+- **macOS**: `brew install openssl@3`
+- **Linux**: `apt-get install libssl-dev libsasl2-dev`
 
 ## Development Setup
 
