@@ -12,4 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-extension Array: KafkaContiguousBytes where Array.Element == UInt8 {}
+extension Array: KafkaContiguousBytes where Element == UInt8 {
+    public func withUnsafeBytes<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
+        try self.withUnsafeBufferPointer { buffer in
+            try body(buffer)
+        }
+    }
+}
