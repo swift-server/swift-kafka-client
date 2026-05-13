@@ -26,5 +26,5 @@ public protocol KafkaContiguousBytes {
     ///         the same buffer pointer will be passed in every time.
     /// - warning: The buffer argument to the body should not be stored or used
     ///            outside of the lifetime of the call to the closure.
-    func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R
+    func withUnsafeBytes<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R
 }

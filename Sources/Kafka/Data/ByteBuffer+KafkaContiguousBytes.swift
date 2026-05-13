@@ -15,9 +15,9 @@
 import NIOCore
 
 extension ByteBuffer: KafkaContiguousBytes {
-    public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
-        try self.withUnsafeReadableBytes {
-            try body($0)
+    public func withUnsafeBytes<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
+        try self.withUnsafeReadableBytes { rawBuffer in
+            try body(rawBuffer.bindMemory(to: UInt8.self))
         }
     }
 }

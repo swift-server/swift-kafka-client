@@ -13,7 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 import Kafka
-
 import struct Foundation.Data
 
-extension Data: KafkaContiguousBytes {}
+extension Data: KafkaContiguousBytes {
+    public func withUnsafeBytes<R>(_ body: (UnsafeBufferPointer<UInt8>) throws -> R) rethrows -> R {
+        try self.withUnsafeBytes { rawBuffer in
+            try body(rawBuffer.bindMemory(to: UInt8.self))
+        }
+    }
+}
