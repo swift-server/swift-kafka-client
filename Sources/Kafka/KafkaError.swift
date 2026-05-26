@@ -31,6 +31,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         /// The raw `Int32` value corresponding to the librdkafka error code.
         public let rawValue: Int32
 
+        /// Creates a librdkafka error code from its raw `Int32` value.
         public init(rawValue: Int32) {
             self.rawValue = rawValue
         }
@@ -64,6 +65,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         /// No error.
         public static let noError = RDKafkaCode(rawValue: 0)
 
+        /// A textual representation of the librdkafka error code, including its name and numeric value.
         public var description: String {
             let name = String(cString: rd_kafka_err2str(rd_kafka_resp_err_t(rawValue: self.rawValue)))
             return "\(name) (code: \(self.rawValue))"
@@ -121,6 +123,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         self.backing.line
     }
 
+    /// A textual representation of the error, including its code, reason, and originating source location.
     public var description: String {
         "KafkaError.\(self.code): \(self.reason) \(self.file):\(self.line)"
     }
@@ -343,6 +346,7 @@ extension KafkaError {
         /// Deleting a topic failed.
         public static let topicDeletionFailed = ErrorCode(.topicDeletion)
 
+        /// A textual representation of the error code.
         public var description: String {
             String(describing: self.backingCode)
         }
@@ -411,10 +415,12 @@ extension KafkaError {
 // MARK: - KafkaError + Hashable
 
 extension KafkaError: Hashable {
+    /// Returns a Boolean value that indicates whether two errors are equal.
     public static func == (lhs: KafkaError, rhs: KafkaError) -> Bool {
         lhs.backing == rhs.backing
     }
 
+    /// Hashes the essential components of the error by feeding them into the given hasher.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(self.backing)
     }

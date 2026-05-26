@@ -20,6 +20,7 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
     /// The raw value corresponding to the librdkafka timestamp type.
     public let rawValue: Int32
 
+    /// Creates a timestamp type from its raw librdkafka value.
     public init(rawValue: Int32) {
         self.rawValue = rawValue
     }
@@ -37,6 +38,7 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
         rawValue: Int32(RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME.rawValue)
     )
 
+    /// A textual representation of the timestamp type.
     public var description: String {
         switch self {
         case .createTime: return "createTime"

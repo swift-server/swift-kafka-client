@@ -63,6 +63,7 @@ public struct KafkaProducerConfiguration {
                 self.rawValue = rawValue
             }
 
+            /// Creates a producer-queue message limit from the given maximum number of messages.
             public static func maximumLimit(_ value: Int) -> MessageLimit {
                 .init(rawValue: value)
             }
@@ -94,6 +95,7 @@ public struct KafkaProducerConfiguration {
             }
         }
 
+        /// Creates a new producer queue configuration with default values.
         public init() {}
     }
 
@@ -175,6 +177,7 @@ public struct KafkaProducerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
+    /// Creates a new producer configuration; deprecated in favor of `KafkaProducerConfig`.
     @available(*, deprecated, message: "Use KafkaProducerConfig instead")
     public init(
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]

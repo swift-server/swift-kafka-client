@@ -85,6 +85,7 @@ public struct KafkaConsumerConfiguration {
             }
         }
 
+        /// Creates a new set of consumer group session options with default values.
         public init() {}
     }
 
@@ -139,6 +140,7 @@ public struct KafkaConsumerConfiguration {
 
     /// Available actions to take when there is no initial offset in offset store / offset is out of range.
     public struct AutoOffsetReset: Sendable, Hashable, CustomStringConvertible {
+        /// A textual representation of the auto-offset-reset action.
         public let description: String
 
         /// Automatically reset the offset to the smallest offset.
@@ -242,6 +244,7 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
+    /// Creates a new consumer configuration; deprecated in favor of `KafkaConsumerConfig`.
     @available(*, deprecated, message: "Use KafkaConsumerConfig instead")
     public init(
         consumptionStrategy: ConsumptionStrategy,

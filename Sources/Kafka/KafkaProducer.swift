@@ -45,6 +45,7 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 
 /// An asynchronous sequence of ``KafkaProducerEvent`` values emitted by Kafka.
 public struct KafkaProducerEvents: Sendable, AsyncSequence {
+    /// The type of event the sequence yields.
     public typealias Element = KafkaProducerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
@@ -54,11 +55,13 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
+        /// Returns the next producer event, or `nil` if the sequence has finished.
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
         }
     }
 
+    /// Returns an asynchronous iterator over the producer event sequence.
     public func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
@@ -204,6 +207,9 @@ public final class KafkaProducer: Service, Sendable {
         return (producer, eventsSequence)
     }
 
+    /// Creates a new producer from a `KafkaProducerConfiguration`.
+    ///
+    /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
     @available(*, deprecated, message: "Use init(config:logger:) instead")
     public convenience init(
         configuration: KafkaProducerConfiguration,
@@ -215,6 +221,9 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
+    /// Creates a new producer and an event sequence from a `KafkaProducerConfiguration`.
+    ///
+    /// This method is deprecated. Use ``makeProducerWithEvents(config:logger:)`` instead.
     @available(*, deprecated, message: "Use makeProducerWithEvents(config:logger:) instead")
     public static func makeProducerWithEvents(
         configuration: KafkaProducerConfiguration,

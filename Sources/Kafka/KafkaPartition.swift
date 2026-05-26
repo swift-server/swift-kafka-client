@@ -16,6 +16,7 @@ import Crdkafka
 
 /// The identifier of a Kafka partition.
 public struct KafkaPartition: RawRepresentable {
+    /// The raw integer identifier of the partition.
     public var rawValue: Int {
         didSet {
             precondition(
@@ -25,6 +26,9 @@ public struct KafkaPartition: RawRepresentable {
         }
     }
 
+    /// Creates a partition identifier from its raw integer value.
+    ///
+    /// The raw value must fall within the valid range `0...Int32.max` or equal the unassigned sentinel value.
     public init(rawValue: Int) {
         precondition(
             0...Int(Int32.max) ~= rawValue || rawValue == RD_KAFKA_PARTITION_UA,

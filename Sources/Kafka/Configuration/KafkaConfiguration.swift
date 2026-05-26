@@ -22,10 +22,16 @@ public enum KafkaConfiguration {
         /// The port to connect to.
         public var port: Int
 
+        /// A textual representation of the broker address in `host:port` form.
         public var description: String {
             "\(self.host):\(self.port)"
         }
 
+        /// Creates a new broker address from a host and port.
+        ///
+        /// - Parameters:
+        ///   - host: The host component of the broker address.
+        ///   - port: The port to connect to.
         public init(
             host: String,
             port: Int
@@ -46,6 +52,7 @@ public enum KafkaConfiguration {
         /// Default: `65535`
         public var maximumBytesToCopy: Int = 65535
 
+        /// Creates a new set of message options with default values.
         public init() {}
     }
 
@@ -59,7 +66,9 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// (Lowest granularity is milliseconds)
+            /// Creates a refresh interval for the given duration.
+            ///
+            /// - Note: The lowest granularity is milliseconds.
             public static func interval(_ value: Duration) -> RefreshInterval {
                 precondition(
                     value.canBeRepresentedAsMilliseconds,
@@ -103,6 +112,7 @@ public enum KafkaConfiguration {
             }
         }
 
+        /// Creates a new set of topic metadata options with default values.
         public init() {}
     }
 
@@ -128,6 +138,7 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
+            /// Creates a buffer size of the given number of bytes.
             public static func value(_ value: Int) -> BufferSize {
                 .init(rawValue: value)
             }
@@ -160,6 +171,7 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
+            /// Creates a maximum-failures threshold from the given number of send failures.
             public static func failures(_ value: Int) -> MaximumFailures {
                 .init(rawValue: value)
             }
@@ -180,6 +192,7 @@ public enum KafkaConfiguration {
         /// Default: `.milliseconds(30000)`
         public var connectionSetupTimeout: Duration = .milliseconds(30000)
 
+        /// Creates a new set of socket options with default values.
         public init() {}
     }
 
@@ -201,6 +214,7 @@ public enum KafkaConfiguration {
         /// Default: `.any`
         public var addressFamily: IPAddressFamily = .any
 
+        /// Creates a new set of broker options with default values.
         public init() {}
     }
 
@@ -214,7 +228,9 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// (Lowest granularity is milliseconds)
+            /// Creates a reconnect backoff for the given duration.
+            ///
+            /// - Note: The lowest granularity is milliseconds.
             public static func backoff(_ value: Duration) -> Backoff {
                 precondition(
                     value.canBeRepresentedAsMilliseconds,
@@ -244,6 +260,7 @@ public enum KafkaConfiguration {
             }
         }
 
+        /// Creates a new set of reconnect options with default values.
         public init() {}
     }
 
@@ -251,29 +268,48 @@ public enum KafkaConfiguration {
 
     /// Available debug contexts to enable.
     public struct DebugOption: Sendable, Hashable, CustomStringConvertible {
+        /// A textual representation of the debug context, suitable for librdkafka's `debug` setting.
         public let description: String
 
+        /// Enables debug logging for generic, non-categorized client events.
         public static let generic = DebugOption(description: "generic")
+        /// Enables debug logging for broker connection and communication events.
         public static let broker = DebugOption(description: "broker")
+        /// Enables debug logging for topic-level operations and state changes.
         public static let topic = DebugOption(description: "topic")
+        /// Enables debug logging for cluster metadata requests and updates.
         public static let metadata = DebugOption(description: "metadata")
+        /// Enables debug logging for protocol feature negotiation with brokers.
         public static let feature = DebugOption(description: "feature")
+        /// Enables debug logging for internal message queue operations.
         public static let queue = DebugOption(description: "queue")
+        /// Enables debug logging for individual message production and delivery.
         public static let msg = DebugOption(description: "msg")
+        /// Enables debug logging for the Kafka wire protocol exchanges.
         public static let `protocol` = DebugOption(description: "protocol")
+        /// Enables debug logging for consumer group coordination and rebalances.
         public static let cgrp = DebugOption(description: "cgrp")
+        /// Enables debug logging for security, authentication, and TLS handshake events.
         public static let security = DebugOption(description: "security")
+        /// Enables debug logging for consumer fetch requests and responses.
         public static let fetch = DebugOption(description: "fetch")
+        /// Enables debug logging for client interceptor invocations.
         public static let interceptor = DebugOption(description: "interceptor")
+        /// Enables debug logging for plugin loading and lifecycle events.
         public static let plugin = DebugOption(description: "plugin")
+        /// Enables debug logging for high-level consumer operations.
         public static let consumer = DebugOption(description: "consumer")
+        /// Enables debug logging for administrative API requests.
         public static let admin = DebugOption(description: "admin")
+        /// Enables debug logging for exactly-once semantics, including the idempotent and transactional producer.
         public static let eos = DebugOption(description: "eos")
+        /// Enables debug logging for every available context.
         public static let all = DebugOption(description: "all")
     }
 
     /// Available IP address families.
     public struct IPAddressFamily: Sendable, Hashable, CustomStringConvertible {
+        /// A textual representation of the IP address family.
         public let description: String
 
         /// Use any IP address family.

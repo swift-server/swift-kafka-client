@@ -39,6 +39,7 @@ extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
 
 /// An asynchronous sequence of ``KafkaConsumerEvent`` values emitted by Kafka.
 public struct KafkaConsumerEvents: Sendable, AsyncSequence {
+    /// The type of event the sequence yields.
     public typealias Element = KafkaConsumerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
@@ -48,11 +49,13 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
+        /// Returns the next consumer event, or `nil` if the sequence has finished.
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
         }
     }
 
+    /// Returns an asynchronous iterator over the consumer event sequence.
     public func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
@@ -67,6 +70,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     let stateMachine: LockedMachine
     let pollInterval: Duration
 
+    /// The type of message the sequence yields.
     public typealias Element = KafkaConsumerMessage
 
     /// An asynchronous iterator over ``KafkaConsumerMessage`` values received from the Kafka cluster.
@@ -95,6 +99,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
             )
         }
 
+        /// Returns the next consumer message, or `nil` when the consumer has shut down or the task is canceled.
+        ///
+        /// - Throws: A ``KafkaError`` if polling for the next message fails.
         public func next() async throws -> Element? {
             while !Task.isCancelled {
                 let action = self.stateMachineHolder.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
@@ -130,6 +137,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         }
     }
 
+    /// Returns an asynchronous iterator over the consumer message sequence.
     public func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(
             stateMachine: self.stateMachine,
@@ -312,6 +320,9 @@ public final class KafkaConsumer: Sendable, Service {
         return (consumer, eventsSequence)
     }
 
+    /// Creates a new consumer from a `KafkaConsumerConfiguration`.
+    ///
+    /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
     @available(*, deprecated, message: "Use init(config:logger:) instead")
     public convenience init(
         configuration: KafkaConsumerConfiguration,
@@ -323,6 +334,9 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
+    /// Creates a new consumer and an event sequence from a `KafkaConsumerConfiguration`.
+    ///
+    /// This method is deprecated. Use ``makeConsumerWithEvents(config:logger:)`` instead.
     @available(*, deprecated, message: "Use makeConsumerWithEvents(config:logger:) instead")
     public static func makeConsumerWithEvents(
         configuration: KafkaConsumerConfiguration,
@@ -712,6 +726,9 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
+    /// Commits the offset of the given message synchronously.
+    ///
+    /// This method is deprecated. Use ``commit(_:)`` instead.
     @available(*, deprecated, renamed: "commit")
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
         try await self.commit(message)

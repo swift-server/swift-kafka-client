@@ -22,6 +22,7 @@ public struct KafkaTopicConfiguration {
             self.rawValue = rawValue
         }
 
+        /// Creates a required-acknowledgments value that requires at least the given number of in-sync replica acknowledgments.
         public static func atLeast(_ value: Int) -> RequiredAcknowledgments {
             .init(rawValue: value)
         }
@@ -58,7 +59,9 @@ public struct KafkaTopicConfiguration {
             self.rawValue = rawValue
         }
 
-        /// (Lowest granularity is milliseconds)
+        /// Creates a message-delivery timeout from the given duration.
+        ///
+        /// - Note: The lowest granularity is milliseconds.
         public static func timeout(_ value: Duration) -> MessageTimeout {
             precondition(
                 value.canBeRepresentedAsMilliseconds,
@@ -67,6 +70,7 @@ public struct KafkaTopicConfiguration {
             return .init(rawValue: value.inMilliseconds)
         }
 
+        /// A message timeout that never expires; messages remain queued for delivery indefinitely.
         public static let infinite: MessageTimeout = .init(rawValue: 0)
     }
 
@@ -81,6 +85,7 @@ public struct KafkaTopicConfiguration {
 
     /// Partitioner. Computes the partition where a message is stored.
     public struct Partitioner: Sendable, Hashable, CustomStringConvertible {
+        /// A textual representation of the partitioner algorithm.
         public let description: String
 
         /// Random distribution.
@@ -115,6 +120,9 @@ public struct KafkaTopicConfiguration {
                 self.rawValue = rawValue
             }
 
+            /// Creates a compression level with the given numeric value.
+            ///
+            /// Valid ranges depend on the selected codec.
             public static func level(_ value: Int) -> Level {
                 .init(rawValue: value)
             }
@@ -170,10 +178,12 @@ public struct KafkaTopicConfiguration {
 
             private let _internal: _Codec
 
+            /// A textual representation of the compression codec name.
             public var description: String {
                 self._internal.description
             }
 
+            /// The compression level associated with the codec, or `.codecDependent` when the codec has no configurable level.
             public var level: Level {
                 self._internal.level
             }
@@ -223,6 +233,7 @@ public struct KafkaTopicConfiguration {
     /// Compression-related configuration options.
     public var compression: Compression = .init()
 
+    /// Creates a new topic configuration with default values.
     public init() {}
 }
 

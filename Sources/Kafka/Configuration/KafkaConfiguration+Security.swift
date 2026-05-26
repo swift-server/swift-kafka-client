@@ -99,6 +99,11 @@ extension KafkaConfiguration {
             /// The password associated with the private key.
             public var password: String
 
+            /// Creates a new private key reference from the given location and password.
+            ///
+            /// - Parameters:
+            ///   - location: The private key's location, either a file path or an inline PEM string.
+            ///   - password: The password associated with the private key.
             public init(location: Location, password: String) {
                 self.key = location
                 self.password = password
@@ -112,6 +117,11 @@ extension KafkaConfiguration {
             /// The key store's password.
             public var password: String
 
+            /// Creates a new key store reference from the given file location and password.
+            ///
+            /// - Parameters:
+            ///   - location: Path to the PKCS#12 key store.
+            ///   - password: The key store's password.
             public init(location: String, password: String) {
                 self.location = location
                 self.password = password
@@ -200,6 +210,9 @@ extension KafkaConfiguration {
             certificateRevocationListPath: nil
         )
 
+        /// Creates a new TLS configuration with default values.
+        ///
+        /// By default, no client identity is configured and the broker is verified using probed trust roots.
         public init() {}
 
         // MARK: TLSConfiguration + Dictionary
@@ -285,7 +298,9 @@ extension KafkaConfiguration {
                     self.rawValue = rawValue
                 }
 
-                /// (Lowest granularity is milliseconds)
+                /// Creates a minimum interval between key refresh attempts from the given duration.
+                ///
+                /// - Note: The lowest granularity is milliseconds.
                 public static func value(_ value: Duration) -> KeyRefreshAttempts {
                     precondition(
                         value.canBeRepresentedAsMilliseconds,
@@ -304,6 +319,9 @@ extension KafkaConfiguration {
             /// Default: `.value(.milliseconds(60000))`
             public var minTimeBeforeRelogin: KeyRefreshAttempts = .value(.milliseconds(60000))
 
+            /// Creates a new Kerberos configuration that authenticates using the given keytab.
+            ///
+            /// - Parameter keytab: Path to the Kerberos keytab file.
             public init(keytab: String) {
                 self.keytab = keytab
             }

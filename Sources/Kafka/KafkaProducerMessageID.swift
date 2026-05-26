@@ -27,6 +27,7 @@ public struct KafkaProducerMessageID {
 // MARK: - KafkaProducerMessageID + CustomStringConvertible
 
 extension KafkaProducerMessageID: CustomStringConvertible {
+    /// A textual representation of the producer message identifier.
     public var description: String {
         String(self.rawValue)
     }
@@ -39,6 +40,7 @@ extension KafkaProducerMessageID: Hashable {}
 // MARK: - KafkaProducerMessageID + Comparable
 
 extension KafkaProducerMessageID: Comparable {
+    /// Returns a Boolean value that indicates whether the first identifier is ordered before the second.
     public static func < (lhs: KafkaProducerMessageID, rhs: KafkaProducerMessageID) -> Bool {
         lhs.rawValue < rhs.rawValue
     }

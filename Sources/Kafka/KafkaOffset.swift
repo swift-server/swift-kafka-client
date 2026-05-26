@@ -16,8 +16,10 @@ import Crdkafka
 
 /// A message offset within a Kafka partition queue.
 public struct KafkaOffset: RawRepresentable {
+    /// The raw integer value of the offset.
     public var rawValue: Int
 
+    /// Creates a Kafka offset from its raw integer value.
     public init(rawValue: Int) {
         self.rawValue = rawValue
     }
