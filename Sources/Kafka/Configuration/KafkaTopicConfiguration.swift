@@ -26,7 +26,7 @@ public struct KafkaTopicConfiguration {
             .init(rawValue: value)
         }
 
-        /// Broker will block until the message is committed by all in-sync replicas (ISRs).
+        /// Broker blocks until the message is committed by all in-sync replicas (ISRs).
         public static let all: RequiredAcknowledgments = .init(rawValue: -1)
 
         /// Broker does not send any response/ack to the client.
@@ -105,7 +105,7 @@ public struct KafkaTopicConfiguration {
     /// Compression-related configuration options.
     public struct Compression: Sendable, Hashable {
         /// Compression level parameter for algorithm selected by configuration property ``codec-swift.property``.
-        /// Higher values will result in better compression at the cost of more CPU usage.
+        /// Higher values produce better compression at the cost of more CPU usage.
         public struct Level: Sendable, Hashable {
             internal let rawValue: Int
 

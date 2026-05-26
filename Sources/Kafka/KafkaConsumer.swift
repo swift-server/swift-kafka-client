@@ -253,8 +253,8 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// Use the asynchronous sequence to consume events.
     ///
-    /// - Important: When the asynchronous sequence is deinited the consumer will be shut down and disallowed from sending more messages.
-    /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
+    /// - Important: When the asynchronous sequence is deinitialized, the consumer shuts down and stops accepting new messages.
+    ///   Additionally, consume the asynchronous sequence; otherwise the events buffer in memory indefinitely.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
@@ -401,7 +401,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// Pauses consumption for the given partitions.
     ///
     /// Paused partitions remain in the consumer group and continue heartbeating
-    /// but will not return messages from ``messages``.
+    /// but don't return messages from ``messages``.
     ///
     /// - Parameter topicPartitions: The partitions to pause.
     /// - Throws: A ``KafkaError`` if the consumer is closed or pausing failed.
@@ -480,7 +480,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Starts the ``KafkaConsumer``.
     ///
-    /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
+    /// - Important: This method **must** be called and runs until either the calling task is canceled or gracefully shut down.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -659,11 +659,11 @@ public final class KafkaConsumer: Sendable, Service {
     /// 1. Set `enableAutoOffsetStore` to `false` in the consumer configuration.
     /// 2. Keep `enableAutoCommit` as `true` (the default).
     /// 3. After successfully processing a message, call `storeOffset(_:)`.
-    /// 4. The auto-commit timer will periodically commit stored offsets to the broker.
+    /// 4. The auto-commit timer periodically commits stored offsets to the broker.
     ///
     /// This ensures that only offsets for **successfully processed** messages are committed.
-    /// If the application crashes before calling `storeOffset`, the message will be
-    /// re-delivered on the next consumer start (at-least-once).
+    /// If the application crashes before calling `storeOffset`, the consumer re-delivers
+    /// the message on the next consumer start (at-least-once).
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoOffsetStore`` is not set to `false`.
     ///

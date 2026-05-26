@@ -16,8 +16,8 @@ public struct KafkaProducerConfiguration {
     // MARK: - Kafka-specific Config properties
 
     /// If the ``isAutoCreateTopicsEnabled`` option is set to `true`,
-    /// the broker will automatically generate topics when producing data to non-existent topics.
-    /// The configuration specified in this ``KafkaTopicConfiguration`` will be applied to the newly created topic.
+    /// the broker automatically generates topics when producing data to nonexistent topics.
+    /// The configuration specified in this ``KafkaTopicConfiguration`` is applied to the newly created topic.
     /// Default: See default values of ``KafkaTopicConfiguration``
     public var topicConfiguration: KafkaTopicConfiguration = .init()
 
@@ -39,7 +39,7 @@ public struct KafkaProducerConfiguration {
 
     // MARK: - Producer-specific Config Properties
 
-    /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order.
+    /// When set to `true`, the producer ensures that messages are successfully produced exactly once and in the original produce order.
     /// The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled:
     /// ``KafkaProducerConfiguration/maximumInFlightRequestsPerConnection`` = `5` (must be less than or equal to 5),
     /// ``KafkaProducerConfiguration/maximumMessageSendRetries`` = `UInt32.max` (must be greater than 0),

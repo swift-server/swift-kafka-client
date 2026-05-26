@@ -147,8 +147,8 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// Use the asynchronous sequence to consume events.
     ///
-    /// - Important: When the asynchronous sequence is deinited the producer will be shut down and disallowed from sending more messages.
-    /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
+    /// - Important: When the asynchronous sequence is deinitialized, the producer shuts down and stops accepting new messages.
+    ///   Additionally, consume the asynchronous sequence; otherwise the events buffer in memory indefinitely.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -228,7 +228,7 @@ public final class KafkaProducer: Service, Sendable {
 
     /// Starts the ``KafkaProducer``.
     ///
-    /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
+    /// - Important: This method **must** be called and runs until either the calling task is canceled or gracefully shut down.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -328,7 +328,7 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// This method does not wait until the message is sent and acknowledged by the cluster.
     /// Instead, it buffers the message and returns immediately.
-    /// The message will be sent out with the next batch of messages.
+    /// The producer sends the message with the next batch of messages.
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` to send.
     /// - Returns: Unique ``KafkaProducerMessageID`` matching the ``KafkaDeliveryReport/id`` property

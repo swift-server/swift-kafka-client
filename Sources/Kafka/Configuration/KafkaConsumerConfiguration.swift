@@ -73,7 +73,7 @@ public struct KafkaConsumerConfiguration {
     public struct SessionOptions: Sendable, Hashable {
         /// Client group session and failure detection timeout.
         /// The consumer sends periodic heartbeats (``KafkaConsumerConfiguration/heartbeatInterval``) to indicate its liveness to the broker.
-        /// If no heartbeats are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance.
+        /// If no heartbeats are received by the broker for a group member within the session timeout, the broker removes the consumer from the group and triggers a rebalance.
         /// (Lowest granularity is milliseconds)
         /// Default: `.milliseconds(45000)`
         public var timeout: Duration = .milliseconds(45000) {
@@ -103,7 +103,7 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// Maximum allowed time between calls to consume messages. If this interval is exceeded the consumer is considered failed and the group will rebalance to reassign the partitions to another consumer group member.
+    /// Maximum allowed time between calls to consume messages. If this interval is exceeded, the consumer is considered failed and the group rebalances to reassign the partitions to another consumer group member.
     ///
     /// - Warning: Offset commits may be not possible at this point.
     ///

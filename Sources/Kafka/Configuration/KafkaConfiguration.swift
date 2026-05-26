@@ -42,7 +42,7 @@ public enum KafkaConfiguration {
         /// Default: `1_000_000`
         public var maximumBytes: Int = 1_000_000
 
-        /// Maximum size for a message to be copied to buffer. Messages larger than this will be passed by reference (zero-copy) at the expense of larger iovecs.
+        /// Maximum size for a message to be copied to buffer. Messages larger than this are passed by reference (zero-copy) at the expense of larger iovecs.
         /// Default: `65535`
         public var maximumBytesToCopy: Int = 65535
 
@@ -73,11 +73,11 @@ public enum KafkaConfiguration {
         }
 
         /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions, or partition leader changes.
-        /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription, or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
+        /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription, or no assignment) then only the broker list is refreshed every interval but no more often than every 10s.
         /// Default: `.interval(.milliseconds(300_000))`
         public var refreshInterval: RefreshInterval = .interval(.milliseconds(300_000))
 
-        /// When a topic loses its leader a new metadata request will be enqueued with this initial interval, exponentially increasing until the topic metadata has been refreshed. This is used to recover quickly from transitioning leader brokers.
+        /// When a topic loses its leader, the client enqueues a new metadata request with this initial interval, exponentially increasing until the topic metadata has been refreshed. This is used to recover quickly from transitioning leader brokers.
         /// Default: `.milliseconds(250)`
         public var refreshFastInterval: Duration = .milliseconds(250) {
             didSet {
@@ -92,7 +92,7 @@ public enum KafkaConfiguration {
         /// Default: `true`
         public var isSparseRefreshingEnabled: Bool = true
 
-        /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic will seem to be nonexistent and the client will mark the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as nonexistent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, for example, on `send()`.
+        /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic seems nonexistent and the client marks the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as nonexistent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, for example, on `send()`.
         /// Default: `.milliseconds(30000)`
         public var maximumPropagation: Duration = .milliseconds(30000) {
             didSet {
@@ -108,7 +108,7 @@ public enum KafkaConfiguration {
 
     /// Socket options.
     public struct SocketOptions: Sendable, Hashable {
-        /// Default timeout for network requests. Producer: ProduceRequests will use the lesser value of ``KafkaConfiguration/SocketOptions/timeout``
+        /// Default timeout for network requests. Producer: ProduceRequests use the lesser value of ``KafkaConfiguration/SocketOptions/timeout``
         /// and remaining ``KafkaTopicConfiguration/messageTimeout``for the first message in the batch.
         /// Default: `.milliseconds(60000)`
         public var timeout: Duration = .milliseconds(60000) {
@@ -176,7 +176,7 @@ public enum KafkaConfiguration {
         public var maximumFailures: MaximumFailures = .failures(1)
 
         /// Maximum time allowed for broker connection setup (TCP connection setup as well SSL and SASL handshake).
-        /// If the connection to the broker is not fully functional after this the connection will be closed and retried.
+        /// If the connection to the broker is not fully functional after this, the client closes and retries the connection.
         /// Default: `.milliseconds(30000)`
         public var connectionSetupTimeout: Duration = .milliseconds(30000)
 

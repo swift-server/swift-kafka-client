@@ -17,12 +17,12 @@ import NIOCore
 
 /// Message that is sent by the ``KafkaProducer``.
 public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
-    /// The topic to which the message will be sent.
+    /// The topic the producer sends the message to.
     public var topic: String
 
-    /// The partition to which the message will be sent.
+    /// The partition the producer sends the message to.
     /// Defaults to ``KafkaPartition/unassigned``.
-    /// This means the message will be automatically assigned a partition using the topic's partitioner function.
+    /// When unassigned, the topic's partitioner function selects a partition automatically.
     public var partition: KafkaPartition
 
     /// The headers of the message.
@@ -39,10 +39,10 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     /// Create a new ``KafkaProducerMessage`` with a ``KafkaContiguousBytes`` key and value.
     ///
     /// - Parameters:
-    ///     - topic: The topic the message will be sent to. Topics may be created by the ``KafkaProducer`` if nonexistent.
-    ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
+    ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
+    ///     - partition: The topic partition the producer sends the message to. If you don't set this explicitly, the producer assigns the partition automatically.
     ///     - headers: The headers of the message.
-    ///     - key: Used to guarantee that messages with the same key will be sent to the same partition so that their order is preserved.
+    ///     - key: Guarantees that messages with the same key go to the same partition, preserving their order.
     ///     - value: The message's value.
     public init(
         topic: String,
@@ -63,8 +63,8 @@ extension KafkaProducerMessage where Key == Never {
     /// Create a new ``KafkaProducerMessage`` with a ``KafkaContiguousBytes`` value.
     ///
     /// - Parameters:
-    ///     - topic: The topic the message will be sent to. Topics may be created by the ``KafkaProducer`` if nonexistent.
-    ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
+    ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
+    ///     - partition: The topic partition the producer sends the message to. If you don't set this explicitly, the producer assigns the partition automatically.
     ///     - headers: The headers of the message.
     ///     - value: The message body.
     public init(

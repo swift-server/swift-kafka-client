@@ -171,7 +171,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     /// before destroying the error object. This preserves the full error metadata
     /// that is only available on the rich error type.
     ///
-    /// - Parameter error: A non-nil `rd_kafka_error_t*` pointer. Will be destroyed after extraction.
+    /// - Parameter error: A non-nil `rd_kafka_error_t*` pointer. The pointer is destroyed after extraction.
     static func rdKafkaError(
         wrapping error: OpaquePointer,
         file: String = #fileID,
