@@ -226,6 +226,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// Creates a new consumer.
     ///
     /// This creates a consumer that does not listen to any events other than consumer messages.
+    /// To also receive events, use ``makeConsumerWithEvents(config:logger:)``.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
@@ -505,6 +506,8 @@ public final class KafkaConsumer: Sendable, Service {
     /// Starts the consumer.
     ///
     /// - Important: Call this method to drive the consumer. It runs until either the calling task is canceled or gracefully shut down.
+    ///
+    /// Stop the consumer with ``triggerGracefulShutdown()``.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()

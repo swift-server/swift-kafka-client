@@ -206,6 +206,8 @@ public struct KafkaProducerConfiguration {
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
     /// Creates a new producer configuration; deprecated in favor of the newer config type.
+    ///
+    /// Use ``KafkaProducerConfig`` for new code.
     @available(*, deprecated, message: "Use KafkaProducerConfig instead")
     public init(
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]

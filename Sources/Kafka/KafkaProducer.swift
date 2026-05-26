@@ -113,6 +113,7 @@ public final class KafkaProducer: Service, Sendable {
     /// Creates a new producer.
     ///
     /// This creates a producer without listening for events.
+    /// To also receive events, use ``makeProducerWithEvents(config:logger:)``.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -245,6 +246,8 @@ public final class KafkaProducer: Service, Sendable {
     /// Starts the producer.
     ///
     /// - Important: Call this method to drive the producer. It runs until either the calling task is canceled or gracefully shut down.
+    ///
+    /// Stop the producer with ``triggerGracefulShutdown()``.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -335,6 +338,8 @@ public final class KafkaProducer: Service, Sendable {
     /// Shuts the producer down gracefully.
     ///
     /// Flushes any buffered messages and waits until the producer receives a callback for each one. After flushing, this method shuts down the connection to Kafka and cleans up any remaining state.
+    ///
+    /// Pairs with ``run()``.
     public func triggerGracefulShutdown() {
         self.stateMachine.withLockedValue { $0.finish() }
     }
@@ -344,6 +349,8 @@ public final class KafkaProducer: Service, Sendable {
     /// This method does not wait until the message is sent and acknowledged by the cluster.
     /// Instead, it buffers the message and returns immediately.
     /// The producer sends the message with the next batch of messages.
+    ///
+    /// For acknowledged delivery, use ``sendAndAwait(_:)``.
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` to send.
     /// - Returns: Unique ``KafkaProducerMessageID`` matching the ``KafkaDeliveryReport/id`` property

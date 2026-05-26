@@ -273,6 +273,8 @@ public struct KafkaConsumerConfiguration {
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
     /// Creates a new consumer configuration; deprecated in favor of the newer config type.
+    ///
+    /// Use ``KafkaConsumerConfig`` for new code.
     @available(*, deprecated, message: "Use KafkaConsumerConfig instead")
     public init(
         consumptionStrategy: ConsumptionStrategy,

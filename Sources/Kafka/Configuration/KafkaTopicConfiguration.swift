@@ -13,6 +13,8 @@
 //===----------------------------------------------------------------------===//
 
 /// Configuration applied to new topics that the producer creates.
+///
+/// The ``KafkaProducer`` applies this configuration when auto-creating topics.
 public struct KafkaTopicConfiguration {
     /// The number of acknowledgments the leader broker must receive from in-sync replica (ISR) brokers before responding to the request.
     public struct RequiredAcknowledgments: Sendable, Hashable {

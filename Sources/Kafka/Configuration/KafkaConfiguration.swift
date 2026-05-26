@@ -244,6 +244,8 @@ public enum KafkaConfiguration {
 
         /// The IP address family the broker is allowed to use.
         ///
+        /// See ``KafkaConfiguration/IPAddressFamily`` for the available values.
+        ///
         /// Default: `.any`
         public var addressFamily: IPAddressFamily = .any
 
