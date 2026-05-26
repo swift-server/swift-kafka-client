@@ -82,7 +82,7 @@ extension KafkaConfiguration {
 
                 let _internal: _Location
 
-                /// A key located in a file at the given `location`.
+                /// A key loaded from a file at the path you provide.
                 public static func file(location: String) -> Location {
                     Location(
                         _internal: .file(location: location)
@@ -102,7 +102,7 @@ extension KafkaConfiguration {
             /// The password associated with the private key.
             public var password: String
 
-            /// Creates a new private key reference from the given location and password.
+            /// Creates a new private key reference from the location and password you provide.
             ///
             /// - Parameters:
             ///   - location: The private key's location, either a file path or an inline PEM string.
@@ -120,7 +120,7 @@ extension KafkaConfiguration {
             /// The key store's password.
             public var password: String
 
-            /// Creates a new key store reference from the given file location and password.
+            /// Creates a new key store reference from the file location and password you provide.
             ///
             /// - Parameters:
             ///   - location: Path to the PKCS#12 key store.
@@ -143,7 +143,7 @@ extension KafkaConfiguration {
 
             let _internal: _ClientIdentity
 
-            /// Use TLS client verification with a given private/public key pair.
+            /// Use TLS client verification with the private/public key pair you provide.
             ///
             /// - Parameters:
             ///     - privateKey: The client's private key (PEM) used for authentication.
@@ -160,7 +160,7 @@ extension KafkaConfiguration {
                 )
             }
 
-            /// Use TLS client verification with a given key store.
+            /// Use TLS client verification with the key store you provide.
             ///
             /// - Parameters:
             ///     - keyStore: The client's keystore (PKCS#12) used for authentication.
@@ -310,7 +310,7 @@ extension KafkaConfiguration {
                     self.rawValue = rawValue
                 }
 
-                /// Creates a minimum interval between key refresh attempts from the given duration.
+                /// Creates a minimum interval between key refresh attempts from the duration you provide.
                 ///
                 /// - Note: The lowest granularity is milliseconds.
                 public static func value(_ value: Duration) -> KeyRefreshAttempts {
@@ -333,7 +333,7 @@ extension KafkaConfiguration {
             /// Default: `.value(.milliseconds(60000))`
             public var minTimeBeforeRelogin: KeyRefreshAttempts = .value(.milliseconds(60000))
 
-            /// Creates a new Kerberos configuration that authenticates using the given keytab.
+            /// Creates a new Kerberos configuration that authenticates using the keytab you provide.
             ///
             /// - Parameter keytab: Path to the Kerberos keytab file.
             public init(keytab: String) {

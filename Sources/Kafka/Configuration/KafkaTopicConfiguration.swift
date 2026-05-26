@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Configuration applied to new topics that the ``KafkaProducer`` creates.
+/// Configuration applied to new topics that the producer creates.
 public struct KafkaTopicConfiguration {
     /// The number of acknowledgments the leader broker must receive from in-sync replica (ISR) brokers before responding to the request.
     public struct RequiredAcknowledgments: Sendable, Hashable {
@@ -22,7 +22,7 @@ public struct KafkaTopicConfiguration {
             self.rawValue = rawValue
         }
 
-        /// Creates a required-acknowledgments value that requires at least the given number of in-sync replica acknowledgments.
+        /// Creates a required-acknowledgments value that requires at least the number of in-sync replica acknowledgments you specify.
         public static func atLeast(_ value: Int) -> RequiredAcknowledgments {
             .init(rawValue: value)
         }
@@ -64,7 +64,7 @@ public struct KafkaTopicConfiguration {
             self.rawValue = rawValue
         }
 
-        /// Creates a message-delivery timeout from the given duration.
+        /// Creates a message-delivery timeout from the duration you provide.
         ///
         /// - Note: The lowest granularity is milliseconds.
         public static func timeout(_ value: Duration) -> MessageTimeout {
@@ -89,9 +89,9 @@ public struct KafkaTopicConfiguration {
     /// Default: `.timeout(.milliseconds(300_000))`
     public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
 
-    /// Partitioner.
+    /// The algorithm a producer uses to assign each message to a partition of its topic.
     ///
-    /// Computes the partition where a message is stored.
+    /// Most algorithms hash the message key so identical keys map to the same partition; messages with no key are typically distributed at random.
     public struct Partitioner: Sendable, Hashable, CustomStringConvertible {
         /// A textual representation of the partitioner algorithm.
         public let description: String
@@ -114,16 +114,18 @@ public struct KafkaTopicConfiguration {
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
     }
 
-    /// Partitioner.
+    /// The partitioning algorithm applied to messages produced to this topic.
     ///
-    /// See ``KafkaTopicConfiguration/Partitioner-swift.struct`` for more information.
+    /// See ``KafkaTopicConfiguration/Partitioner-swift.struct`` for the available algorithms.
     ///
     /// Default: `.consistentRandom`
     public var partitioner: Partitioner = .consistentRandom
 
     /// Compression-related configuration options.
     public struct Compression: Sendable, Hashable {
-        /// The compression level for the algorithm selected by the ``codec-swift.property`` configuration property.
+        /// A compression level for the configured codec.
+        ///
+        /// The valid range depends on the codec selected by ``codec-swift.property``.
         ///
         /// Higher values produce better compression at the cost of more CPU usage.
         public struct Level: Sendable, Hashable {
@@ -133,7 +135,7 @@ public struct KafkaTopicConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// Creates a compression level with the given numeric value.
+            /// Creates a compression level with the numeric value you provide.
             ///
             /// Valid ranges depend on the selected codec.
             public static func level(_ value: Int) -> Level {

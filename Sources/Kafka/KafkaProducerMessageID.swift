@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An identifier for a message produced by a ``KafkaProducer``.
+/// An identifier for a message produced by a Kafka producer.
 ///
 /// Use a ``KafkaProducerMessageID`` to correlate an incoming ``KafkaDeliveryReport`` with the
 /// corresponding ``KafkaProducer/send(_:)`` call that produced it.

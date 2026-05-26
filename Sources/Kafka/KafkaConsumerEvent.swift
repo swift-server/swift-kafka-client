@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An event delivered through the ``KafkaConsumerEvents`` asynchronous sequence.
+/// An event reported by a Kafka consumer, such as a rebalance notification or an error.
+///
+/// Delivered through ``KafkaConsumerEvents``.
 public enum KafkaConsumerEvent: Sendable, Hashable {
     /// A consumer group rebalance occurred.
     ///

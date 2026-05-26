@@ -27,7 +27,7 @@ public enum _TestMessagesError: Error {
     case deliveryReportsIncorrect
 }
 
-/// Builds an array of test producer messages with unique keys for the given topic.
+/// Builds an array of test producer messages with unique keys for the topic you provide.
 @_spi(Internal)
 public func _createTestMessages(
     topic: String,
@@ -44,7 +44,7 @@ public func _createTestMessages(
     }
 }
 
-/// Sends the given messages and verifies that each one is acknowledged via the producer's events sequence.
+/// Sends the messages you provide and verifies that each one is acknowledged via the producer's events sequence.
 @_spi(Internal)
 public func _sendAndAcknowledgeMessages(
     producer: KafkaProducer,

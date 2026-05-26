@@ -15,7 +15,7 @@
 import Crdkafka
 import NIOCore
 
-/// A message that the ``KafkaProducer`` sends to the Kafka cluster.
+/// A message a producer sends to the Kafka cluster.
 public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
     /// The topic the producer sends the message to.
     public var topic: String
@@ -39,7 +39,9 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     /// The value of the message to send.
     public var value: Value
 
-    /// Create a new ``KafkaProducerMessage`` with a ``KafkaContiguousBytes`` key and value.
+    /// Creates a producer message with key and value content.
+    ///
+    /// Both `key` and `value` must conform to ``KafkaContiguousBytes``.
     ///
     /// - Parameters:
     ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
@@ -63,7 +65,9 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
 }
 
 extension KafkaProducerMessage where Key == Never {
-    /// Create a new ``KafkaProducerMessage`` with a ``KafkaContiguousBytes`` value.
+    /// Creates a producer message with value content and no key.
+    ///
+    /// The `value` must conform to ``KafkaContiguousBytes``.
     ///
     /// - Parameters:
     ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.

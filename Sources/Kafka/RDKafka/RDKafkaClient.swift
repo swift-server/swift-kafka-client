@@ -731,8 +731,8 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
-    /// Non-blocking "fire-and-forget" commit of a `message`'s offset to Kafka.
-    /// Schedules a commit and returns immediately.
+    /// Schedules a non-blocking, fire-and-forget commit of the message's offset to Kafka.
+    ///
     /// The client discards any errors encountered after scheduling the commit.
     ///
     /// - Parameter message: Last received message to mark as read.

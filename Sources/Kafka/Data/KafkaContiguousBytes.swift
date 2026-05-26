@@ -21,7 +21,7 @@
 /// By conforming your own types to this protocol, you can pass instances of those types
 /// directly to ``KafkaProducerMessage`` as key and value.
 public protocol KafkaContiguousBytes {
-    /// Calls the given closure with the contents of the underlying storage.
+    /// Calls the closure you provide with the contents of the underlying storage.
     ///
     /// - Note: Calling `withUnsafeBytes` multiple times doesn't guarantee that
     ///         the same buffer pointer is passed in every time.

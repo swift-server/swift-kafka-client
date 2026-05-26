@@ -45,7 +45,7 @@ public enum KafkaConfiguration {
     public struct MessageOptions: Sendable, Hashable {
         /// Maximum Kafka protocol request message size.
         ///
-        /// Due to differing framing overhead between protocol versions, the producer can't reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests.
+        /// Due to differing framing overhead between protocol versions, the producer can't reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol `ProduceRequest`s.
         /// The broker enforces the topic's `max.message.bytes` limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
         ///
         /// Default: `1_000_000`
@@ -64,7 +64,9 @@ public enum KafkaConfiguration {
 
     /// Options that control how the client refreshes topic and broker metadata.
     public struct TopicMetadataOptions: Sendable, Hashable {
-        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions, or partition leader changes.
+        /// The interval at which the client refreshes topic and broker metadata.
+        ///
+        /// Periodic refreshes proactively discover new brokers, topics, partitions, and partition leader changes.
         public struct RefreshInterval: Sendable, Hashable {
             internal let rawValue: Int
 
@@ -72,7 +74,7 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// Creates a refresh interval for the given duration.
+            /// Creates a refresh interval for the duration you provide.
             ///
             /// - Note: The lowest granularity is milliseconds.
             public static func interval(_ value: Duration) -> RefreshInterval {
@@ -87,8 +89,9 @@ public enum KafkaConfiguration {
             public static let disabled: RefreshInterval = .init(rawValue: -1)
         }
 
-        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions, or partition leader changes.
+        /// The interval at which topic and broker metadata is refreshed.
         ///
+        /// Periodic refreshes proactively discover new brokers, topics, partitions, and partition leader changes.
         /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription, or no assignment) then only the broker list is refreshed every interval but no more often than every 10s.
         ///
         /// Default: `.interval(.milliseconds(300_000))`
@@ -113,9 +116,11 @@ public enum KafkaConfiguration {
         /// Default: `true`
         public var isSparseRefreshingEnabled: Bool = true
 
-        /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers.
+        /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate to all brokers.
         ///
-        /// If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic seems nonexistent and the client marks the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as nonexistent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, for example, on `send()`.
+        /// If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic seems nonexistent and the client marks the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC.
+        /// This setting delays marking a topic as nonexistent until the configured propagation max time has passed.
+        /// The maximum propagation time is calculated from the time the topic is first referenced in the client, for example, on `send()`.
         ///
         /// Default: `.milliseconds(30000)`
         public var maximumPropagation: Duration = .milliseconds(30000) {
@@ -135,7 +140,7 @@ public enum KafkaConfiguration {
     public struct SocketOptions: Sendable, Hashable {
         /// Default timeout for network requests.
         ///
-        /// Producer: ProduceRequests use the lesser value of ``KafkaConfiguration/SocketOptions/timeout``
+        /// Producer: `ProduceRequest`s use the lesser value of ``KafkaConfiguration/SocketOptions/timeout``
         /// and remaining ``KafkaTopicConfiguration/messageTimeout`` for the first message in the batch.
         ///
         /// Default: `.milliseconds(60000)`
@@ -156,7 +161,7 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// Creates a buffer size of the given number of bytes.
+            /// Creates a buffer size from the number of bytes you provide.
             public static func value(_ value: Int) -> BufferSize {
                 .init(rawValue: value)
             }
@@ -193,7 +198,7 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// Creates a maximum-failures threshold from the given number of send failures.
+            /// Creates a maximum-failures threshold from the number of send failures you provide.
             public static func failures(_ value: Int) -> MaximumFailures {
                 .init(rawValue: value)
             }
@@ -237,7 +242,7 @@ public enum KafkaConfiguration {
             }
         }
 
-        /// Allowed broker ``KafkaConfiguration/IPAddressFamily``.
+        /// The IP address family the broker is allowed to use.
         ///
         /// Default: `.any`
         public var addressFamily: IPAddressFamily = .any
@@ -256,7 +261,7 @@ public enum KafkaConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// Creates a reconnect backoff for the given duration.
+            /// Creates a reconnect backoff for the duration you provide.
             ///
             /// - Note: The lowest granularity is milliseconds.
             public static func backoff(_ value: Duration) -> Backoff {

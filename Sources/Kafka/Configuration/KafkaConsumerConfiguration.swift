@@ -14,7 +14,7 @@
 
 import struct Foundation.UUID
 
-/// Configuration values that control a `KafkaConsumer` instance.
+/// Configuration values that control a Kafka consumer instance.
 public struct KafkaConsumerConfiguration {
     // MARK: - Kafka-specific Config properties
 
@@ -39,7 +39,7 @@ public struct KafkaConsumerConfiguration {
         }
 
         /// A consumption strategy based on partition assignment.
-        /// The consumer reads from a specific partition of a topic at a given offset.
+        /// The consumer reads from a specific partition of a topic at the offset you provide.
         ///
         /// - Parameters:
         ///     - partition: The partition of the topic to consume from.
@@ -272,7 +272,7 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
-    /// Creates a new consumer configuration; deprecated in favor of `KafkaConsumerConfig`.
+    /// Creates a new consumer configuration; deprecated in favor of the newer config type.
     @available(*, deprecated, message: "Use KafkaConsumerConfig instead")
     public init(
         consumptionStrategy: ConsumptionStrategy,

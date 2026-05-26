@@ -26,7 +26,7 @@ private func queueEventCallback(_ rk: OpaquePointer?, _ context: UnsafeMutableRa
 
 @_spi(Internal)
 extension RDKafkaClient {
-    /// Create a topic with a unique name (`UUID`).
+    /// Creates a topic with a unique UUID-based name.
     /// - Parameter partitions: Partitions in topic (default: -1 - default for broker)
     /// - Returns: Name of newly created topic.
     /// - Throws: A ``KafkaError`` if the topic creation failed.
@@ -188,12 +188,12 @@ extension RDKafkaClient {
         }
     }
 
-    /// Creates an `RDKafkaClient` configured for topic management using the given consumer configuration.
+    /// Creates a topic-management client using the consumer configuration you provide.
     public static func makeClientForTopics(config: KafkaConsumerConfig, logger: Logger) throws -> RDKafkaClient {
         try Self.makeClient(type: .consumer, configDictionary: config.config, events: [], logger: logger)
     }
 
-    /// Creates an `RDKafkaClient` configured for topic management using the given consumer configuration.
+    /// Creates a topic-management client using the consumer configuration you provide.
     @available(*, deprecated, message: "Use makeClientForTopics(config:logger:) with KafkaConsumerConfig instead")
     public static func makeClientForTopics(config: KafkaConsumerConfiguration, logger: Logger) throws -> RDKafkaClient {
         try Self.makeClient(type: .consumer, configDictionary: config.dictionary, events: [], logger: logger)

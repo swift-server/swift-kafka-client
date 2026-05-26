@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An event delivered through the ``KafkaProducerEvents`` asynchronous sequence.
+/// An event reported by a Kafka producer, such as a delivery report or an error.
+///
+/// Delivered through ``KafkaProducerEvents``.
 public enum KafkaProducerEvent: Sendable, Hashable {
     /// A collection of delivery reports received from the Kafka cluster indicating the status of produced messages.
     case deliveryReports([KafkaDeliveryReport])

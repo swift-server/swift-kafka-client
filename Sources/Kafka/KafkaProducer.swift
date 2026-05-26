@@ -43,7 +43,9 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 
 // MARK: - KafkaProducerEvents
 
-/// An asynchronous sequence of ``KafkaProducerEvent`` values emitted by Kafka.
+/// An asynchronous sequence of producer events emitted by Kafka.
+///
+/// The sequence yields ``KafkaProducerEvent`` values such as delivery reports and errors.
 public struct KafkaProducerEvents: Sendable, AsyncSequence {
     /// The type of event the sequence yields.
     public typealias Element = KafkaProducerEvent
@@ -51,7 +53,9 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
-    /// An asynchronous iterator over ``KafkaProducerEvent`` values emitted by Kafka.
+    /// An asynchronous iterator over producer events emitted by Kafka.
+    ///
+    /// The iterator yields ``KafkaProducerEvent`` values such as delivery reports and errors.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
@@ -106,7 +110,7 @@ public final class KafkaProducer: Service, Sendable {
         self.logger = logger
     }
 
-    /// Creates a new ``KafkaProducer``.
+    /// Creates a new producer.
     ///
     /// This creates a producer without listening for events.
     ///
@@ -147,7 +151,9 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Creates a new ``KafkaProducer`` and a ``KafkaProducerEvents`` asynchronous sequence.
+    /// Creates a new producer paired with an asynchronous event sequence.
+    ///
+    /// The returned tuple pairs a ``KafkaProducer`` with its ``KafkaProducerEvents`` sequence.
     ///
     /// Use the asynchronous sequence to consume events.
     ///
@@ -208,7 +214,7 @@ public final class KafkaProducer: Service, Sendable {
         return (producer, eventsSequence)
     }
 
-    /// Creates a new producer from a `KafkaProducerConfiguration`.
+    /// Creates a new producer from a deprecated configuration value.
     ///
     /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
     @available(*, deprecated, message: "Use init(config:logger:) instead")
@@ -222,7 +228,7 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Creates a new producer and an event sequence from a `KafkaProducerConfiguration`.
+    /// Creates a new producer and an event sequence from a deprecated configuration value.
     ///
     /// This method is deprecated. Use ``makeProducerWithEvents(config:logger:)`` instead.
     @available(*, deprecated, message: "Use makeProducerWithEvents(config:logger:) instead")
@@ -236,7 +242,7 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Starts the ``KafkaProducer``.
+    /// Starts the producer.
     ///
     /// - Important: Call this method to drive the producer. It runs until either the calling task is canceled or gracefully shut down.
     public func run() async throws {
@@ -326,14 +332,14 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Shuts the ``KafkaProducer`` down gracefully.
+    /// Shuts the producer down gracefully.
     ///
     /// Flushes any buffered messages and waits until the producer receives a callback for each one. After flushing, this method shuts down the connection to Kafka and cleans up any remaining state.
     public func triggerGracefulShutdown() {
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
-    /// Sends a ``KafkaProducerMessage`` to the Kafka cluster.
+    /// Sends a message to the Kafka cluster.
     ///
     /// This method does not wait until the message is sent and acknowledged by the cluster.
     /// Instead, it buffers the message and returns immediately.
@@ -357,7 +363,7 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Sends a ``KafkaProducerMessage`` to the Kafka cluster and await the delivery report.
+    /// Sends a message to the Kafka cluster and awaits the delivery report.
     ///
     /// Unlike ``send(_:)``, this method suspends until the broker acknowledges (or rejects)
     /// the message. The returned ``KafkaDeliveryReport`` contains the acknowledgment status,

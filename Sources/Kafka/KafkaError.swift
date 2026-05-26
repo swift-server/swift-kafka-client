@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-/// An error that can occur on `Kafka` operations.
+/// An error that can occur during Kafka operations.
 ///
 /// - Note: `Hashable` conformance considers both the ``KafkaError/code``
 ///   and the ``KafkaError/rdKafkaCode``.
@@ -28,10 +28,10 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     /// Use the static constants (for example, `.allBrokersDown` or `.authentication`) to match
     /// against the ``KafkaError/rdKafkaCode`` property without importing Crdkafka.
     public struct RDKafkaCode: Hashable, Sendable, CustomStringConvertible {
-        /// The raw `Int32` value corresponding to the librdkafka error code.
+        /// The raw 32-bit value corresponding to the librdkafka error code.
         public let rawValue: Int32
 
-        /// Creates a librdkafka error code from its raw `Int32` value.
+        /// Creates a librdkafka error code from its raw 32-bit value.
         public init(rawValue: Int32) {
             self.rawValue = rawValue
         }

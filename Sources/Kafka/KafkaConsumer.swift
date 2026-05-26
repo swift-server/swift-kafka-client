@@ -37,7 +37,9 @@ extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
 
 // MARK: - KafkaConsumerEvents
 
-/// An asynchronous sequence of ``KafkaConsumerEvent`` values emitted by Kafka.
+/// An asynchronous sequence of consumer events emitted by Kafka.
+///
+/// The sequence yields ``KafkaConsumerEvent`` values such as rebalance notifications and errors.
 public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     /// The type of event the sequence yields.
     public typealias Element = KafkaConsumerEvent
@@ -45,7 +47,9 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
     let wrappedSequence: WrappedSequence
 
-    /// An asynchronous iterator over ``KafkaConsumerEvent`` values emitted by Kafka.
+    /// An asynchronous iterator over consumer events emitted by Kafka.
+    ///
+    /// The iterator yields ``KafkaConsumerEvent`` values such as rebalance notifications and errors.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
@@ -63,7 +67,9 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumerMessages
 
-/// An asynchronous sequence of ``KafkaConsumerMessage`` values received from the Kafka cluster.
+/// An asynchronous sequence of messages received from the Kafka cluster.
+///
+/// The sequence yields ``KafkaConsumerMessage`` values.
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
 
@@ -73,7 +79,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     /// The type of message the sequence yields.
     public typealias Element = KafkaConsumerMessage
 
-    /// An asynchronous iterator over ``KafkaConsumerMessage`` values received from the Kafka cluster.
+    /// An asynchronous iterator over messages received from the Kafka cluster.
+    ///
+    /// The iterator yields ``KafkaConsumerMessage`` values.
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
@@ -215,7 +223,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Creates a new ``KafkaConsumer``.
+    /// Creates a new consumer.
     ///
     /// This creates a consumer that does not listen to any events other than consumer messages.
     ///
@@ -257,7 +265,9 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
-    /// Creates a new ``KafkaConsumer`` and a ``KafkaConsumerEvents`` asynchronous sequence.
+    /// Creates a new consumer paired with an asynchronous event sequence.
+    ///
+    /// The returned tuple pairs a ``KafkaConsumer`` with its ``KafkaConsumerEvents`` sequence.
     ///
     /// Use the asynchronous sequence to consume events.
     ///
@@ -320,7 +330,7 @@ public final class KafkaConsumer: Sendable, Service {
         return (consumer, eventsSequence)
     }
 
-    /// Creates a new consumer from a `KafkaConsumerConfiguration`.
+    /// Creates a new consumer from a deprecated configuration value.
     ///
     /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
     @available(*, deprecated, message: "Use init(config:logger:) instead")
@@ -334,7 +344,7 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
-    /// Creates a new consumer and an event sequence from a `KafkaConsumerConfiguration`.
+    /// Creates a new consumer and an event sequence from a deprecated configuration value.
     ///
     /// This method is deprecated. Use ``makeConsumerWithEvents(config:logger:)`` instead.
     @available(*, deprecated, message: "Use makeConsumerWithEvents(config:logger:) instead")
@@ -350,7 +360,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     // MARK: - Subscription Management
 
-    /// Subscribes to the given list of topics.
+    /// Subscribes to the list of topics you provide.
     ///
     /// This replaces any previous subscription. The consumer assigns partitions
     /// automatically using the consumer group. The consumer treats topic names prefixed
@@ -412,7 +422,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Pauses consumption for the given partitions.
+    /// Pauses consumption for the partitions you provide.
     ///
     /// Paused partitions remain in the consumer group and continue heartbeating
     /// but don't return messages from ``messages``.
@@ -433,7 +443,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Resumes consumption for the given partitions.
+    /// Resumes consumption for the partitions you provide.
     ///
     /// - Parameter topicPartitions: The partitions to resume.
     /// - Throws: A ``KafkaError`` if the consumer is closed or resuming failed.
@@ -492,7 +502,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Starts the ``KafkaConsumer``.
+    /// Starts the consumer.
     ///
     /// - Important: Call this method to drive the consumer. It runs until either the calling task is canceled or gracefully shut down.
     public func run() async throws {
@@ -727,7 +737,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Commits the offset of the given message synchronously.
+    /// Synchronously commits the offset of the message you provide.
     ///
     /// This method is deprecated. Use ``commit(_:)`` instead.
     @available(*, deprecated, renamed: "commit")
@@ -800,7 +810,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Retrieves the last-committed offsets for the given topic+partition pairs from the broker.
+    /// Retrieves the last-committed offsets from the broker for the topic+partition pairs you provide.
     ///
     /// Use this to monitor consumer lag and to verify that the broker received the
     /// committed offsets.
@@ -827,7 +837,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Retrieves the current positions (next offset to be fetched) for the given topic+partition pairs.
+    /// Retrieves the current positions (next offset to be fetched) for the topic+partition pairs you provide.
     ///
     /// The position reflects the consumer's in-memory position, which is the last consumed
     /// message's offset + 1. Use the position to compute consumer lag against the committed offsets.
@@ -869,12 +879,12 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Seeks to specific offsets for the given partitions.
+    /// Seeks to specific offsets for the partitions you provide.
     ///
     /// Use this to replay messages or to skip ahead. The partitions
     /// must already be assigned to this consumer (via subscription or manual assignment).
     ///
-    /// This call purges all pre-fetched messages for the given partitions.
+    /// This call purges all pre-fetched messages for the partitions you provide.
     ///
     /// - Parameters:
     ///   - topicPartitionOffsets: An array of ``KafkaTopicPartitionOffset`` specifying where to seek.

@@ -33,7 +33,7 @@ public struct KafkaOffset: RawRepresentable {
     /// Start consuming from offset retrieved from offset store.
     public static let storedOffset = KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_STORED))
 
-    /// Start consuming with the `count` latest messages.
+    /// Start consuming with the latest messages of the topic.
     ///
     /// Example: Current end offset is at `12345` and `count = 200`.
     /// This means start reading offset from offset `12345 - 200 = 12145`.

@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Configuration values that control a `KafkaProducer` instance.
+/// Configuration values that control a Kafka producer instance.
 public struct KafkaProducerConfiguration {
     // MARK: - Kafka-specific Config properties
 
@@ -32,7 +32,7 @@ public struct KafkaProducerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// Maximum timeout for flushing outstanding produce requests when the ``KafkaProducer`` is shutting down.
+    /// Maximum timeout for flushing outstanding produce requests during producer shutdown.
     ///
     /// Default: `10000`
     public var flushTimeoutMilliseconds: Int = 10000 {
@@ -71,7 +71,7 @@ public struct KafkaProducerConfiguration {
                 self.rawValue = rawValue
             }
 
-            /// Creates a producer-queue message limit from the given maximum number of messages.
+            /// Creates a producer-queue message limit from the maximum number of messages you provide.
             public static func maximumLimit(_ value: Int) -> MessageLimit {
                 .init(rawValue: value)
             }
@@ -205,7 +205,7 @@ public struct KafkaProducerConfiguration {
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
-    /// Creates a new producer configuration; deprecated in favor of `KafkaProducerConfig`.
+    /// Creates a new producer configuration; deprecated in favor of the newer config type.
     @available(*, deprecated, message: "Use KafkaProducerConfig instead")
     public init(
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]

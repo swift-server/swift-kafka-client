@@ -24,10 +24,10 @@ public struct KafkaDeliveryReport: Sendable, Hashable {
         case failure(KafkaError)
     }
 
-    /// The ``Status`` of a Kafka producer message after attempting to send it.
+    /// The delivery status of the producer message.
     public var status: Status
 
-    /// The unique identifier the ``KafkaProducer`` assigned when sending the message to Kafka.
+    /// The unique identifier the producer assigned when sending the message to Kafka.
     ///
     /// ``KafkaProducer/send(_:)`` returns the same identifier, which correlates
     /// a sent message with a delivery report.
