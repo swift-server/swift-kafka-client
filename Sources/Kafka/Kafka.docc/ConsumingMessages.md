@@ -4,7 +4,7 @@ Receive records from Kafka topics as an asynchronous sequence, control offset co
 
 ## Overview
 
-A ``KafkaConsumer`` joins a consumer group and exposes records through a ``KafkaConsumerMessages`` asynchronous sequence. You iterate the sequence with `for try await`, and the consumer integrates naturally with structured concurrency, task cancellation, and graceful shutdown through `ServiceGroup`.
+A ``KafkaConsumer`` joins a consumer group and exposes records through a ``KafkaConsumerMessages`` asynchronous sequence. Iterate the sequence with `for try await`, and the consumer integrates naturally with structured concurrency, task cancellation, and graceful shutdown through `ServiceGroup`.
 
 By default, the consumer stores and commits offsets automatically as you iterate. For at-least-once delivery, you can disable automatic offset storage and store offsets yourself after your code finishes processing a record. For full control, you can also turn off the periodic auto-commit and commit explicitly.
 
@@ -15,7 +15,10 @@ A ``KafkaConsumerConfig`` holds the broker addresses and the consumption strateg
 ```swift
 var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
-config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
+config.consumptionStrategy = .group(
+    id: "example-group",
+    topics: ["topic-name"]
+)
 ```
 
 For security options, see <doc:SecuringConnections>.
@@ -53,7 +56,10 @@ For at-least-once semantics, disable automatic offset storage and call ``KafkaCo
 ```swift
 var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
-config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
+config.consumptionStrategy = .group(
+    id: "example-group",
+    topics: ["topic-name"]
+)
 config.enableAutoOffsetStore = false
 
 let consumer = try KafkaConsumer(config: config, logger: logger)
@@ -75,7 +81,10 @@ To control exactly when offsets reach the broker, disable auto-commit and call `
 ```swift
 var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
-config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
+config.consumptionStrategy = .group(
+    id: "example-group",
+    topics: ["topic-name"]
+)
 config.enableAutoCommit = false
 
 let consumer = try KafkaConsumer(config: config, logger: logger)
@@ -114,7 +123,10 @@ try consumer.unsubscribe()
 Pause specific partitions to apply backpressure or perform maintenance without leaving the consumer group:
 
 ```swift
-let partition = KafkaTopicPartition(topic: "topic-name", partition: KafkaPartition(rawValue: 0))
+let partition = KafkaTopicPartition(
+    topic: "topic-name",
+    partition: KafkaPartition(rawValue: 0)
+)
 try consumer.pause(topicPartitions: [partition])
 // ... later
 try consumer.resume(topicPartitions: [partition])

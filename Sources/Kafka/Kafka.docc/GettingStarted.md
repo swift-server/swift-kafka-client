@@ -4,7 +4,7 @@ Add the Kafka client to your package, then run a producer or consumer inside a s
 
 ## Overview
 
-Kafka exposes a producer and a consumer that conform to the `Service` protocol from `swift-service-lifecycle`. You run them inside a `ServiceGroup`, which manages graceful startup and shutdown, and you exchange records with the broker through `async`/`await` and `AsyncSequence`.
+Kafka exposes a producer and a consumer that conform to the `Service` protocol from `swift-service-lifecycle`. Run them inside a `ServiceGroup`, which manages graceful startup and shutdown, and exchange records with the broker through `async`/`await` and `AsyncSequence`.
 
 This article walks you through adding the dependency, sending a single message, and reading messages from a topic.
 
@@ -13,7 +13,10 @@ This article walks you through adding the dependency, sending a single message, 
 Add the package to the dependencies in your `Package.swift`:
 
 ```swift
-.package(url: "https://github.com/swift-server/swift-kafka-client", branch: "main")
+.package(
+    url: "https://github.com/swift-server/swift-kafka-client", 
+    branch: "main"
+)
 ```
 
 Then add `Kafka` to your target's dependencies:
@@ -66,7 +69,10 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let message = KafkaProducerMessage(
+            topic: "topic-name",
+            value: "Hello, World!"
+        )
         let report = try await producer.sendAndAwait(message)
         switch report.status {
         case .acknowledged(let ack):
@@ -85,7 +91,10 @@ To consume messages, create a ``KafkaConsumer`` with a group consumption strateg
 ```swift
 var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
-config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
+config.consumptionStrategy = .group(
+    id: "example-group",
+    topics: ["topic-name"]
+)
 
 let consumer = try KafkaConsumer(config: config, logger: logger)
 

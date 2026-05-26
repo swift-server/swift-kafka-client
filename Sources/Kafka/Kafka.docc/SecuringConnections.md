@@ -4,7 +4,7 @@ Configure TLS or SASL authentication for producers and consumers connecting to a
 
 ## Overview
 
-Both ``KafkaProducer`` and ``KafkaConsumer`` accept the same security settings on their configuration types. You select the wire protocol with `securityProtocol`, and you provide SASL credentials when the chosen protocol requires them.
+Both ``KafkaProducer`` and ``KafkaConsumer`` accept the same security settings on their configuration types. Select the wire protocol with `securityProtocol`, and provide SASL credentials when the chosen protocol requires them.
 
 The following examples configure a ``KafkaProducerConfig``. The same property names apply to ``KafkaConsumerConfig``.
 
