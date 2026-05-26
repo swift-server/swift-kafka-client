@@ -4,7 +4,7 @@ Add the Kafka client to your package, then run a producer or consumer inside a s
 
 ## Overview
 
-The Kafka module exposes a producer and a consumer that conform to the `Service` protocol from swift-service-lifecycle. You run them inside a `ServiceGroup`, which manages graceful startup and shutdown, and you exchange records with the broker through `async`/`await` and `AsyncSequence`.
+Kafka exposes a producer and a consumer that conform to the `Service` protocol from `swift-service-lifecycle`. You run them inside a `ServiceGroup`, which manages graceful startup and shutdown, and you exchange records with the broker through `async`/`await` and `AsyncSequence`.
 
 This article walks you through adding the dependency, sending a single message, and reading messages from a topic.
 
@@ -33,14 +33,14 @@ Finally, import the module in your source code:
 import Kafka
 ```
 
-### Install the native dependencies
+### Install system dependencies
 
 The package wraps the native `librdkafka` C library, which depends on OpenSSL.
 
 - On macOS, run `brew install openssl@3`.
 - On Linux, run `apt-get install libssl-dev libsasl2-dev`.
 
-### Send your first message
+### Send a first message
 
 To produce a message and wait for the broker to acknowledge it, configure a ``KafkaProducer``, run it inside a `ServiceGroup`, and call ``KafkaProducer/sendAndAwait(_:)``:
 
@@ -106,7 +106,7 @@ try await withThrowingTaskGroup(of: Void.self) { group in
 }
 ```
 
-### Run a local broker for development
+### Run a local broker
 
 You can stand up a Kafka broker on `localhost:9092` with Docker:
 
@@ -114,6 +114,6 @@ You can stand up a Kafka broker on `localhost:9092` with Docker:
 docker run -d -p 9092:9092 apache/kafka:3.9.1
 ```
 
-### Continue learning
+### Next steps
 
 For more detail on each side of the pipeline, see <doc:ProducingMessages> and <doc:ConsumingMessages>. To configure TLS or SASL authentication, see <doc:SecuringConnections>.

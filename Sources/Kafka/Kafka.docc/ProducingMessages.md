@@ -8,7 +8,7 @@ A ``KafkaProducer`` offers two send styles. The awaitable ``KafkaProducer/sendAn
 
 Choose `sendAndAwait(_:)` when you need confirmation per message — for example, in a request handler that returns the resulting partition and offset to its caller. Choose `send(_:)` paired with an events sequence when you need maximum throughput and can process delivery reports in batches.
 
-In either case, the producer conforms to the `Service` protocol and runs inside a `ServiceGroup` so that the surrounding application controls its lifecycle.
+Either way, the producer conforms to the `Service` protocol and runs inside a `ServiceGroup`, so the surrounding application controls its lifecycle.
 
 ### Configure the producer
 
@@ -87,15 +87,15 @@ try await withThrowingTaskGroup(of: Void.self) { group in
 }
 ```
 
-The events sequence delivers reports in batches as `librdkafka` flushes them, which keeps overhead low compared with awaiting each message individually.
+The events sequence delivers reports in batches as `librdkafka` flushes them, which keeps overhead lower than awaiting each message individually.
 
 ### Identify a record before delivery
 
-The synchronous ``KafkaProducer/send(_:)`` returns a ``KafkaProducerMessageID`` you can use to match a later ``KafkaDeliveryReport`` back to the originating record. The same identifier appears on the report.
+The synchronous ``KafkaProducer/send(_:)`` returns a ``KafkaProducerMessageID``. Use this identifier to match a later ``KafkaDeliveryReport`` to the originating record; the same identifier appears on the report.
 
 ### Handle producer events
 
-Beyond delivery reports, the events sequence emits errors and other broker events. See ``KafkaProducerEvent`` for the full set of cases. To classify errors, read ``KafkaError/isFatal`` and ``KafkaError/isRetriable``: a fatal error means the producer is unrecoverable and the application needs to shut it down, while a retriable error typically resolves on its own as the broker recovers.
+Beyond delivery reports, the events sequence emits errors and other broker events. See ``KafkaProducerEvent`` for the full set of cases. To classify errors, read ``KafkaError/isFatal`` and ``KafkaError/isRetriable``: a fatal error means the producer can't recover, and your application needs to shut it down. A retriable error typically resolves on its own as the broker recovers.
 
 ## Topics
 

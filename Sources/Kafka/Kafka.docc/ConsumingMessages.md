@@ -1,12 +1,12 @@
 # Consuming messages
 
-Receive records from Kafka topics through an AsyncSequence, control offset commits, and pause or resume partition consumption.
+Receive records from Kafka topics as an asynchronous sequence, control offset commits, and pause or resume partitions.
 
 ## Overview
 
-A ``KafkaConsumer`` joins a consumer group and surfaces records as a ``KafkaConsumerMessages`` `AsyncSequence`. You iterate the sequence with `for try await`, and the consumer integrates naturally with structured concurrency, task cancellation, and graceful shutdown through `ServiceGroup`.
+A ``KafkaConsumer`` joins a consumer group and exposes records through a ``KafkaConsumerMessages`` asynchronous sequence. You iterate the sequence with `for try await`, and the consumer integrates naturally with structured concurrency, task cancellation, and graceful shutdown through `ServiceGroup`.
 
-By default, the consumer stores and commits offsets automatically as you iterate. For at-least-once delivery, you can disable automatic offset storage and store offsets yourself after a record finishes processing. For full control, you can also turn off the periodic auto-commit and commit explicitly.
+By default, the consumer stores and commits offsets automatically as you iterate. For at-least-once delivery, you can disable automatic offset storage and store offsets yourself after your code finishes processing a record. For full control, you can also turn off the periodic auto-commit and commit explicitly.
 
 ### Configure a consumer group
 
@@ -48,7 +48,7 @@ Each ``KafkaConsumerMessage`` carries the topic, partition, offset, key, value, 
 
 ### Achieve at-least-once delivery
 
-For at-least-once semantics, disable automatic offset storage and call ``KafkaConsumer/storeOffset(_:)`` only after the record finishes processing. The consumer's background auto-commit timer then commits the stored offsets:
+For at-least-once semantics, disable automatic offset storage and call ``KafkaConsumer/storeOffset(_:)`` only after your code finishes processing the record. The consumer's background auto-commit timer then commits the stored offsets:
 
 ```swift
 var config = KafkaConsumerConfig()
@@ -96,7 +96,7 @@ try await consumer.commit()
 
 ### Manage subscriptions dynamically
 
-Topic subscriptions can change at runtime:
+Topic subscriptions can change at runtime — call ``KafkaConsumer/subscribe(topics:)`` again to update them:
 
 ```swift
 // Subscribe to additional topics.
@@ -111,7 +111,7 @@ try consumer.unsubscribe()
 
 ### Pause and resume partitions
 
-You can pause specific partitions to apply backpressure or perform maintenance without leaving the consumer group:
+Pause specific partitions to apply backpressure or perform maintenance without leaving the consumer group:
 
 ```swift
 let partition = KafkaTopicPartition(topic: "topic-name", partition: KafkaPartition(rawValue: 0))

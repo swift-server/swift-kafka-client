@@ -6,11 +6,11 @@ Configure TLS or SASL authentication for producers and consumers connecting to a
 
 Both ``KafkaProducer`` and ``KafkaConsumer`` accept the same security settings on their configuration types. You select the wire protocol with `securityProtocol`, and you provide SASL credentials when the chosen protocol requires them.
 
-The examples below configure a ``KafkaProducerConfig``. The same property names apply to ``KafkaConsumerConfig``.
+The following examples configure a ``KafkaProducerConfig``. The same property names apply to ``KafkaConsumerConfig``.
 
 ### Use plaintext for local development
 
-Plaintext sends data unencrypted and is appropriate only for local development against a broker on a trusted network:
+Plaintext sends data without encryption, and is appropriate only for local development against a broker on a trusted network:
 
 ```swift
 var config = KafkaProducerConfig()
