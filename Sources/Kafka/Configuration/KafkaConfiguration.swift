@@ -51,7 +51,7 @@ public enum KafkaConfiguration {
 
     /// Topic metadata options.
     public struct TopicMetadataOptions: Sendable, Hashable {
-        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions or partition leader changes.
+        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions, or partition leader changes.
         public struct RefreshInterval: Sendable, Hashable {
             internal let rawValue: Int
 
@@ -72,8 +72,8 @@ public enum KafkaConfiguration {
             public static let disabled: RefreshInterval = .init(rawValue: -1)
         }
 
-        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions or partition leader changes.
-        /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
+        /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions, or partition leader changes.
+        /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription, or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
         /// Default: `.interval(.milliseconds(300_000))`
         public var refreshInterval: RefreshInterval = .interval(.milliseconds(300_000))
 
@@ -92,7 +92,7 @@ public enum KafkaConfiguration {
         /// Default: `true`
         public var isSparseRefreshingEnabled: Bool = true
 
-        /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic will seem to be non-existent and the client will mark the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as non-existent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, e.g., on `send()`.
+        /// Apache Kafka topic creation is asynchronous and it takes some time for a new topic to propagate throughout the cluster to all brokers. If a client requests topic metadata after manual topic creation but before the topic has been fully propagated to the broker the client is requesting metadata from, the topic will seem to be nonexistent and the client will mark the topic as such, failing queued produced messages with ERR__UNKNOWN_TOPIC. This setting delays marking a topic as nonexistent until the configured propagation max time has passed. The maximum propagation time is calculated from the time the topic is first referenced in the client, for example, on `send()`.
         /// Default: `.milliseconds(30000)`
         public var maximumPropagation: Duration = .milliseconds(30000) {
             didSet {
@@ -152,7 +152,7 @@ public enum KafkaConfiguration {
         /// Default: `false`
         public var isNagleDisabled: Bool = false
 
-        /// Disconnect from the broker when this number of send failures (e.g., timed-out requests) is reached.
+        /// Disconnect from the broker when this number of send failures (for example, timed-out requests) is reached.
         public struct MaximumFailures: Sendable, Hashable {
             internal let rawValue: Int
 
@@ -168,7 +168,7 @@ public enum KafkaConfiguration {
             public static let disabled: MaximumFailures = .init(rawValue: 0)
         }
 
-        /// Disconnect from the broker when this number of send failures (e.g., timed-out requests) is reached.
+        /// Disconnect from the broker when this number of send failures (for example, timed-out requests) is reached.
         ///
         /// - Warning: It is highly recommended to leave this setting at its default value of 1 to avoid the client and broker becoming desynchronized in case of request timeouts.
         /// - Note: The connection is automatically re-established.
@@ -228,7 +228,7 @@ public enum KafkaConfiguration {
         }
 
         /// The initial time to wait before reconnecting to a broker after the connection has been closed.
-        /// The time is increased exponentially until ``KafkaConfiguration/ReconnectOptions/maximumBackoff``is reached.
+        /// The time is increased exponentially until ``KafkaConfiguration/ReconnectOptions/maximumBackoff`` is reached.
         /// -25% to +50% jitter is applied to each reconnect backoff.
         /// Default: `.backoff(.milliseconds(100))`
         public var backoff: Backoff = .backoff(.milliseconds(100))

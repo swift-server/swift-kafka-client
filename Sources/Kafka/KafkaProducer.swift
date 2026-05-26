@@ -19,7 +19,7 @@ import ServiceLifecycle
 
 // MARK: - KafkaProducerCloseOnTerminate
 
-/// `NIOAsyncSequenceProducerDelegate` that terminates the closes the producer when
+/// `NIOAsyncSequenceProducerDelegate` that terminates and closes the producer when
 /// `didTerminate()` is invoked.
 internal struct KafkaProducerCloseOnTerminate: Sendable {
     let stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>
@@ -50,7 +50,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
-    /// `AsynceIteratorProtocol` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
+    /// `AsyncIteratorProtocol` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
@@ -331,7 +331,7 @@ public final class KafkaProducer: Service, Sendable {
     /// The message will be sent out with the next batch of messages.
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` to send.
-    /// - Returns: Unique ``KafkaProducerMessageID``matching the ``KafkaDeliveryReport/id`` property
+    /// - Returns: Unique ``KafkaProducerMessageID`` matching the ``KafkaDeliveryReport/id`` property
     /// of the corresponding ``KafkaDeliveryReport``.
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
@@ -460,7 +460,7 @@ extension KafkaProducer {
             case uninitialized
             /// The ``KafkaProducer`` has started and is ready to use.
             ///
-            /// - Parameter messageIDCounter:Used to incrementally assign unique IDs to messages.
+            /// - Parameter messageIDCounter: Used to incrementally assign unique IDs to messages.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
@@ -648,7 +648,7 @@ extension KafkaProducer {
         /// Initialize a continuation slot.
         ///
         /// Pre-allocates the slot so `cancelContinuation` can safely detect
-        /// if it's cancelling an active request versus a stale ID.
+        /// if it's canceling an active request versus a stale ID.
         mutating func initializeContinuation(for messageID: UInt) {
             self.pendingContinuations[messageID] = .initialized
         }

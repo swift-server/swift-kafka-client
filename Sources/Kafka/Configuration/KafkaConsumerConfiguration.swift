@@ -73,7 +73,7 @@ public struct KafkaConsumerConfiguration {
     public struct SessionOptions: Sendable, Hashable {
         /// Client group session and failure detection timeout.
         /// The consumer sends periodic heartbeats (``KafkaConsumerConfiguration/heartbeatInterval``) to indicate its liveness to the broker.
-        /// If no hearts are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance.
+        /// If no heartbeats are received by the broker for a group member within the session timeout, the broker will remove the consumer from the group and trigger a rebalance.
         /// (Lowest granularity is milliseconds)
         /// Default: `.milliseconds(45000)`
         public var timeout: Duration = .milliseconds(45000) {
@@ -120,7 +120,7 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// Automatically and periodically commit offsets in the background. Note: setting this to false does not prevent the consumer from fetching previously committed start offsets.
+    /// Automatically and periodically commit offsets in the background. Note: Setting this to `false` does not prevent the consumer from fetching previously committed start offsets.
     /// Default: `true`
     public var isAutoCommitEnabled: Bool = true
 
@@ -198,8 +198,8 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// The maximum amount of time the server will block before answering the fetch request
-    /// there isn’t sufficient data to immediately satisfy the requirement given by fetch.min.bytes.
+    /// The maximum amount of time the server will block before answering the fetch request when
+    /// there isn’t sufficient data to immediately satisfy the requirement given by `fetch.min.bytes`.
     /// Default: `.milliseconds(500)`
     public var maximumFetchWaitTime: Duration = .milliseconds(500) {
         didSet {

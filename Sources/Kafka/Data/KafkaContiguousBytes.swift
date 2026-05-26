@@ -22,9 +22,9 @@
 public protocol KafkaContiguousBytes {
     /// Calls the given closure with the contents of the underlying storage.
     ///
-    /// - note: Calling `withUnsafeBytes` multiple times does not guarantee that
+    /// - Note: Calling `withUnsafeBytes` multiple times does not guarantee that
     ///         the same buffer pointer will be passed in every time.
-    /// - warning: The buffer argument to the body should not be stored or used
+    /// - Warning: The buffer argument to the body should not be stored or used
     ///            outside of the lifetime of the call to the closure.
     func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R
 }

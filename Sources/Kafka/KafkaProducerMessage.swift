@@ -15,7 +15,7 @@
 import Crdkafka
 import NIOCore
 
-/// Message that is sent by the `KafkaProducer`
+/// Message that is sent by the ``KafkaProducer``.
 public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
     /// The topic to which the message will be sent.
     public var topic: String
@@ -36,10 +36,10 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     /// The value of the message to be sent.
     public var value: Value
 
-    /// Create a new `KafkaProducerMessage` with a ``KafkaContiguousBytes`` key and value.
+    /// Create a new ``KafkaProducerMessage`` with a ``KafkaContiguousBytes`` key and value.
     ///
     /// - Parameters:
-    ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
+    ///     - topic: The topic the message will be sent to. Topics may be created by the ``KafkaProducer`` if nonexistent.
     ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
     ///     - headers: The headers of the message.
     ///     - key: Used to guarantee that messages with the same key will be sent to the same partition so that their order is preserved.
@@ -60,10 +60,10 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
 }
 
 extension KafkaProducerMessage where Key == Never {
-    /// Create a new `KafkaProducerMessage` with a ``KafkaContiguousBytes`` value.
+    /// Create a new ``KafkaProducerMessage`` with a ``KafkaContiguousBytes`` value.
     ///
     /// - Parameters:
-    ///     - topic: The topic the message will be sent to. Topics may be created by the `KafkaProducer` if non-existent.
+    ///     - topic: The topic the message will be sent to. Topics may be created by the ``KafkaProducer`` if nonexistent.
     ///     - partition: The topic partition the message will be sent to. If not set explicitly, the partition will be assigned automatically.
     ///     - headers: The headers of the message.
     ///     - value: The message body.

@@ -31,7 +31,7 @@ public struct KafkaAcknowledgedMessage {
     public var headers: [KafkaHeader]
 
     /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
-    /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
+    /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgments or malformed messages.
     internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 

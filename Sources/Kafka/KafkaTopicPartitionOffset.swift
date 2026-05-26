@@ -14,8 +14,8 @@
 
 /// A topic-partition pair with an associated offset.
 ///
-/// Used as both input (e.g., for ``KafkaConsumer/seek(topicPartitionOffsets:timeout:)``) and output
-/// (e.g., from ``KafkaConsumer/committed(topicPartitions:timeout:)`` and ``KafkaConsumer/position(topicPartitions:)``).
+/// Used as both input (for example, ``KafkaConsumer/seek(topicPartitionOffsets:timeout:)``) and output
+/// (for example, ``KafkaConsumer/committed(topicPartitions:timeout:)`` and ``KafkaConsumer/position(topicPartitions:)``).
 public struct KafkaTopicPartitionOffset: Sendable, Hashable {
     /// The topic and partition.
     public var topicPartition: KafkaTopicPartition

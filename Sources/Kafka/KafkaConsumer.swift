@@ -44,7 +44,7 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
     let wrappedSequence: WrappedSequence
 
-    /// `AsynceIteratorProtocol` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
+    /// `AsyncIteratorProtocol` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
@@ -69,7 +69,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
     public typealias Element = KafkaConsumerMessage
 
-    /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
+    /// `AsyncIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
@@ -158,7 +158,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///   `rd_kafka_destroy` stops all librdkafka threads before the `RebalanceContext`
     ///   (which holds the C callback's unretained pointer target) is deallocated.
     private let stateMachine: NIOLockedValueBox<StateMachine>
-    /// Source for yielding consumer events (rebalance, etc.). `nil` when created without events.
+    /// Source for yielding consumer events (rebalance, and so on). `nil` when created without events.
     private let eventsSource: ConsumerEventsProducer.Source?
     /// Context for the C rebalance callback. Must outlive the `RDKafkaClient` because the
     /// C callback holds an unretained pointer to it.
@@ -170,7 +170,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     // Private initializer, use factory method or convenience init to create KafkaConsumer
     /// Initialize a new ``KafkaConsumer``.
-    /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe()``
+    /// To listen to incoming messages, subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     ///
     /// - Parameters:
@@ -831,7 +831,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// Check if the current partition assignment has been lost involuntarily.
     ///
     /// This is primarily useful when reacting to a rebalance event.
-    /// When partitions are lost (e.g., because `max.poll.interval.ms` was exceeded),
+    /// When partitions are lost (for example, because `max.poll.interval.ms` was exceeded),
     /// committing offsets for those partitions will fail because they may already
     /// be owned by another consumer in the group.
     ///
@@ -1211,7 +1211,7 @@ extension KafkaConsumer {
             }
         }
 
-        /// Returns the client if available, for cleanup purposes (e.g., final event drain).
+        /// Returns the client if available, for cleanup purposes (for example, final event drain).
         /// Unlike ``withClient()``, this does not fatalError in transitional states —
         /// it returns `nil` when no client is available.
         func clientForCleanup() -> RDKafkaClient? {

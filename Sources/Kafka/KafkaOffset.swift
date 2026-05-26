@@ -22,10 +22,10 @@ public struct KafkaOffset: RawRepresentable {
         self.rawValue = rawValue
     }
 
-    /// Start consuming from the beginning of the Kafka partition queue i.e. the oldest message.
+    /// Start consuming from the beginning of the Kafka partition queue, that is, the oldest message.
     public static let beginning = KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_BEGINNING))
 
-    /// Start consuming from the end of the Kafka partition queue i.e. wait for next message to be produced.
+    /// Start consuming from the end of the Kafka partition queue, that is, wait for the next message to be produced.
     public static let end = KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_END))
 
     /// Start consuming from offset retrieved from offset store.

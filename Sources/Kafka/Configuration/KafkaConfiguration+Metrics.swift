@@ -30,7 +30,7 @@ extension KafkaConfiguration {
         /// Update interval for statistics.
         public var updateInterval: Duration?
 
-        /// Number of operations (callbacks, events, etc) waiting in the queue.
+        /// Number of operations (callbacks, events, and so on) waiting in the queue.
         public var queuedOperation: Gauge?
 
         /// Total number of requests sent to Kafka brokers.
@@ -42,7 +42,7 @@ extension KafkaConfiguration {
         /// Total number of bytes received from Kafka brokers.
         public var totalKafkaBrokerResponsesSize: Gauge?
 
-        /// Total number of messages consumed, not including ignored messages (due to offset, etc), from Kafka brokers.
+        /// Total number of messages consumed, not including ignored messages (due to offset, and so on), from Kafka brokers.
         public var totalKafkaBrokerMessagesRecieved: Gauge?
         /// Total number of message bytes (including framing) received from Kafka brokers.
         public var totalKafkaBrokerMessagesBytesRecieved: Gauge?

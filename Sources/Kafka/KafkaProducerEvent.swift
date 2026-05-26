@@ -16,7 +16,7 @@
 public enum KafkaProducerEvent: Sendable, Hashable {
     /// A collection of delivery reports received from the Kafka cluster indicating the status of produced messages.
     case deliveryReports([KafkaDeliveryReport])
-    /// An error reported by the Kafka client (e.g., broker disconnection, authentication failure).
+    /// An error reported by the Kafka client (for example, broker disconnection or authentication failure).
     case error(KafkaError)
     /// - Important: Always provide a `default` case when switching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY

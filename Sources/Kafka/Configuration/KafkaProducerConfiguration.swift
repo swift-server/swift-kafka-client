@@ -76,7 +76,7 @@ public struct KafkaProducerConfiguration {
         /// Default: `1_048_576 * 1024`
         public var maximumMessageBytes: Int = 1_048_576 * 1024
 
-        /// How long wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers.
+        /// How long to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers.
         /// A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
         /// (Lowest granularity is milliseconds)
         /// Default: `.milliseconds(5)`
@@ -97,7 +97,7 @@ public struct KafkaProducerConfiguration {
 
     /// How many times to retry sending a failing Message.
     ///
-    /// - Note: retrying may cause reordering unless ``KafkaProducerConfiguration/isIdempotenceEnabled`` is set to `true`.
+    /// - Note: Retrying may cause reordering unless ``KafkaProducerConfiguration/isIdempotenceEnabled`` is set to `true`.
     /// Default: `2_147_483_647`
     public var maximumMessageSendRetries: Int = 2_147_483_647
 

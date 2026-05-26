@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-/// An error that can occur on `Kafka` operations
+/// An error that can occur on `Kafka` operations.
 ///
 /// - Note: `Hashable` conformance considers both the ``KafkaError/code``
 ///   and the ``KafkaError/rdKafkaCode``.
@@ -25,7 +25,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 
     /// A type-safe wrapper around librdkafka's `rd_kafka_resp_err_t` error codes.
     ///
-    /// Use the static constants (e.g., `.allBrokersDown`, `.authentication`) to match
+    /// Use the static constants (for example, `.allBrokersDown` or `.authentication`) to match
     /// against the ``KafkaError/rdKafkaCode`` property without importing Crdkafka.
     public struct RDKafkaCode: Hashable, Sendable, CustomStringConvertible {
         /// The raw `Int32` value corresponding to the librdkafka error code.
@@ -86,7 +86,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     /// The underlying librdkafka error code, if this error originated from librdkafka.
     ///
     /// Returns `nil` for errors that do not wrap a `rd_kafka_resp_err_t`
-    /// (e.g., pure configuration or lifecycle errors).
+    /// (for example, pure configuration or lifecycle errors).
     public var rdKafkaCode: RDKafkaCode? {
         self.backing.rdKafkaCode
     }

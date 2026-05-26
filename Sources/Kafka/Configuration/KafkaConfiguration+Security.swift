@@ -194,7 +194,7 @@ extension KafkaConfiguration {
         public var clientIdentity: ClientIdentity? = nil
 
         /// Configuration for the TLS verification of the broker.
-        /// Default:  `verify(trustRoots: .probe, certificateRevocationListPath: nil)``
+        /// Default: `.verify(trustRoots: .probe, certificateRevocationListPath: nil)`
         public var brokerVerification: BrokerVerification = .verify(
             trustRoots: .probe,
             certificateRevocationListPath: nil
@@ -358,7 +358,7 @@ extension KafkaConfiguration {
             ///     - tokenEndPointURL: OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token.
             ///     - scope: The client uses this to specify the scope of the access request to the broker.
             ///     - extensions: Allow additional information to be provided to the broker.
-            ///     Comma-separated list of key=value pairs. E.g., "supportFeatureX=true,organizationId=sales-emea".
+            ///     Comma-separated list of key=value pairs. For example, "supportFeatureX=true,organizationId=sales-emea".
             static func oidc(
                 configuration: String? = nil,
                 clientID: String,
