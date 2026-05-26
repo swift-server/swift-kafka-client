@@ -34,6 +34,7 @@ public struct KafkaOffset: RawRepresentable {
     public static let storedOffset = KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_STORED))
 
     /// Start consuming with the `count` latest messages.
+    ///
     /// Example: Current end offset is at `12345` and `count = 200`.
     /// This means start reading offset from offset `12345 - 200 = 12145`.
     public static func tail(_ count: Int) -> KafkaOffset {

@@ -24,8 +24,10 @@ public struct KafkaConsumerRebalance: Sendable, Hashable {
         case assign
         /// Partitions have been revoked from this consumer.
         case revoke
-        /// An unexpected error occurred during rebalance. All partitions have been
-        /// unassigned as a recovery measure. The associated string describes the error.
+        /// An unexpected error occurred during rebalance.
+        ///
+        /// All partitions have been unassigned as a recovery measure.
+        /// The associated string describes the error.
         case error(String)
     }
 

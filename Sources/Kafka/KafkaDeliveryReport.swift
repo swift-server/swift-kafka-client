@@ -28,6 +28,7 @@ public struct KafkaDeliveryReport: Sendable, Hashable {
     public var status: Status
 
     /// The unique identifier assigned by the ``KafkaProducer`` when the message was sent to Kafka.
+    ///
     /// The same identifier is returned by ``KafkaProducer/send(_:)`` and can be used to correlate
     /// a sent message with a delivery report.
     public var id: KafkaProducerMessageID

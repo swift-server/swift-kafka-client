@@ -702,6 +702,7 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Marks all messages up to the passed message in the topic as read.
+    ///
     /// Schedules a commit and returns immediately.
     /// Any errors encountered after scheduling the commit will be discarded.
     ///
@@ -735,6 +736,7 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Marks all messages up to the passed message in the topic as read.
+    ///
     /// Awaits until the commit succeeds or an error is encountered.
     ///
     /// This method is only used for manual offset management.
@@ -759,6 +761,7 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Schedules an asynchronous commit of all stored offsets.
+    ///
     /// Returns immediately. Any errors after scheduling are discarded.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
@@ -778,6 +781,7 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Commits all stored offsets to the broker.
+    ///
     /// Awaits until the commit succeeds or encounters an error.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).

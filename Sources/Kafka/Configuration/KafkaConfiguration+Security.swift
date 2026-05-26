@@ -18,6 +18,7 @@ extension KafkaConfiguration {
     /// A configuration for a TLS connection.
     public struct TLSConfiguration: Sendable, Hashable {
         /// Certificate chain consisting of one leaf certificate and potentially multiple intermediate certificates.
+        ///
         /// The public key of the leaf certificate will be used for authentication.
         public struct LeafAndIntermediates: Sendable, Hashable {
             internal enum _Key: Sendable, Hashable {
@@ -200,10 +201,12 @@ extension KafkaConfiguration {
         }
 
         /// Configuration for the TLS verification of the client.
+        ///
         /// Default: `nil`
         public var clientIdentity: ClientIdentity? = nil
 
         /// Configuration for the TLS verification of the broker.
+        ///
         /// Default: `.verify(trustRoots: .probe, certificateRevocationListPath: nil)`
         public var brokerVerification: BrokerVerification = .verify(
             trustRoots: .probe,
@@ -272,20 +275,27 @@ extension KafkaConfiguration {
         /// Used to configure Kerberos.
         public struct KerberosConfiguration: Sendable, Hashable {
             /// Kerberos principal name that Kafka runs as, not including `/hostname@REALM`.
+            ///
             /// Default: `"kafka"`
             public var serviceName: String = "kafka"
-            /// This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal).
+            /// This client's Kerberos principal name.
+            ///
+            /// (Not supported on Windows, will use the logon user's principal).
+            ///
             /// Default: `"kafkaclient"`
             public var principal: String = "kafkaclient"
             /// Shell command to refresh or acquire the client's Kerberos ticket.
+            ///
             /// This command is executed on client creation and every ``KafkaConfiguration/SASLMechanism/KerberosConfiguration/minTimeBeforeRelogin``.
             /// %{config.prop.name} is replaced by corresponding config object value.
+            ///
             /// Default: `kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"`.
             public var kinitCommand: String = """
                 kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || \
                 kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"
                 """
             /// Path to Kerberos keytab file.
+            ///
             /// This configuration property is only used as a variable in ``KafkaConfiguration/SASLMechanism/KerberosConfiguration/kinitCommand``
             /// as  ... -t "%{sasl.kerberos.keytab}".
             public var keytab: String
@@ -314,8 +324,10 @@ extension KafkaConfiguration {
             }
 
             /// Minimum time in between key refresh attempts.
+            ///
             /// Disable automatic key refresh by setting this property to 0.
             /// (Lowest granularity is milliseconds)
+            ///
             /// Default: `.value(.milliseconds(60000))`
             public var minTimeBeforeRelogin: KeyRefreshAttempts = .value(.milliseconds(60000))
 

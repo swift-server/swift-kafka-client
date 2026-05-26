@@ -35,12 +35,17 @@ public struct KafkaTopicConfiguration {
     }
 
     /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
+    ///
     /// If there are less than `min.insync.replicas` (broker configuration) in the ISR set the produce request will fail.
+    ///
     /// Default: `.all`
     public var requiredAcknowledgements: RequiredAcknowledgments = .all
 
-    /// The ack timeout of the producer request. This value is only enforced by the broker and relies on ``requiredAcknowledgements`` being != 0.
+    /// The ack timeout of the producer request.
+    ///
+    /// This value is only enforced by the broker and relies on ``requiredAcknowledgements`` being != 0.
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.milliseconds(30000)`
     public var requestTimeout: Duration = .milliseconds(30000) {
         didSet {
@@ -80,10 +85,13 @@ public struct KafkaTopicConfiguration {
     /// This is the maximum time librdkafka may use to deliver a message (including retries).
     /// Delivery error occurs when either the retry count or the message timeout is exceeded.
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.timeout(.milliseconds(300_000))`
     public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
 
-    /// Partitioner. Computes the partition where a message is stored.
+    /// Partitioner.
+    ///
+    /// Computes the partition where a message is stored.
     public struct Partitioner: Sendable, Hashable, CustomStringConvertible {
         /// A textual representation of the partitioner algorithm.
         public let description: String
@@ -96,7 +104,9 @@ public struct KafkaTopicConfiguration {
         public static let consistentRandom = Partitioner(description: "consistent_random")
         /// Java Producer compatible Murmur2 hash of key. Maps NULL keys to a single partition.
         public static let murmur2 = Partitioner(description: "murmur2")
-        /// Java Producer compatible Murmur2 hash of key. Randomly partitions NULL keys. This is functionally equivalent to the default partitioner in the Java Producer.
+        /// Java Producer compatible Murmur2 hash of key.
+        ///
+        /// Randomly partitions NULL keys. This is functionally equivalent to the default partitioner in the Java Producer.
         public static let murmur2Random = Partitioner(description: "murmur2_random")
         /// FNV-1a hash of key. Maps NULL keys to a single partition.
         public static let fnv1a = Partitioner(description: "fnv1a")
@@ -104,7 +114,10 @@ public struct KafkaTopicConfiguration {
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
     }
 
-    /// Partitioner. See ``KafkaTopicConfiguration/Partitioner-swift.struct`` for more information.
+    /// Partitioner.
+    ///
+    /// See ``KafkaTopicConfiguration/Partitioner-swift.struct`` for more information.
+    ///
     /// Default: `.consistentRandom`
     public var partitioner: Partitioner = .consistentRandom
 
@@ -226,6 +239,7 @@ public struct KafkaTopicConfiguration {
         }
 
         /// Compression codec to use for compressing message sets.
+        ///
         /// Default: `.inherit`
         public var codec: Codec = .inherit
     }

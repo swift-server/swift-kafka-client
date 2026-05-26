@@ -21,6 +21,7 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     public var topic: String
 
     /// The partition the producer sends the message to.
+    ///
     /// Defaults to ``KafkaPartition/unassigned``.
     /// When unassigned, the topic's partitioner function selects a partition automatically.
     public var partition: KafkaPartition
@@ -29,6 +30,7 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     public var headers: [KafkaHeader]
 
     /// The optional key associated with the message.
+    ///
     /// If the ``KafkaPartition`` is ``KafkaPartition/unassigned``, the ``KafkaProducerMessage/key`` is used to ensure
     /// that two ``KafkaProducerMessage``s with the same key still get sent to the same ``KafkaPartition``.
     public var key: Key?

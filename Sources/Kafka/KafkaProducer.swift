@@ -70,6 +70,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 // MARK: - KafkaProducer
 
 /// Sends messages to the Kafka cluster.
+///
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the default topic configuration
 ///   (based on topic-level configuration properties set on `KafkaProducerConfig`).
 public final class KafkaProducer: Service, Sendable {

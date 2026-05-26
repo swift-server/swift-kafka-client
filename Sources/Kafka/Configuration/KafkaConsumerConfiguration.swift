@@ -18,7 +18,9 @@ public struct KafkaConsumerConfiguration {
     // MARK: - Kafka-specific Config properties
 
     /// The time between two consecutive polls.
+    ///
     /// Effectively controls the rate at which incoming events and messages are consumed.
+    ///
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
@@ -72,9 +74,11 @@ public struct KafkaConsumerConfiguration {
     /// Client group session options.
     public struct SessionOptions: Sendable, Hashable {
         /// Client group session and failure detection timeout.
+        ///
         /// The consumer sends periodic heartbeats (``KafkaConsumerConfiguration/heartbeatInterval``) to indicate its liveness to the broker.
         /// If no heartbeats are received by the broker for a group member within the session timeout, the broker removes the consumer from the group and triggers a rebalance.
         /// (Lowest granularity is milliseconds)
+        ///
         /// Default: `.milliseconds(45000)`
         public var timeout: Duration = .milliseconds(45000) {
             didSet {
@@ -93,7 +97,9 @@ public struct KafkaConsumerConfiguration {
     public var session: SessionOptions = .init()
 
     /// Group session keepalive heartbeat interval.
+    ///
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.milliseconds(3000)`
     public var heartbeatInterval: Duration = .milliseconds(3000) {
         didSet {
@@ -104,13 +110,16 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// Maximum allowed time between calls to consume messages. If this interval is exceeded, the consumer is considered failed and the group rebalances to reassign the partitions to another consumer group member.
+    /// Maximum allowed time between calls to consume messages.
+    ///
+    /// If this interval is exceeded, the consumer is considered failed and the group rebalances to reassign the partitions to another consumer group member.
     ///
     /// - Warning: Offset commits may be not possible at this point.
     ///
     /// The interval is checked two times per second. See KIP-62 for more information.
     ///
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.milliseconds(300_000)`
     public var maximumPollInterval: Duration = .milliseconds(300_000) {
         didSet {
@@ -129,6 +138,7 @@ public struct KafkaConsumerConfiguration {
     public var isAutoCommitEnabled: Bool = true
 
     /// A Boolean value that indicates whether the consumer automatically stores the offset of the last message provided to the application.
+    ///
     /// The offset store is an in-memory store of the next offset to (auto-)commit for each partition.
     ///
     /// When set to `false`, the application must explicitly call ``KafkaConsumer/storeOffset(_:)``
@@ -159,40 +169,54 @@ public struct KafkaConsumerConfiguration {
         public static let error = AutoOffsetReset(description: "error")
     }
 
-    /// Action to take when there is no initial offset in the offset store or the desired offset is out of range. See ``KafkaConsumerConfiguration/AutoOffsetReset-swift.struct`` for more information.
+    /// Action to take when there is no initial offset in the offset store or the desired offset is out of range.
+    ///
+    /// See ``KafkaConsumerConfiguration/AutoOffsetReset-swift.struct`` for more information.
+    ///
     /// Default: `.largest`
     public var autoOffsetReset: AutoOffsetReset = .largest
 
     /// A Boolean value that indicates whether the consumer allows automatic topic creation on the broker when subscribing to or assigning nonexistent topics.
+    ///
     /// The broker must also be configured with ``KafkaConsumerConfiguration/isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
+    ///
     /// Default: `false`
     public var isAutoCreateTopicsEnabled: Bool = false
 
     // MARK: - Common Client Config Properties
 
     /// Client identifier.
+    ///
     /// Default: `"rdkafka"`
     public var identifier: String = "rdkafka"
 
     /// Initial list of brokers.
+    ///
     /// Default: `[]`
     public var bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress] = []
 
-    /// Message options.
+    /// Options that govern Kafka message size and copy behavior.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
-    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
+    /// The maximum Kafka protocol response message size.
+    ///
+    /// This serves as a safety precaution to avoid memory exhaustion in case of protocol errors.
+    ///
     /// Default: `100_000_000`
     public var maximumReceiveMessageBytes: Int = 100_000_000
 
     /// Maximum number of in-flight requests per broker connection.
+    ///
     /// This is a generic property applied to all broker communication, however, it is primarily relevant to produce requests.
     /// In particular, note that other mechanisms limit the number of outstanding consumer fetch requests per broker to one.
+    ///
     /// Default: `1_000_000`
     public var maximumInFlightRequestsPerConnection: Int = 1_000_000
 
     /// Metadata cache max age.
+    ///
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.milliseconds(900_000)`
     public var maximumMetadataAge: Duration = .milliseconds(900_000) {
         didSet {
@@ -203,8 +227,8 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// The maximum amount of time the server will block before answering the fetch request when
-    /// there isn’t sufficient data to immediately satisfy the requirement given by `fetch.min.bytes`.
+    /// The maximum amount of time the server will block before answering the fetch request when there isn’t sufficient data to immediately satisfy the requirement given by `fetch.min.bytes`.
+    ///
     /// Default: `.milliseconds(500)`
     public var maximumFetchWaitTime: Duration = .milliseconds(500) {
         didSet {
@@ -221,10 +245,12 @@ public struct KafkaConsumerConfiguration {
     public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
 
     /// Topic denylist.
+    ///
     /// Default: `[]`
     public var topicDenylist: [String] = []
 
     /// Debug options.
+    ///
     /// Default: `[]`
     public var debugOptions: [KafkaConfiguration.DebugOption] = []
 
@@ -237,10 +263,11 @@ public struct KafkaConsumerConfiguration {
     /// Reconnect options.
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
-    /// Options for librdkafka metrics updates
+    /// Options for librdkafka metrics updates.
     public var metrics: KafkaConfiguration.ConsumerMetrics = .init()
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
+    ///
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
