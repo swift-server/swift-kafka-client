@@ -15,7 +15,7 @@
 extension KafkaConfiguration {
     // MARK: - TLSConfiguration
 
-    /// Use to configure a TLS connection.
+    /// A configuration for a TLS connection.
     public struct TLSConfiguration: Sendable, Hashable {
         /// Certificate chain consisting of one leaf certificate and potentially multiple intermediate certificates.
         /// The public key of the leaf certificate will be used for authentication.
@@ -69,7 +69,7 @@ extension KafkaConfiguration {
             }
         }
 
-        /// A TLS private key.
+        /// A TLS private key with its associated password.
         public struct PrivateKey: Sendable, Hashable {
             public struct Location: Sendable, Hashable {
                 internal enum _Location: Sendable, Hashable {
@@ -105,7 +105,7 @@ extension KafkaConfiguration {
             }
         }
 
-        /// A TLS key store (PKCS#12).
+        /// A TLS key store in PKCS#12 format.
         public struct KeyStore: Sendable, Hashable {
             /// Path to the key store.
             public var location: String
@@ -254,7 +254,7 @@ extension KafkaConfiguration {
 
     // MARK: - SASLMechanism
 
-    /// Available SASL mechanisms that can be used for authentication.
+    /// SASL mechanisms available for authentication.
     public struct SASLMechanism: Sendable, Hashable {
         /// Used to configure Kerberos.
         public struct KerberosConfiguration: Sendable, Hashable {
@@ -483,7 +483,7 @@ extension KafkaConfiguration {
 
     // MARK: - SecurityProtocol
 
-    /// Protocol used to communicate with brokers.
+    /// The protocol the client uses to communicate with brokers.
     public struct SecurityProtocol: Sendable, Hashable {
         internal enum _SecurityProtocol: Sendable, Hashable {
             case plaintext
@@ -494,7 +494,7 @@ extension KafkaConfiguration {
 
         private let _internal: _SecurityProtocol
 
-        /// Send messages as plaintext (no security protocol used).
+        /// Sends messages as plaintext without any security protocol.
         public static let plaintext = SecurityProtocol(
             _internal: .plaintext
         )

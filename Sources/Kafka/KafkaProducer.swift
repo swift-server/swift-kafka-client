@@ -43,14 +43,14 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 
 // MARK: - KafkaProducerEvents
 
-/// `AsyncSequence` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
+/// An asynchronous sequence of ``KafkaProducerEvent`` values emitted by Kafka.
 public struct KafkaProducerEvents: Sendable, AsyncSequence {
     public typealias Element = KafkaProducerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
-    /// `AsyncIteratorProtocol` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
+    /// An asynchronous iterator over ``KafkaProducerEvent`` values emitted by Kafka.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
@@ -316,10 +316,9 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Method to shutdown the ``KafkaProducer``.
+    /// Shuts the ``KafkaProducer`` down gracefully.
     ///
-    /// This method flushes any buffered messages and waits until a callback is received for all of them.
-    /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
+    /// Flushes any buffered messages and waits until the producer receives a callback for each one. After flushing, this method shuts down the connection to Kafka and cleans up any remaining state.
     public func triggerGracefulShutdown() {
         self.stateMachine.withLockedValue { $0.finish() }
     }

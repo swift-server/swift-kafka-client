@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-/// Message offset on a Kafka partition queue.
+/// A message offset within a Kafka partition queue.
 public struct KafkaOffset: RawRepresentable {
     public var rawValue: Int
 

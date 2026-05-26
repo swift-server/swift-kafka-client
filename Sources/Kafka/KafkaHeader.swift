@@ -14,8 +14,9 @@
 
 import NIOCore
 
-/// A structure representing a header for a Kafka message.
-/// Headers are key-value pairs that can be attached to Kafka messages to provide additional metadata.
+/// A header attached to a Kafka message.
+///
+/// Headers are key-value pairs that carry additional metadata alongside a Kafka message.
 public struct KafkaHeader: Sendable, Hashable {
     /// The key associated with the header.
     public var key: String

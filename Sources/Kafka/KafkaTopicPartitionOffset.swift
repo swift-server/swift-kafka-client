@@ -26,10 +26,14 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
     /// a `nil` value indicates that no committed offset or position exists.
     public var offset: KafkaOffset?
 
-    /// The name of the Kafka topic (convenience accessor).
+    /// The name of the Kafka topic.
+    ///
+    /// This is a convenience accessor for the underlying ``KafkaTopicPartition/topic``.
     public var topic: String { self.topicPartition.topic }
 
-    /// The partition within the topic (convenience accessor).
+    /// The partition within the topic.
+    ///
+    /// This is a convenience accessor for the underlying ``KafkaTopicPartition/partition``.
     public var partition: KafkaPartition { self.topicPartition.partition }
 
     /// Creates a new ``KafkaTopicPartitionOffset``.

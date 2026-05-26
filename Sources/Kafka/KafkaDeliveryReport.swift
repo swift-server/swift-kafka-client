@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-/// A delivery report for a message that was sent to the Kafka cluster.
+/// A delivery report for a message the producer sent to the Kafka cluster.
 public struct KafkaDeliveryReport: Sendable, Hashable {
     public enum Status: Sendable, Hashable {
         /// The message has been successfully acknowledged by the Kafka cluster.

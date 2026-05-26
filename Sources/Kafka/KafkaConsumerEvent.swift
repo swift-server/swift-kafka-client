@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
+/// An event delivered through the ``KafkaConsumerEvents`` asynchronous sequence.
 public enum KafkaConsumerEvent: Sendable, Hashable {
     /// A consumer group rebalance occurred.
     ///

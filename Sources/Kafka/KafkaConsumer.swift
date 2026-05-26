@@ -37,14 +37,14 @@ extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
 
 // MARK: - KafkaConsumerEvents
 
-/// `AsyncSequence` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
+/// An asynchronous sequence of ``KafkaConsumerEvent`` values emitted by Kafka.
 public struct KafkaConsumerEvents: Sendable, AsyncSequence {
     public typealias Element = KafkaConsumerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
     let wrappedSequence: WrappedSequence
 
-    /// `AsyncIteratorProtocol` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
+    /// An asynchronous iterator over ``KafkaConsumerEvent`` values emitted by Kafka.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
@@ -60,7 +60,7 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumerMessages
 
-/// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
+/// An asynchronous sequence of ``KafkaConsumerMessage`` values received from the Kafka cluster.
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
 
@@ -69,7 +69,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
     public typealias Element = KafkaConsumerMessage
 
-    /// `AsyncIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
+    /// An asynchronous iterator over ``KafkaConsumerMessage`` values received from the Kafka cluster.
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
@@ -140,7 +140,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumer
 
-/// Can be used to consume messages from a Kafka cluster.
+/// Consumes messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     typealias ConsumerEventsProducer = NIOAsyncSequenceProducer<
         KafkaConsumerEvent,
@@ -165,7 +165,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Important: Must be declared AFTER `stateMachine` — see ordering note above.
     private let rebalanceContext: RebalanceContext
 
-    /// An asynchronous sequence containing messages from the Kafka cluster.
+    /// An asynchronous sequence of messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
 
     // Private initializer, use factory method or convenience init to create KafkaConsumer

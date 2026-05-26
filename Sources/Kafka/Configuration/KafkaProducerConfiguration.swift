@@ -15,6 +15,8 @@
 public struct KafkaProducerConfiguration {
     // MARK: - Kafka-specific Config properties
 
+    /// Topic configuration applied to topics that the broker auto-creates.
+    ///
     /// If the ``isAutoCreateTopicsEnabled`` option is set to `true`,
     /// the broker automatically generates topics when producing data to nonexistent topics.
     /// The configuration specified in this ``KafkaTopicConfiguration`` is applied to the newly created topic.
@@ -51,7 +53,7 @@ public struct KafkaProducerConfiguration {
     /// Default: `false`
     public var isIdempotenceEnabled: Bool = false
 
-    /// Producer queue options.
+    /// Options that control producer queue size, buffering, and retry behavior.
     public struct QueueConfiguration: Sendable, Hashable {
         /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
         public struct MessageLimit: Sendable, Hashable {
@@ -78,7 +80,8 @@ public struct KafkaProducerConfiguration {
         /// Default: `1_048_576 * 1024`
         public var maximumMessageBytes: Int = 1_048_576 * 1024
 
-        /// How long to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers.
+        /// The duration to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) for transmission to brokers.
+        ///
         /// A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
         /// (Lowest granularity is milliseconds)
         /// Default: `.milliseconds(5)`
@@ -94,10 +97,10 @@ public struct KafkaProducerConfiguration {
         public init() {}
     }
 
-    /// Producer queue options.
+    /// Options that control producer queue size, buffering, and retry behavior.
     public var queue: QueueConfiguration = .init()
 
-    /// How many times to retry sending a failing Message.
+    /// The number of times to retry sending a failed message.
     ///
     /// - Note: Retrying may cause reordering unless ``KafkaProducerConfiguration/isIdempotenceEnabled`` is set to `true`.
     /// Default: `2_147_483_647`
@@ -118,10 +121,12 @@ public struct KafkaProducerConfiguration {
     /// Default: `[]`
     public var bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress] = []
 
-    /// Message options.
+    /// Options that govern Kafka message size and copy behavior.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
-    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
+    /// The maximum Kafka protocol response message size.
+    ///
+    /// This serves as a safety precaution to avoid memory exhaustion in case of protocol errors.
     /// Default: `100_000_000`
     public var maximumReceiveMessageBytes: Int = 100_000_000
 

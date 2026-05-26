@@ -22,7 +22,7 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// A struct representing the different Kafka message consumption strategies.
+    /// The Kafka message consumption strategy.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {
             case partition(groupID: String?, topic: String, partition: KafkaPartition, offset: KafkaOffset)

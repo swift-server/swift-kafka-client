@@ -15,7 +15,7 @@
 import Crdkafka
 import NIOCore
 
-/// Message that is sent by the ``KafkaProducer``.
+/// A message that the ``KafkaProducer`` sends to the Kafka cluster.
 public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
     /// The topic the producer sends the message to.
     public var topic: String

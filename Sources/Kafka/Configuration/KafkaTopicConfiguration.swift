@@ -12,9 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Used to configure new topics created by the ``KafkaProducer``.
+/// Configuration applied to new topics that the ``KafkaProducer`` creates.
 public struct KafkaTopicConfiguration {
-    /// This number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
+    /// The number of acknowledgments the leader broker must receive from in-sync replica (ISR) brokers before responding to the request.
     public struct RequiredAcknowledgments: Sendable, Hashable {
         internal let rawValue: Int
 
@@ -29,7 +29,7 @@ public struct KafkaTopicConfiguration {
         /// Broker blocks until the message is committed by all in-sync replicas (ISRs).
         public static let all: RequiredAcknowledgments = .init(rawValue: -1)
 
-        /// Broker does not send any response/ack to the client.
+        /// The broker does not send any response or acknowledgment to the client.
         public static let noAcknowledgments: RequiredAcknowledgments = .init(rawValue: 0)
     }
 
@@ -50,7 +50,7 @@ public struct KafkaTopicConfiguration {
         }
     }
 
-    /// Local message timeout.
+    /// A local timeout for delivering a produced message.
     public struct MessageTimeout: Sendable, Hashable {
         internal let rawValue: UInt
 
@@ -70,7 +70,8 @@ public struct KafkaTopicConfiguration {
         public static let infinite: MessageTimeout = .init(rawValue: 0)
     }
 
-    /// Local message timeout.
+    /// The local timeout for delivering a produced message.
+    ///
     /// This value is only enforced locally and limits the time a produced message waits for successful delivery.
     /// This is the maximum time librdkafka may use to deliver a message (including retries).
     /// Delivery error occurs when either the retry count or the message timeout is exceeded.
@@ -104,7 +105,8 @@ public struct KafkaTopicConfiguration {
 
     /// Compression-related configuration options.
     public struct Compression: Sendable, Hashable {
-        /// Compression level parameter for algorithm selected by configuration property ``codec-swift.property``.
+        /// The compression level for the algorithm selected by the ``codec-swift.property`` configuration property.
+        ///
         /// Higher values produce better compression at the cost of more CPU usage.
         public struct Level: Sendable, Hashable {
             internal let rawValue: Int
@@ -121,7 +123,7 @@ public struct KafkaTopicConfiguration {
             public static let codecDependent: Level = .init(rawValue: -1)
         }
 
-        /// Process to compress and decompress data.
+        /// A compression codec that compresses and decompresses message data.
         public struct Codec: Sendable, Hashable, CustomStringConvertible {
             private enum _Codec: Sendable, Hashable, CustomStringConvertible {
                 case none

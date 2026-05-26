@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-/// Type for representing the id of a Kafka Partition.
+/// The identifier of a Kafka partition.
 public struct KafkaPartition: RawRepresentable {
     public var rawValue: Int {
         didSet {
@@ -33,7 +33,9 @@ public struct KafkaPartition: RawRepresentable {
         self.rawValue = rawValue
     }
 
-    /// Automatically assign a partition using the topic's partitioner function.
+    /// A sentinel value that defers partition assignment to the topic's partitioner function.
+    ///
+    /// When you set this value, the partition is assigned automatically using the topic's partitioner function.
     public static let unassigned = KafkaPartition(rawValue: Int(RD_KAFKA_PARTITION_UA))
 }
 

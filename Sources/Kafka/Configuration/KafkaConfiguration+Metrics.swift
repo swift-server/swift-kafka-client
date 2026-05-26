@@ -17,7 +17,7 @@ import Metrics
 extension KafkaConfiguration {
     // MARK: - Metrics
 
-    /// Configuration for the consumer metrics emitted by `SwiftKafka`.
+    /// Configuration for the consumer metrics that the Kafka client emits.
     public struct ConsumerMetrics: Sendable {
         internal var enabled: Bool {
             self.updateInterval != nil
@@ -77,7 +77,7 @@ extension KafkaConfiguration {
         }
     }
 
-    /// Configuration for the producer metrics emitted by `SwiftKafka`.
+    /// Configuration for the producer metrics that the Kafka client emits.
     public struct ProducerMetrics: Sendable {
         internal var enabled: Bool {
             self.updateInterval != nil

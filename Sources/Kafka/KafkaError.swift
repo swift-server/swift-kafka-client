@@ -23,7 +23,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 
     // MARK: - RDKafkaCode
 
-    /// A type-safe wrapper around librdkafka's `rd_kafka_resp_err_t` error codes.
+    /// A type-safe representation of a librdkafka `rd_kafka_resp_err_t` error code.
     ///
     /// Use the static constants (for example, `.allBrokersDown` or `.authentication`) to match
     /// against the ``KafkaError/rdKafkaCode`` property without importing Crdkafka.
@@ -72,7 +72,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 
     private var backing: Backing
 
-    /// Represents the kind of error that was encountered.
+    /// The kind of error that was encountered.
     public var code: ErrorCode {
         get {
             self.backing.code
@@ -303,10 +303,10 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 }
 
 extension KafkaError {
-    /// Represents the kind of error.
+    /// The high-level classification of a Kafka error.
     ///
     /// The same error may be thrown from more than one place for more than one reason.
-    /// This type represents only a relatively high-level error:
+    /// This type captures only a relatively high-level error:
     /// use the string representation of ``KafkaError`` to get more details about the specific cause.
     public struct ErrorCode: Hashable, Sendable, CustomStringConvertible {
         fileprivate enum BackingCode {

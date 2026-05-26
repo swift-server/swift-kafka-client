@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Collection of types used in the configuration structs this library provides.
+/// A namespace of types used in the library's configuration structs.
 public enum KafkaConfiguration {
     /// The address of a Kafka broker.
     public struct BrokerAddress: Sendable, Hashable, CustomStringConvertible {
@@ -35,7 +35,7 @@ public enum KafkaConfiguration {
         }
     }
 
-    /// Message options.
+    /// Options that govern Kafka message size and copy behavior.
     public struct MessageOptions: Sendable, Hashable {
         /// Maximum Kafka protocol request message size. Due to differing framing overhead between protocol versions, the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests.
         /// The broker will enforce the topic's `max.message.bytes` limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
@@ -49,7 +49,7 @@ public enum KafkaConfiguration {
         public init() {}
     }
 
-    /// Topic metadata options.
+    /// Options that control how the client refreshes topic and broker metadata.
     public struct TopicMetadataOptions: Sendable, Hashable {
         /// Period of time at which topic and broker metadata is refreshed to proactively discover any new brokers, topics, partitions, or partition leader changes.
         public struct RefreshInterval: Sendable, Hashable {
@@ -106,7 +106,7 @@ public enum KafkaConfiguration {
         public init() {}
     }
 
-    /// Socket options.
+    /// Options that configure socket-level networking behavior.
     public struct SocketOptions: Sendable, Hashable {
         /// Default timeout for network requests. Producer: ProduceRequests use the lesser value of ``KafkaConfiguration/SocketOptions/timeout``
         /// and remaining ``KafkaTopicConfiguration/messageTimeout``for the first message in the batch.
@@ -183,7 +183,7 @@ public enum KafkaConfiguration {
         public init() {}
     }
 
-    /// Broker options.
+    /// Options that configure broker connection behavior.
     public struct BrokerOptions: Sendable, Hashable {
         /// How long to cache the broker address resolving results.
         /// (Lowest granularity is milliseconds)
@@ -204,7 +204,7 @@ public enum KafkaConfiguration {
         public init() {}
     }
 
-    /// Reconnect options.
+    /// Options that control reconnection backoff after a broker connection drops.
     public struct ReconnectOptions: Sendable, Hashable {
         /// The initial time to wait before reconnecting to a broker after the connection has been closed.
         public struct Backoff: Sendable, Hashable {
