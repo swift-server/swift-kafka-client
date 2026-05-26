@@ -6,7 +6,7 @@ Send records to Kafka topics with awaitable acknowledgments or with high-through
 
 A ``KafkaProducer`` offers two send styles. The awaitable ``KafkaProducer/sendAndAwait(_:)`` returns once the broker confirms delivery, and the fire-and-forget ``KafkaProducer/send(_:)`` enqueues records for transmission and reports outcomes through an `AsyncSequence` of events.
 
-Choose `sendAndAwait(_:)` when you need confirmation per message — for example, in a request handler that returns the resulting partition and offset to its caller. Choose `send(_:)` paired with an events sequence when you need maximum throughput and can process delivery reports in batches.
+Choose `sendAndAwait(_:)` for per-message confirmation — for example, in a request handler that returns the resulting partition and offset to its caller. Choose `send(_:)` paired with an events sequence for maximum throughput when batched delivery report processing is acceptable.
 
 Either way, the producer conforms to the `Service` protocol and runs inside a `ServiceGroup`, so the surrounding application controls its lifecycle.
 
@@ -95,7 +95,7 @@ The synchronous ``KafkaProducer/send(_:)`` returns a ``KafkaProducerMessageID``.
 
 ### Handle producer events
 
-Beyond delivery reports, the events sequence emits errors and other broker events. See ``KafkaProducerEvent`` for the full set of cases. To classify errors, read ``KafkaError/isFatal`` and ``KafkaError/isRetriable``: a fatal error means the producer can't recover, and your application needs to shut it down. A retriable error typically resolves on its own as the broker recovers.
+Beyond delivery reports, the events sequence emits errors and other broker events. See ``KafkaProducerEvent`` for the full set of cases. To classify errors, read ``KafkaError/isFatal`` and ``KafkaError/isRetriable``: a fatal error means the producer can't recover, and the application needs to shut it down. A retriable error typically resolves on its own as the broker recovers.
 
 ## Topics
 

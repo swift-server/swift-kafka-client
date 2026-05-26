@@ -42,9 +42,9 @@ public struct KafkaConsumerConfiguration {
         ///
         /// - Parameters:
         ///     - partition: The partition of the topic to consume from.
-        ///     - groupID: The ID of the consumer group to commit to. Defaults to no group ID. Specifying a group ID is useful if partitions assignment is manually managed but committed offsets should still be tracked in a consumer group.
+        ///     - groupID: The ID of the consumer group to commit to. Defaults to no group ID. Specifying a group ID is useful when manually managing partition assignment but still tracking committed offsets in a consumer group.
         ///     - topic: The name of the Kafka topic.
-        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (meaning wait for the next produced message).
+        ///     - offset: The offset to start consuming from. Defaults to the end of the Kafka partition queue (waits for the next produced message).
         public static func partition(
             _ partition: KafkaPartition,
             groupID: String? = nil,
@@ -112,9 +112,9 @@ public struct KafkaConsumerConfiguration {
 
     /// Maximum allowed time between calls to consume messages.
     ///
-    /// If this interval is exceeded, the consumer is considered failed and the group rebalances to reassign the partitions to another consumer group member.
+    /// If this interval is exceeded, the group considers the consumer failed and rebalances to reassign the partitions to another consumer group member.
     ///
-    /// - Warning: Offset commits may be not possible at this point.
+    /// - Warning: Offset commits may not be possible at this point.
     ///
     /// The interval is checked two times per second. See KIP-62 for more information.
     ///
@@ -227,7 +227,7 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// The maximum amount of time the server will block before answering the fetch request when there isn’t sufficient data to immediately satisfy the requirement given by `fetch.min.bytes`.
+    /// The maximum amount of time the server blocks before answering the fetch request when there isn't sufficient data to immediately satisfy the requirement given by `fetch.min.bytes`.
     ///
     /// Default: `.milliseconds(500)`
     public var maximumFetchWaitTime: Duration = .milliseconds(500) {

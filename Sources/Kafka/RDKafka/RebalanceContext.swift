@@ -249,14 +249,14 @@ extension RDKafkaConfig {
     /// Register the rebalance callback and opaque pointer on a config.
     ///
     /// - Important: `rd_kafka_conf_set_opaque` sets a **single** opaque pointer per config.
-    ///   All C callbacks that receive `void* opaque` (rebalance, offset commit, error, etc.)
+    ///   All C callbacks that receive `void* opaque` (rebalance, offset commit, error, and so on)
     ///   share this one slot. Currently only the rebalance callback uses it. If a future
     ///   callback also needs the opaque, introduce a wrapper struct that multiplexes
-    ///   (e.g., a context holding both rebalance and other callback contexts).
+    ///   (for example, a context holding both rebalance and other callback contexts).
     ///
     /// - Parameters:
     ///   - configPointer: The `rd_kafka_conf_t` to configure.
-    ///   - context: The `RebalanceContext` that will receive callbacks.
+    ///   - context: The `RebalanceContext` that receives callbacks.
     static func setRebalanceCallback(
         configPointer: OpaquePointer,
         context: RebalanceContext

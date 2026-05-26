@@ -19,7 +19,7 @@ extension KafkaConfiguration {
     public struct TLSConfiguration: Sendable, Hashable {
         /// Certificate chain consisting of one leaf certificate and potentially multiple intermediate certificates.
         ///
-        /// The public key of the leaf certificate will be used for authentication.
+        /// Authentication uses the public key of the leaf certificate.
         public struct LeafAndIntermediates: Sendable, Hashable {
             internal enum _Key: Sendable, Hashable {
                 case file(location: String)
@@ -280,7 +280,7 @@ extension KafkaConfiguration {
             public var serviceName: String = "kafka"
             /// This client's Kerberos principal name.
             ///
-            /// (Not supported on Windows, will use the logon user's principal).
+            /// (Not supported on Windows, uses the logon user's principal).
             ///
             /// Default: `"kafkaclient"`
             public var principal: String = "kafkaclient"
@@ -384,7 +384,7 @@ extension KafkaConfiguration {
             ///         For example: `principal=admin extension_traceId=123`
             ///     - clientID: Public identifier for the application. Must be unique across all clients that the authorization server handles.
             ///     - clientSecret: Client secret only known to the application and the authorization server.
-            ///     This should be a sufficiently random string that is not guessable.
+            ///     Use a sufficiently random string that isn't guessable.
             ///     - tokenEndPointURL: OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token.
             ///     - scope: The client uses this to specify the scope of the access request to the broker.
             ///     - extensions: Allow additional information to be provided to the broker.

@@ -4,7 +4,7 @@ The Swift Kafka Client library provides a convenient way to interact with [Apach
 
 ## Features
 
-- Async/await producer with awaitable delivery acknowledgements (`sendAndAwait`)
+- Async/await producer with awaitable delivery acknowledgments (`sendAndAwait`)
 - High-throughput fire-and-forget producer with batched delivery reports
 - `AsyncSequence`-based consumer with automatic rebalancing
 - At-least-once delivery semantics via manual offset storage
@@ -36,13 +36,13 @@ Finally, add `import Kafka` to your source code.
 
 ## Usage
 
-`Kafka` should be used within a [`Swift Service Lifecycle`](https://github.com/swift-server/swift-service-lifecycle)
+Run `Kafka` within a [`Swift Service Lifecycle`](https://github.com/swift-server/swift-service-lifecycle)
 [`ServiceGroup`](https://swiftpackageindex.com/swift-server/swift-service-lifecycle/main/documentation/servicelifecycle/servicegroup) for proper startup and shutdown handling.
 Both the `KafkaProducer` and the `KafkaConsumer` implement the [`Service`](https://swiftpackageindex.com/swift-server/swift-service-lifecycle/main/documentation/servicelifecycle/service) protocol.
 
 ### Producer API
 
-The `sendAndAwait(_:)` method produces a message and asynchronously awaits broker acknowledgement — giving you confirmation of exactly which partition and offset your message landed at, without blocking any threads:
+The `sendAndAwait(_:)` method produces a message and asynchronously awaits broker acknowledgment, confirming the partition and offset where your message landed without blocking any threads:
 
 ```swift
 var config = KafkaProducerConfig()
@@ -72,7 +72,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 }
 ```
 
-For high-throughput pipelines where you need to maximize send rate, use the fire-and-forget `send(_:)` method and process delivery reports in batches through the events sequence:
+For high-throughput pipelines that need to maximize send rate, use the fire-and-forget `send(_:)` method and process delivery reports in batches through the events sequence:
 
 ```swift
 var config = KafkaProducerConfig()
@@ -100,7 +100,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
             switch event {
             case .deliveryReports(let reports):
                 for report in reports {
-                    // Handle delivery acknowledgement
+                    // Handle delivery acknowledgment
                 }
             default:
                 break
@@ -112,7 +112,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 ### Consumer API
 
-Messages are delivered as an `AsyncSequence` — consume them with a standard `for try await` loop that integrates naturally with Swift concurrency, structured tasks, and cancellation:
+The consumer delivers messages as an `AsyncSequence`. Iterate them with a standard `for try await` loop that integrates naturally with Swift concurrency, structured tasks, and cancellation:
 
 #### Consumer Groups
 
@@ -165,7 +165,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
         for try await message in consumer.messages {
             // Process message...
             try consumer.storeOffset(message)
-            // Offset will be committed automatically by the background auto-commit timer
+            // The background auto-commit timer commits the offset automatically.
         }
     }
 }
@@ -209,7 +209,7 @@ try await consumer.commit()
 
 #### Dynamic Subscription Management
 
-Topics can be changed at runtime:
+Change topics at runtime:
 
 ```swift
 // Subscribe to additional topics
@@ -224,7 +224,7 @@ try consumer.unsubscribe()
 
 #### Pause and Resume
 
-Partition consumption can be temporarily paused and resumed, useful for applying backpressure or performing maintenance without leaving the consumer group:
+Pause and resume partition consumption temporarily, useful for applying backpressure or performing maintenance without leaving the consumer group:
 
 ```swift
 let partition = KafkaTopicPartition(topic: "topic-name", partition: KafkaPartition(rawValue: 0))
@@ -235,7 +235,7 @@ try consumer.resume(topicPartitions: [partition])
 
 ### Security Mechanisms
 
-Both the `KafkaProducer` and the `KafkaConsumer` can be configured to use different security mechanisms via the `securityProtocol` property.
+Configure both the `KafkaProducer` and the `KafkaConsumer` to use different security mechanisms via the `securityProtocol` property.
 
 #### Plaintext
 
@@ -277,7 +277,7 @@ config.saslPassword = "password"
 
 ### Error Handling
 
-Errors from librdkafka are surfaced through the events sequence with typed error codes:
+The events sequence surfaces errors from librdkafka with typed error codes:
 
 ```swift
 let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: logger)
@@ -286,9 +286,9 @@ for await event in events {
     switch event {
     case .error(let error):
         if error.isFatal {
-            // Client is irrecoverable — initiate shutdown
+            // The client is irrecoverable — initiate shutdown.
         } else if error.isRetriable {
-            // Transient error — will likely resolve
+            // Transient error — likely resolves on its own.
         }
         print("Error: \(error)")
     default:
@@ -300,7 +300,7 @@ for await event in events {
 ## librdkafka
 
 The Package depends on [the `librdkafka` library](https://github.com/confluentinc/librdkafka), which is included as a git submodule.
-It has source files that are excluded in `Package.swift`.
+Its source files are excluded in `Package.swift`.
 
 ### Dependencies
 
@@ -311,7 +311,7 @@ It has source files that are excluded in `Package.swift`.
 
 ### Running tests locally
 
-Integration tests require a running Kafka broker which can be started with Docker:
+Integration tests require a running Kafka broker. Start one with Docker:
 
 ```shell
 docker run -d -p 9092:9092 apache/kafka:3.9.1
@@ -322,18 +322,18 @@ swift test
 
 ### Running tests in Docker
 
-We provide a Docker environment for this package. This will automatically start a local Kafka server and run the tests:
+The package provides a Docker environment that automatically starts a local Kafka server and runs the tests:
 
 ```shell
 docker compose -f docker/docker-compose.yaml run client swift test
 ```
 
-Alternatively you can use a `Makefile` target:
+Alternatively, use a `Makefile` target:
 ```shell
 make docker-test
 ```
 
-You can specify Swift compiler version using `SWIFT_VERSION` environment variable:
+Specify the Swift compiler version using the `SWIFT_VERSION` environment variable:
 ```shell
 SWIFT_VERSION=6.2 make docker-test
 ```

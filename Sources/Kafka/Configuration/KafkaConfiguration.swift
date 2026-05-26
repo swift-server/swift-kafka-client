@@ -45,8 +45,8 @@ public enum KafkaConfiguration {
     public struct MessageOptions: Sendable, Hashable {
         /// Maximum Kafka protocol request message size.
         ///
-        /// Due to differing framing overhead between protocol versions, the producer is unable to reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests.
-        /// The broker will enforce the topic's `max.message.bytes` limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
+        /// Due to differing framing overhead between protocol versions, the producer can't reliably enforce a strict max message limit at produce time and may exceed the maximum size by one message in protocol ProduceRequests.
+        /// The broker enforces the topic's `max.message.bytes` limit [(see Apache Kafka documentation)](https://kafka.apache.org/documentation/#brokerconfigs_message.max.bytes).
         ///
         /// Default: `1_000_000`
         public var maximumBytes: Int = 1_000_000
@@ -96,7 +96,7 @@ public enum KafkaConfiguration {
 
         /// When a topic loses its leader, the client enqueues a new metadata request with this initial interval, exponentially increasing until the topic metadata has been refreshed.
         ///
-        /// This is used to recover quickly from transitioning leader brokers.
+        /// This setting helps recover quickly from transitioning leader brokers.
         ///
         /// Default: `.milliseconds(250)`
         public var refreshFastInterval: Duration = .milliseconds(250) {

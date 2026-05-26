@@ -352,9 +352,9 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Subscribes to the given list of topics.
     ///
-    /// This replaces any previous subscription. The partition assignment happens
-    /// automatically using the consumer's consumer group. Topic names prefixed
-    /// with `^` are treated as regular expressions. Passing an empty array is
+    /// This replaces any previous subscription. The consumer assigns partitions
+    /// automatically using the consumer group. The consumer treats topic names prefixed
+    /// with `^` as regular expressions. Passing an empty array is
     /// equivalent to calling ``unsubscribe()``.
     ///
     /// - Parameter topics: An array of topic names to subscribe to.
@@ -385,7 +385,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// Clears all topic subscriptions. The consumer leaves the consumer group
     /// and stops receiving messages. This triggers a rebalance event.
-    /// Can re-subscribe later with ``subscribe(topics:)``.
+    /// Resubscribe later with ``subscribe(topics:)``.
     ///
     /// - Throws: A ``KafkaError`` if the consumer is closed or unsubscribing failed.
     public func unsubscribe() throws {
@@ -471,10 +471,10 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Assigns the ``KafkaConsumer`` to a specific `partition` of a `topic`.
-    /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
-    /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
+    /// - Parameter topic: Name of the topic to read from.
+    /// - Parameter partition: Partition to read from.
     /// - Parameter offset: The offset to start consuming from.
-    /// Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
+    /// Defaults to the end of the Kafka partition queue (waits for the next produced message).
     /// - Throws: A ``KafkaError`` if the consumer could not be assigned to the topic + partition pair.
     private func assign(
         topic: String,
@@ -669,19 +669,19 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Stores the offset of a consumed message in the local offset store.
     ///
-    /// This is used for at-least-once delivery semantics. The typical pattern is:
+    /// Use this for at-least-once delivery semantics. The typical pattern is:
     /// 1. Set `enableAutoOffsetStore` to `false` in the consumer configuration.
     /// 2. Keep `enableAutoCommit` as `true` (the default).
     /// 3. After successfully processing a message, call `storeOffset(_:)`.
     /// 4. The auto-commit timer periodically commits stored offsets to the broker.
     ///
-    /// This ensures that only offsets for successfully processed messages are committed.
-    /// If the application crashes before calling `storeOffset`, the consumer re-delivers
+    /// This ensures the consumer commits only offsets for successfully processed messages.
+    /// If the application crashes before calling `storeOffset`, the consumer redelivers
     /// the message on the next consumer start (at-least-once).
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoOffsetStore`` is not set to `false`.
     ///
-    /// - Parameter message: The message whose offset should be stored.
+    /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed or the consumer is closed.
     public func storeOffset(_ message: KafkaConsumerMessage) throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
@@ -704,14 +704,14 @@ public final class KafkaConsumer: Sendable, Service {
     /// Marks all messages up to the passed message in the topic as read.
     ///
     /// Schedules a commit and returns immediately.
-    /// Any errors encountered after scheduling the commit will be discarded.
+    /// The consumer discards any errors encountered after scheduling the commit.
     ///
-    /// This method is only used for manual offset management.
+    /// Use this method only for manual offset management.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     ///
     /// - Parameters:
-    ///     - message: Last received message that shall be marked as read.
+    ///     - message: Last received message to mark as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func scheduleCommit(_ message: KafkaConsumerMessage) throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
@@ -737,14 +737,14 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Marks all messages up to the passed message in the topic as read.
     ///
-    /// Awaits until the commit succeeds or an error is encountered.
+    /// Awaits until the commit succeeds or an error occurs.
     ///
-    /// This method is only used for manual offset management.
+    /// Use this method only for manual offset management.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     ///
     /// - Parameters:
-    ///     - message: Last received message that shall be marked as read.
+    ///     - message: Last received message to mark as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func commit(_ message: KafkaConsumerMessage) async throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
@@ -802,8 +802,8 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Retrieves the last-committed offsets for the given topic+partition pairs from the broker.
     ///
-    /// This is useful for monitoring consumer lag and verifying that offsets have been
-    /// successfully committed.
+    /// Use this to monitor consumer lag and to verify that the broker received the
+    /// committed offsets.
     ///
     /// - Parameters:
     ///   - topicPartitions: An array of ``KafkaTopicPartition`` to query.
@@ -850,10 +850,10 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// A Boolean value that indicates whether the current partition assignment is involuntarily lost.
     ///
-    /// This is primarily useful when reacting to a rebalance event.
-    /// When partitions are lost (for example, because `max.poll.interval.ms` was exceeded),
-    /// committing offsets for those partitions will fail because they may already
-    /// be owned by another consumer in the group.
+    /// This value is primarily useful when reacting to a rebalance event.
+    /// When the consumer loses partitions (for example, because `max.poll.interval.ms` was exceeded),
+    /// committing offsets for those partitions fails because another consumer in the group
+    /// may already own them.
     ///
     /// - Returns: `true` if the current assignment is considered lost, `false` otherwise.
     /// - Throws: A ``KafkaError`` if the consumer is closed.
@@ -871,7 +871,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Seeks to specific offsets for the given partitions.
     ///
-    /// This is useful for replaying messages or skipping ahead. The partitions
+    /// Use this to replay messages or to skip ahead. The partitions
     /// must already be assigned to this consumer (via subscription or manual assignment).
     ///
     /// This call purges all pre-fetched messages for the given partitions.

@@ -28,12 +28,12 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
 
     /// The name of the Kafka topic.
     ///
-    /// This is a convenience accessor for the underlying ``KafkaTopicPartition/topic``.
+    /// A convenience accessor for the underlying ``KafkaTopicPartition/topic``.
     public var topic: String { self.topicPartition.topic }
 
     /// The partition within the topic.
     ///
-    /// This is a convenience accessor for the underlying ``KafkaTopicPartition/partition``.
+    /// A convenience accessor for the underlying ``KafkaTopicPartition/partition``.
     public var partition: KafkaPartition { self.topicPartition.partition }
 
     /// Creates a new ``KafkaTopicPartitionOffset``.

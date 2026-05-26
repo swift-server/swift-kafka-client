@@ -6,7 +6,7 @@ Receive records from Kafka topics as an asynchronous sequence, control offset co
 
 A ``KafkaConsumer`` joins a consumer group and exposes records through a ``KafkaConsumerMessages`` asynchronous sequence. Iterate the sequence with `for try await`, and the consumer integrates naturally with structured concurrency, task cancellation, and graceful shutdown through `ServiceGroup`.
 
-By default, the consumer stores and commits offsets automatically as you iterate. For at-least-once delivery, you can disable automatic offset storage and store offsets yourself after your code finishes processing a record. For full control, you can also turn off the periodic auto-commit and commit explicitly.
+By default, the consumer stores and commits offsets automatically as iteration proceeds. For at-least-once delivery, disable automatic offset storage and store offsets after processing each record. For full control, also turn off the periodic auto-commit and commit explicitly.
 
 ### Configure a consumer group
 
@@ -51,7 +51,7 @@ Each ``KafkaConsumerMessage`` carries the topic, partition, offset, key, value, 
 
 ### Achieve at-least-once delivery
 
-For at-least-once semantics, disable automatic offset storage and call ``KafkaConsumer/storeOffset(_:)`` only after your code finishes processing the record. The consumer's background auto-commit timer then commits the stored offsets:
+For at-least-once semantics, disable automatic offset storage and call ``KafkaConsumer/storeOffset(_:)`` only after processing each record. The consumer's background auto-commit timer then commits the stored offsets:
 
 ```swift
 var config = KafkaConsumerConfig()
@@ -105,7 +105,7 @@ try await consumer.commit()
 
 ### Manage subscriptions dynamically
 
-Topic subscriptions can change at runtime — call ``KafkaConsumer/subscribe(topics:)`` again to update them:
+Topic subscriptions change at runtime — call ``KafkaConsumer/subscribe(topics:)`` again to update them:
 
 ```swift
 // Subscribe to additional topics.

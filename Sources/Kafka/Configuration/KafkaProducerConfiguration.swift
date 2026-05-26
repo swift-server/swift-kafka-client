@@ -53,7 +53,7 @@ public struct KafkaProducerConfiguration {
     /// ``KafkaProducerConfiguration/maximumMessageSendRetries`` = `UInt32.max` (must be greater than 0),
     /// ``KafkaTopicConfiguration/requiredAcknowledgements`` = ``KafkaTopicConfiguration/RequiredAcknowledgments/all``,
     /// queuing strategy = FIFO.
-    /// Producer instantiation will fail if the user-supplied configuration is incompatible.
+    /// Producer instantiation fails if the user-supplied configuration is incompatible.
     ///
     /// Default: `false`
     public var isIdempotenceEnabled: Bool = false

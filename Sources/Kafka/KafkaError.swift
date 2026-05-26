@@ -308,9 +308,9 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 extension KafkaError {
     /// The high-level classification of a Kafka error.
     ///
-    /// The same error may be thrown from more than one place for more than one reason.
+    /// The same error may originate from more than one place for more than one reason.
     /// This type captures only a relatively high-level error:
-    /// use the string representation of ``KafkaError`` to get more details about the specific cause.
+    /// use the string representation of ``KafkaError`` for more details about the specific cause.
     public struct ErrorCode: Hashable, Sendable, CustomStringConvertible {
         fileprivate enum BackingCode {
             case rdKafkaError

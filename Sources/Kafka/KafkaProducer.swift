@@ -71,7 +71,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 
 /// Sends messages to the Kafka cluster.
 ///
-/// - Note: When messages get published to a non-existent topic, a new topic is created using the default topic configuration
+/// - Note: When messages get published to a nonexistent topic, a new topic is created using the default topic configuration
 ///   (based on topic-level configuration properties set on `KafkaProducerConfig`).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
@@ -306,8 +306,8 @@ public final class KafkaProducer: Service, Sendable {
     /// Match delivery reports against pending `sendAndAwait` continuations.
     ///
     /// For each report, if a continuation is registered for that message ID, resume it.
-    /// All reports are returned; the producer yields them to the events sequence regardless
-    /// of whether a continuation was resumed. This ensures the events sequence is a complete
+    /// Returns all reports; the producer yields them to the events sequence regardless
+    /// of whether it resumed a continuation. This ensures the events sequence is a complete
     /// log of all delivery reports, even for messages sent via `sendAndAwait`.
     private func resumeContinuations(for reports: [KafkaDeliveryReport]) {
         for report in reports {
@@ -479,8 +479,8 @@ extension KafkaProducer {
                 source: Producer.Source?,
                 topicHandles: RDKafkaTopicHandles
             )
-            /// Producer is still running but the event asynchronous sequence was terminated.
-            /// All incoming events will be dropped.
+            /// The producer is still running but the events asynchronous sequence terminated.
+            /// The producer drops all incoming events.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case eventConsumptionFinished(client: RDKafkaClient)
@@ -610,8 +610,8 @@ extension KafkaProducer {
             case finishSource(source: Producer.Source?)
         }
 
-        /// The events asynchronous sequence was terminated.
-        /// All incoming events will be dropped.
+        /// The events asynchronous sequence terminated.
+        /// The producer drops all incoming events.
         mutating func stopConsuming() -> StopConsumingAction? {
             switch self.state {
             case .uninitialized:

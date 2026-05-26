@@ -69,7 +69,7 @@ final class RDKafkaTopicPartitionList: @unchecked Sendable {
 
     /// Scoped accessor that enables safe access to the pointer of the underlying `rd_kafka_topic_partition_t`.
     /// - Warning: Do not escape the pointer from the closure for later use.
-    /// - Parameter body: The closure will use the pointer.
+    /// - Parameter body: The closure that uses the pointer.
     @discardableResult
     func withListPointer<T>(_ body: (UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws -> T) rethrows -> T {
         try body(self._internal)

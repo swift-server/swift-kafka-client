@@ -31,11 +31,12 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
 
     /// The optional key associated with the message.
     ///
-    /// If the ``KafkaPartition`` is ``KafkaPartition/unassigned``, the ``KafkaProducerMessage/key`` is used to ensure
-    /// that two ``KafkaProducerMessage``s with the same key still get sent to the same ``KafkaPartition``.
+    /// If the ``KafkaPartition`` is ``KafkaPartition/unassigned``, the producer uses
+    /// ``KafkaProducerMessage/key`` to ensure that two ``KafkaProducerMessage``s with
+    /// the same key route to the same ``KafkaPartition``.
     public var key: Key?
 
-    /// The value of the message to be sent.
+    /// The value of the message to send.
     public var value: Value
 
     /// Create a new ``KafkaProducerMessage`` with a ``KafkaContiguousBytes`` key and value.

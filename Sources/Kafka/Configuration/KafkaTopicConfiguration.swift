@@ -34,14 +34,14 @@ public struct KafkaTopicConfiguration {
         public static let noAcknowledgments: RequiredAcknowledgments = .init(rawValue: 0)
     }
 
-    /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
+    /// The number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
     ///
-    /// If there are less than `min.insync.replicas` (broker configuration) in the ISR set the produce request will fail.
+    /// If there are less than `min.insync.replicas` (broker configuration) in the ISR set, the produce request fails.
     ///
     /// Default: `.all`
     public var requiredAcknowledgements: RequiredAcknowledgments = .all
 
-    /// The ack timeout of the producer request.
+    /// The acknowledgment timeout of the producer request.
     ///
     /// This value is only enforced by the broker and relies on ``requiredAcknowledgements`` being != 0.
     /// (Lowest granularity is milliseconds)

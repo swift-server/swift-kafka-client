@@ -51,9 +51,9 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
 
 /// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage {
-    /// The topic that the message was received from.
+    /// The topic the consumer received the message from.
     public var topic: String
-    /// The partition that the message was received from.
+    /// The partition the consumer received the message from.
     public var partition: KafkaPartition
     /// The headers of the message.
     public var headers: [KafkaHeader]

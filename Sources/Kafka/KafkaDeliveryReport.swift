@@ -18,18 +18,18 @@ import Crdkafka
 public struct KafkaDeliveryReport: Sendable, Hashable {
     /// The outcome of a producer's attempt to deliver a message to the Kafka cluster.
     public enum Status: Sendable, Hashable {
-        /// The message has been successfully acknowledged by the Kafka cluster.
+        /// The Kafka cluster successfully acknowledged the message.
         case acknowledged(message: KafkaAcknowledgedMessage)
-        /// The message failed to be acknowledged by the Kafka cluster and encountered an error.
+        /// The Kafka cluster failed to acknowledge the message and encountered an error.
         case failure(KafkaError)
     }
 
     /// The ``Status`` of a Kafka producer message after attempting to send it.
     public var status: Status
 
-    /// The unique identifier assigned by the ``KafkaProducer`` when the message was sent to Kafka.
+    /// The unique identifier the ``KafkaProducer`` assigned when sending the message to Kafka.
     ///
-    /// The same identifier is returned by ``KafkaProducer/send(_:)`` and can be used to correlate
+    /// ``KafkaProducer/send(_:)`` returns the same identifier, which correlates
     /// a sent message with a delivery report.
     public var id: KafkaProducerMessageID
 

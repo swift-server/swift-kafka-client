@@ -6,7 +6,7 @@ Add the Kafka client to your package, then run a producer or consumer inside a s
 
 Kafka exposes a producer and a consumer that conform to the `Service` protocol from `swift-service-lifecycle`. Run them inside a `ServiceGroup`, which manages graceful startup and shutdown, and exchange records with the broker through `async`/`await` and `AsyncSequence`.
 
-This article walks you through adding the dependency, sending a single message, and reading messages from a topic.
+This article walks through adding the dependency, sending a single message, and reading messages from a topic.
 
 ### Add Kafka as a dependency
 
@@ -117,7 +117,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 ### Run a local broker
 
-You can stand up a Kafka broker on `localhost:9092` with Docker:
+Stand up a Kafka broker on `localhost:9092` with Docker:
 
 ```shell
 docker run -d -p 9092:9092 apache/kafka:3.9.1
