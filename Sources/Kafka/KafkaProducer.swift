@@ -228,7 +228,7 @@ public final class KafkaProducer: Service, Sendable {
 
     /// Starts the ``KafkaProducer``.
     ///
-    /// - Important: This method **must** be called and runs until either the calling task is canceled or gracefully shut down.
+    /// - Important: Call this method to drive the producer. It runs until either the calling task is canceled or gracefully shut down.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -296,7 +296,7 @@ public final class KafkaProducer: Service, Sendable {
     /// Match delivery reports against pending `sendAndAwait` continuations.
     ///
     /// For each report, if a continuation is registered for that message ID, resume it.
-    /// ALL reports are returned — they should be yielded to the events sequence regardless
+    /// All reports are returned; the producer yields them to the events sequence regardless
     /// of whether a continuation was resumed. This ensures the events sequence is a complete
     /// log of all delivery reports, even for messages sent via `sendAndAwait`.
     private func resumeContinuations(for reports: [KafkaDeliveryReport]) {

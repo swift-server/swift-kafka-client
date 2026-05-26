@@ -131,7 +131,7 @@ public struct KafkaConsumerConfiguration {
     /// The offset store is an in-memory store of the next offset to (auto-)commit for each partition.
     ///
     /// When set to `false`, the application must explicitly call ``KafkaConsumer/storeOffset(_:)``
-    /// after processing each message. This is the **recommended pattern** for at-least-once delivery
+    /// after processing each message. This is the recommended pattern for at-least-once delivery
     /// semantics — it prevents offsets from being committed for unprocessed messages.
     ///
     /// Default: `true`

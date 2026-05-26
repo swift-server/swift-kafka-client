@@ -480,7 +480,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Starts the ``KafkaConsumer``.
     ///
-    /// - Important: This method **must** be called and runs until either the calling task is canceled or gracefully shut down.
+    /// - Important: Call this method to drive the consumer. It runs until either the calling task is canceled or gracefully shut down.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -655,13 +655,13 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Stores the offset of a consumed message in the local offset store.
     ///
-    /// This is used for **at-least-once** delivery semantics. The typical pattern is:
+    /// This is used for at-least-once delivery semantics. The typical pattern is:
     /// 1. Set `enableAutoOffsetStore` to `false` in the consumer configuration.
     /// 2. Keep `enableAutoCommit` as `true` (the default).
     /// 3. After successfully processing a message, call `storeOffset(_:)`.
     /// 4. The auto-commit timer periodically commits stored offsets to the broker.
     ///
-    /// This ensures that only offsets for **successfully processed** messages are committed.
+    /// This ensures that only offsets for successfully processed messages are committed.
     /// If the application crashes before calling `storeOffset`, the consumer re-delivers
     /// the message on the next consumer start (at-least-once).
     ///
