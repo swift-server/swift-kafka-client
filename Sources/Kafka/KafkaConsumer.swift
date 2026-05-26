@@ -761,7 +761,7 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Commits all stored offsets to the broker.
-    /// Awaits until the commit succeeds or an error is encountered.
+    /// Awaits until the commit succeeds or encounters an error.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     /// - Throws: A ``KafkaError`` if the commit failed or the consumer is closed.
@@ -809,8 +809,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// Retrieves the current positions (next offset to be fetched) for the given topic+partition pairs.
     ///
     /// The position reflects the consumer's in-memory position, which is the last consumed
-    /// message's offset + 1. This is useful for computing consumer lag when compared with
-    /// the committed offsets.
+    /// message's offset + 1. Use the position to compute consumer lag against the committed offsets.
     ///
     /// - Parameter topicPartitions: An array of ``KafkaTopicPartition`` to query.
     /// - Returns: An array of ``KafkaTopicPartitionOffset``. The ``KafkaTopicPartitionOffset/offset``
@@ -878,10 +877,9 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// This function is used to gracefully shut down a Kafka consumer client.
+    /// Gracefully shuts down a Kafka consumer client.
     ///
-    /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
-    /// will already shut down when consumption of the ``KafkaConsumerMessages`` has ended.
+    /// - Note: Invoking this method isn't always needed; the ``KafkaConsumer`` already shuts down when consumption of ``KafkaConsumerMessages`` ends.
     public func triggerGracefulShutdown() {
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {

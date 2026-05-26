@@ -152,7 +152,7 @@ public enum KafkaConfiguration {
         /// Default: `false`
         public var isNagleDisabled: Bool = false
 
-        /// Disconnect from the broker when this number of send failures (for example, timed-out requests) is reached.
+        /// Disconnects from the broker after this number of send failures (for example, timed-out requests).
         public struct MaximumFailures: Sendable, Hashable {
             internal let rawValue: Int
 
@@ -168,7 +168,7 @@ public enum KafkaConfiguration {
             public static let disabled: MaximumFailures = .init(rawValue: 0)
         }
 
-        /// Disconnect from the broker when this number of send failures (for example, timed-out requests) is reached.
+        /// Disconnects from the broker after this number of send failures (for example, timed-out requests).
         ///
         /// - Warning: It is highly recommended to leave this setting at its default value of 1 to avoid the client and broker becoming desynchronized in case of request timeouts.
         /// - Note: The connection is automatically re-established.

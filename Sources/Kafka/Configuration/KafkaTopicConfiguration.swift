@@ -78,23 +78,23 @@ public struct KafkaTopicConfiguration {
     /// Default: `.timeout(.milliseconds(300_000))`
     public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
 
-    /// Partitioner. Computes the partition that a message is stored in.
+    /// Partitioner. Computes the partition where a message is stored.
     public struct Partitioner: Sendable, Hashable, CustomStringConvertible {
         public let description: String
 
         /// Random distribution.
         public static let random = Partitioner(description: "random")
-        /// CRC32 hash of key (Empty and NULL keys are mapped to a single partition).
+        /// CRC32 hash of key. Maps empty and NULL keys to a single partition.
         public static let consistent = Partitioner(description: "consistent")
-        /// CRC32 hash of key (Empty and NULL keys are randomly partitioned).
+        /// CRC32 hash of key. Randomly partitions empty and NULL keys.
         public static let consistentRandom = Partitioner(description: "consistent_random")
-        /// Java Producer compatible Murmur2 hash of key (NULL keys are mapped to a single partition).
+        /// Java Producer compatible Murmur2 hash of key. Maps NULL keys to a single partition.
         public static let murmur2 = Partitioner(description: "murmur2")
-        /// Java Producer compatible Murmur2 hash of key (NULL keys are randomly partitioned. This is functionally equivalent to the default partitioner in the Java Producer).
+        /// Java Producer compatible Murmur2 hash of key. Randomly partitions NULL keys. This is functionally equivalent to the default partitioner in the Java Producer.
         public static let murmur2Random = Partitioner(description: "murmur2_random")
-        /// FNV-1a hash of key (NULL keys are mapped to a single partition).
+        /// FNV-1a hash of key. Maps NULL keys to a single partition.
         public static let fnv1a = Partitioner(description: "fnv1a")
-        /// FNV-1a hash of key (NULL keys are randomly partitioned).
+        /// FNV-1a hash of key. Randomly partitions NULL keys.
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
     }
 

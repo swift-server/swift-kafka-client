@@ -51,7 +51,7 @@ extension KafkaConfiguration {
 
             let _internal: _TrustRoots
 
-            /// A list of standard paths will be probed and the first one found will be used as the default root certificate location path.
+            /// Probes a list of standard paths and uses the first one found as the default root certificate location.
             public static let probe = TrustRoots(_internal: .probe)
 
             /// File or directory path to root certificate(s) for verifying the broker's key.
