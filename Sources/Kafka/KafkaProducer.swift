@@ -534,7 +534,7 @@ extension KafkaProducer {
         /// Returns the next action to be taken when wanting to poll.
         /// - Returns: The next action to be taken, either polling or terminating the poll loop.
         ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        /// - Important: This function traps with a `fatalError` if called while in the `.uninitialized` state.
         mutating func nextPollLoopAction() -> PollLoopAction {
             switch self.state {
             case .uninitialized:
@@ -624,7 +624,7 @@ extension KafkaProducer {
 
         /// Get action to be taken when wanting to do close the producer.
         ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        /// - Important: This function traps with a `fatalError` if called while in the `.uninitialized` state.
         mutating func finish() {
             switch self.state {
             case .uninitialized:

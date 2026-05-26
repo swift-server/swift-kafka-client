@@ -665,7 +665,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// If the application crashes before calling `storeOffset`, the message will be
     /// re-delivered on the next consumer start (at-least-once).
     ///
-    /// - Warning: This method fails if `enableAutoOffsetStore` is not set to `false`.
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoOffsetStore`` is not set to `false`.
     ///
     /// - Parameter message: The message whose offset should be stored.
     /// - Throws: A ``KafkaError`` if storing the offset failed or the consumer is closed.
@@ -693,7 +693,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// This method is only used for manual offset management.
     ///
-    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     ///
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.
@@ -722,7 +722,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// This method is only used for manual offset management.
     ///
-    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     ///
     /// - Parameters:
     ///     - message: Last received message that shall be marked as read.
