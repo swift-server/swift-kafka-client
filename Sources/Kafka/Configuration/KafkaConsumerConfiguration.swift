@@ -14,6 +14,7 @@
 
 import struct Foundation.UUID
 
+/// Configuration values that control a `KafkaConsumer` instance.
 public struct KafkaConsumerConfiguration {
     // MARK: - Kafka-specific Config properties
 

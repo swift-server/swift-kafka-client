@@ -15,6 +15,7 @@
 import NIOCore
 
 extension String: KafkaContiguousBytes {
+    /// Calls the given closure with a pointer to the string's UTF-8 bytes.
     public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
         if let read = try self.utf8.withContiguousStorageIfAvailable({ unsafePointer in
             // Fast Path

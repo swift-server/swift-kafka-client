@@ -188,10 +188,12 @@ extension RDKafkaClient {
         }
     }
 
+    /// Creates an `RDKafkaClient` configured for topic management using the given consumer configuration.
     public static func makeClientForTopics(config: KafkaConsumerConfig, logger: Logger) throws -> RDKafkaClient {
         try Self.makeClient(type: .consumer, configDictionary: config.config, events: [], logger: logger)
     }
 
+    /// Creates an `RDKafkaClient` configured for topic management using the given consumer configuration.
     @available(*, deprecated, message: "Use makeClientForTopics(config:logger:) with KafkaConsumerConfig instead")
     public static func makeClientForTopics(config: KafkaConsumerConfiguration, logger: Logger) throws -> RDKafkaClient {
         try Self.makeClient(type: .consumer, configDictionary: config.dictionary, events: [], logger: logger)

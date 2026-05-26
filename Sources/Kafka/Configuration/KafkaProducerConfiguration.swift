@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Configuration values that control a `KafkaProducer` instance.
 public struct KafkaProducerConfiguration {
     // MARK: - Kafka-specific Config properties
 

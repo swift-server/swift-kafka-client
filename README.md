@@ -15,7 +15,7 @@ The Swift Kafka Client library provides a convenient way to interact with [Apach
 - Integration with [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle), [swift-log](https://github.com/apple/swift-log), and [swift-metrics](https://github.com/apple/swift-metrics)
 - Full librdkafka configuration exposed as typed Swift properties
 
-## Adding Kafka as a Dependency
+## Adding Kafka as a dependency
 
 To use the `Kafka` library in a SwiftPM project,
 add the following line to the dependencies in your `Package.swift` file:
@@ -114,7 +114,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 The consumer delivers messages as an `AsyncSequence`. Iterate them with a standard `for try await` loop that integrates naturally with Swift concurrency, structured tasks, and cancellation:
 
-#### Consumer Groups
+#### Consumer groups
 
 ```swift
 var config = KafkaConsumerConfig()
@@ -140,7 +140,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 }
 ```
 
-#### At-Least-Once Processing
+#### At-least-once processing
 
 For at-least-once delivery semantics, disable automatic offset storage and manually store offsets after processing:
 
@@ -171,7 +171,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 }
 ```
 
-#### Manual Commits
+#### Manual commits
 
 To control exactly when offsets are committed to the broker:
 
@@ -207,7 +207,7 @@ To commit all previously stored offsets at once:
 try await consumer.commit()
 ```
 
-#### Dynamic Subscription Management
+#### Dynamic subscription management
 
 Change topics at runtime:
 
@@ -222,7 +222,7 @@ let topics = try consumer.subscribedTopics()
 try consumer.unsubscribe()
 ```
 
-#### Pause and Resume
+#### Pause and resume
 
 Pause and resume partition consumption temporarily, useful for applying backpressure or performing maintenance without leaving the consumer group:
 
@@ -233,7 +233,7 @@ try consumer.pause(topicPartitions: [partition])
 try consumer.resume(topicPartitions: [partition])
 ```
 
-### Security Mechanisms
+### Security mechanisms
 
 Configure both the `KafkaProducer` and the `KafkaConsumer` to use different security mechanisms via the `securityProtocol` property.
 
@@ -253,7 +253,7 @@ config.bootstrapServers = ["localhost:9092"]
 config.securityProtocol = .ssl
 ```
 
-#### SASL + Plaintext
+#### SASL + plaintext
 
 ```swift
 var config = KafkaProducerConfig()
@@ -275,7 +275,7 @@ config.saslUsername = "user"
 config.saslPassword = "password"
 ```
 
-### Error Handling
+### Error handling
 
 The events sequence surfaces errors from librdkafka with typed error codes:
 
@@ -307,7 +307,7 @@ Its source files are excluded in `Package.swift`.
 - **macOS**: `brew install openssl@3`
 - **Linux**: `apt-get install libssl-dev libsasl2-dev`
 
-## Development Setup
+## Development setup
 
 ### Running tests locally
 

@@ -43,6 +43,7 @@ extension KafkaConfiguration {
             }
         }
 
+        /// A set of trust roots used to verify the broker's TLS certificate.
         public struct TrustRoots: Sendable, Hashable {
             internal enum _TrustRoots: Sendable, Hashable {
                 case probe
@@ -72,6 +73,7 @@ extension KafkaConfiguration {
 
         /// A TLS private key with its associated password.
         public struct PrivateKey: Sendable, Hashable {
+            /// The source of a TLS private key, either a file path or an inline PEM string.
             public struct Location: Sendable, Hashable {
                 internal enum _Location: Sendable, Hashable {
                     case file(location: String)

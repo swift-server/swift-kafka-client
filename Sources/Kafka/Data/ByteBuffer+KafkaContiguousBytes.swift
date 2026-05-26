@@ -15,6 +15,7 @@
 import NIOCore
 
 extension ByteBuffer: KafkaContiguousBytes {
+    /// Calls the given closure with a pointer to the buffer's readable bytes.
     public func withUnsafeBytes<R>(_ body: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
         try self.withUnsafeReadableBytes {
             try body($0)
