@@ -52,11 +52,11 @@ let producer = try KafkaProducer(config: config, logger: logger)
 
 let serviceGroup = ServiceGroup(
     services: [producer],
-    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
+    gracefulShutdownSignals: [.sigterm],
     logger: logger
 )
 
-try await withThrowingTaskGroup(of: Void.self) { group in
+await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
@@ -85,11 +85,11 @@ let (producer, events) = try KafkaProducer.makeProducerWithEvents(
 
 let serviceGroup = ServiceGroup(
     services: [producer],
-    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
+    gracefulShutdownSignals: [.sigterm],
     logger: logger
 )
 
-try await withThrowingTaskGroup(of: Void.self) { group in
+await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
@@ -125,11 +125,11 @@ let consumer = try KafkaConsumer(config: config, logger: logger)
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
-    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
+    gracefulShutdownSignals: [.sigterm],
     logger: logger
 )
 
-try await withThrowingTaskGroup(of: Void.self) { group in
+await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
@@ -154,11 +154,11 @@ let consumer = try KafkaConsumer(config: config, logger: logger)
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
-    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
+    gracefulShutdownSignals: [.sigterm],
     logger: logger
 )
 
-try await withThrowingTaskGroup(of: Void.self) { group in
+await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
@@ -185,11 +185,11 @@ let consumer = try KafkaConsumer(config: config, logger: logger)
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
-    configuration: ServiceGroupConfiguration(gracefulShutdownSignals: [.sigterm]),
+    gracefulShutdownSignals: [.sigterm],
     logger: logger
 )
 
-try await withThrowingTaskGroup(of: Void.self) { group in
+await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
@@ -290,7 +290,7 @@ for await event in events {
         } else if error.isRetriable {
             // Transient error — will likely resolve
         }
-        print("Error: \(error.rdKafkaCode)")
+        print("Error: \(error)")
     default:
         break
     }
