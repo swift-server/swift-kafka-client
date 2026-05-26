@@ -32,7 +32,7 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
     /// The partition within the topic (convenience accessor).
     public var partition: KafkaPartition { self.topicPartition.partition }
 
-    /// Create a new ``KafkaTopicPartitionOffset``.
+    /// Creates a new ``KafkaTopicPartitionOffset``.
     ///
     /// - Parameters:
     ///   - topic: The name of the Kafka topic.
@@ -43,7 +43,7 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
         self.offset = offset
     }
 
-    /// Create a new ``KafkaTopicPartitionOffset`` from an existing ``KafkaTopicPartition``.
+    /// Creates a new ``KafkaTopicPartitionOffset`` from an existing ``KafkaTopicPartition``.
     ///
     /// - Parameters:
     ///   - topicPartition: The topic and partition.

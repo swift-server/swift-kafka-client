@@ -165,7 +165,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         )
     }
 
-    /// Create a ``KafkaError`` from a rich `rd_kafka_error_t*` error.
+    /// Creates a ``KafkaError`` from a rich `rd_kafka_error_t*` error.
     ///
     /// Extracts the error code, reason string, isFatal, and isRetriable flags
     /// before destroying the error object. This preserves the full error metadata

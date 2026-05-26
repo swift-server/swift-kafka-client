@@ -20,7 +20,7 @@ public struct KafkaTopicPartition: Sendable, Hashable {
     /// The partition within the topic.
     public var partition: KafkaPartition
 
-    /// Create a new ``KafkaTopicPartition``.
+    /// Creates a new ``KafkaTopicPartition``.
     ///
     /// - Parameters:
     ///   - topic: The name of the Kafka topic.

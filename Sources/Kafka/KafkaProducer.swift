@@ -66,7 +66,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 
 // MARK: - KafkaProducer
 
-/// Send messages to the Kafka cluster.
+/// Sends messages to the Kafka cluster.
 /// - Note: When messages get published to a non-existent topic, a new topic is created using the default topic configuration
 ///   (based on topic-level configuration properties set on `KafkaProducerConfig`).
 public final class KafkaProducer: Service, Sendable {
@@ -86,7 +86,7 @@ public final class KafkaProducer: Service, Sendable {
     private let logger: Logger
 
     // Private initializer, use factory method or convenience init to create KafkaProducer
-    /// Initialize a new ``KafkaProducer``.
+    /// Creates a new ``KafkaProducer``.
     ///
     /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -102,7 +102,7 @@ public final class KafkaProducer: Service, Sendable {
         self.logger = logger
     }
 
-    /// Initialize a new ``KafkaProducer``.
+    /// Creates a new ``KafkaProducer``.
     ///
     /// This creates a producer without listening for events.
     ///
@@ -143,7 +143,7 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Initialize a new ``KafkaProducer`` and a ``KafkaProducerEvents`` asynchronous sequence.
+    /// Creates a new ``KafkaProducer`` and a ``KafkaProducerEvents`` asynchronous sequence.
     ///
     /// Use the asynchronous sequence to consume events.
     ///
@@ -226,7 +226,7 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Start the ``KafkaProducer``.
+    /// Starts the ``KafkaProducer``.
     ///
     /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
     public func run() async throws {
@@ -324,7 +324,7 @@ public final class KafkaProducer: Service, Sendable {
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
-    /// Send a ``KafkaProducerMessage`` to the Kafka cluster.
+    /// Sends a ``KafkaProducerMessage`` to the Kafka cluster.
     ///
     /// This method does not wait until the message is sent and acknowledged by the cluster.
     /// Instead, it buffers the message and returns immediately.
@@ -348,7 +348,7 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Send a ``KafkaProducerMessage`` to the Kafka cluster and await the delivery report.
+    /// Sends a ``KafkaProducerMessage`` to the Kafka cluster and await the delivery report.
     ///
     /// Unlike ``send(_:)``, this method suspends until the broker acknowledges (or rejects)
     /// the message. The returned ``KafkaDeliveryReport`` contains the acknowledgment status,

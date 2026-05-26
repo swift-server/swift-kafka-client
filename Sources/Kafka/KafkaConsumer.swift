@@ -169,7 +169,7 @@ public final class KafkaConsumer: Sendable, Service {
     public let messages: KafkaConsumerMessages
 
     // Private initializer, use factory method or convenience init to create KafkaConsumer
-    /// Initialize a new ``KafkaConsumer``.
+    /// Creates a new ``KafkaConsumer``.
     /// To listen to incoming messages, subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     ///
@@ -207,7 +207,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Initialize a new ``KafkaConsumer``.
+    /// Creates a new ``KafkaConsumer``.
     ///
     /// This creates a consumer that does not listen to any events other than consumer messages.
     ///
@@ -249,7 +249,7 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
-    /// Initialize a new ``KafkaConsumer`` and a ``KafkaConsumerEvents`` asynchronous sequence.
+    /// Creates a new ``KafkaConsumer`` and a ``KafkaConsumerEvents`` asynchronous sequence.
     ///
     /// Use the asynchronous sequence to consume events.
     ///
@@ -336,7 +336,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     // MARK: - Subscription Management
 
-    /// Subscribe to the given list of topics.
+    /// Subscribes to the given list of topics.
     ///
     /// This replaces any previous subscription. The partition assignment happens
     /// automatically using the consumer's consumer group. Topic names prefixed
@@ -367,7 +367,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Unsubscribe from the current subscription.
+    /// Unsubscribes from the current subscription.
     ///
     /// Clears all topic subscriptions. The consumer leaves the consumer group
     /// and stops receiving messages. This triggers a rebalance event.
@@ -384,7 +384,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Get the current topic subscription.
+    /// Returns the current topic subscription.
     ///
     /// - Returns: An array of topic names or patterns the consumer is currently subscribed to.
     /// - Throws: A ``KafkaError`` if the consumer is closed or the query failed.
@@ -398,7 +398,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Pause consumption for the given partitions.
+    /// Pauses consumption for the given partitions.
     ///
     /// Paused partitions remain in the consumer group and continue heartbeating
     /// but will not return messages from ``messages``.
@@ -419,7 +419,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Resume consumption for the given partitions.
+    /// Resumes consumption for the given partitions.
     ///
     /// - Parameter topicPartitions: The partitions to resume.
     /// - Throws: A ``KafkaError`` if the consumer is closed or resuming failed.
@@ -456,7 +456,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Assign the``KafkaConsumer`` to a specific `partition` of a `topic`.
+    /// Assigns the ``KafkaConsumer`` to a specific `partition` of a `topic`.
     /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
     /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
     /// - Parameter offset: The offset to start consuming from.
@@ -478,7 +478,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Start the ``KafkaConsumer``.
+    /// Starts the ``KafkaConsumer``.
     ///
     /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
     public func run() async throws {
@@ -653,7 +653,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Store the offset of a consumed message in the local offset store.
+    /// Stores the offset of a consumed message in the local offset store.
     ///
     /// This is used for **at-least-once** delivery semantics. The typical pattern is:
     /// 1. Set `enableAutoOffsetStore` to `false` in the consumer configuration.
@@ -687,7 +687,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Mark all messages up to the passed message in the topic as read.
+    /// Marks all messages up to the passed message in the topic as read.
     /// Schedules a commit and returns immediately.
     /// Any errors encountered after scheduling the commit will be discarded.
     ///
@@ -717,7 +717,7 @@ public final class KafkaConsumer: Sendable, Service {
         try await self.commit(message)
     }
 
-    /// Mark all messages up to the passed message in the topic as read.
+    /// Marks all messages up to the passed message in the topic as read.
     /// Awaits until the commit succeeds or an error is encountered.
     ///
     /// This method is only used for manual offset management.
@@ -741,7 +741,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Schedule an async commit of all stored offsets.
+    /// Schedules an asynchronous commit of all stored offsets.
     /// Returns immediately. Any errors after scheduling are discarded.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
@@ -760,7 +760,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Commit all stored offsets to the broker.
+    /// Commits all stored offsets to the broker.
     /// Awaits until the commit succeeds or an error is encountered.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
@@ -779,7 +779,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Retrieve the last-committed offsets for the given topic+partition pairs from the broker.
+    /// Retrieves the last-committed offsets for the given topic+partition pairs from the broker.
     ///
     /// This is useful for monitoring consumer lag and verifying that offsets have been
     /// successfully committed.
@@ -806,7 +806,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Retrieve the current positions (next offset to be fetched) for the given topic+partition pairs.
+    /// Retrieves the current positions (next offset to be fetched) for the given topic+partition pairs.
     ///
     /// The position reflects the consumer's in-memory position, which is the last consumed
     /// message's offset + 1. This is useful for computing consumer lag when compared with
@@ -849,7 +849,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Seek to specific offsets for the given partitions.
+    /// Seeks to specific offsets for the given partitions.
     ///
     /// This is useful for replaying messages or skipping ahead. The partitions
     /// must already be assigned to this consumer (via subscription or manual assignment).

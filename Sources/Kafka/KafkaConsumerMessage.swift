@@ -66,7 +66,7 @@ public struct KafkaConsumerMessage {
     /// The type of timestamp on this message.
     public var timestampType: KafkaTimestampType
 
-    /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
+    /// Creates a ``KafkaConsumerMessage`` from an `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee

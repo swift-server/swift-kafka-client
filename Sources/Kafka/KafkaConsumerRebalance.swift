@@ -39,7 +39,7 @@ public struct KafkaConsumerRebalance: Sendable, Hashable {
     /// For ``Kind/error(_:)``: empty.
     public let partitions: [KafkaTopicPartition]
 
-    /// Create a rebalance event description.
+    /// Creates a rebalance event description.
     /// - Parameters:
     ///   - kind: Whether this is an assignment, revocation, or error.
     ///   - partitions: The partitions involved in this rebalance.

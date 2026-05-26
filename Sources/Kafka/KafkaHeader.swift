@@ -23,7 +23,7 @@ public struct KafkaHeader: Sendable, Hashable {
     /// The value associated with the header.
     public var value: ByteBuffer?
 
-    /// Initializes a new Kafka header with the provided key and optional value.
+    /// Creates a new Kafka header with the given key and optional value.
     ///
     /// - Parameters:
     ///   - key: The key associated with the header.
