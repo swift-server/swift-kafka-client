@@ -828,7 +828,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Check if the current partition assignment has been lost involuntarily.
+    /// A Boolean value that indicates whether the current partition assignment is involuntarily lost.
     ///
     /// This is primarily useful when reacting to a rebalance event.
     /// When partitions are lost (for example, because `max.poll.interval.ms` was exceeded),

@@ -120,11 +120,14 @@ public struct KafkaConsumerConfiguration {
         }
     }
 
-    /// Automatically and periodically commit offsets in the background. Note: Setting this to `false` does not prevent the consumer from fetching previously committed start offsets.
+    /// A Boolean value that indicates whether the consumer commits offsets automatically and periodically in the background.
+    ///
+    /// - Note: Setting this to `false` does not prevent the consumer from fetching previously committed start offsets.
+    ///
     /// Default: `true`
     public var isAutoCommitEnabled: Bool = true
 
-    /// Automatically store offset of last message provided to application.
+    /// A Boolean value that indicates whether the consumer automatically stores the offset of the last message provided to the application.
     /// The offset store is an in-memory store of the next offset to (auto-)commit for each partition.
     ///
     /// When set to `false`, the application must explicitly call ``KafkaConsumer/storeOffset(_:)``
@@ -158,7 +161,7 @@ public struct KafkaConsumerConfiguration {
     /// Default: `.largest`
     public var autoOffsetReset: AutoOffsetReset = .largest
 
-    /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
+    /// A Boolean value that indicates whether the consumer allows automatic topic creation on the broker when subscribing to or assigning nonexistent topics.
     /// The broker must also be configured with ``KafkaConsumerConfiguration/isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
     /// Default: `false`
     public var isAutoCreateTopicsEnabled: Bool = false

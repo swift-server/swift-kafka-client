@@ -39,6 +39,8 @@ public struct KafkaProducerConfiguration {
 
     // MARK: - Producer-specific Config Properties
 
+    /// A Boolean value that indicates whether the producer guarantees idempotent message delivery.
+    ///
     /// When set to `true`, the producer ensures that messages are successfully produced exactly once and in the original produce order.
     /// The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled:
     /// ``KafkaProducerConfiguration/maximumInFlightRequestsPerConnection`` = `5` (must be less than or equal to 5),
@@ -101,7 +103,7 @@ public struct KafkaProducerConfiguration {
     /// Default: `2_147_483_647`
     public var maximumMessageSendRetries: Int = 2_147_483_647
 
-    /// Allow automatic topic creation on the broker when producing to non-existent topics.
+    /// A Boolean value that indicates whether the producer allows automatic topic creation on the broker when producing to nonexistent topics.
     /// The broker must also be configured with ``isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
     /// Default: `true`
     public var isAutoCreateTopicsEnabled: Bool = true

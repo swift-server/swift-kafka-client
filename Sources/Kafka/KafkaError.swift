@@ -91,7 +91,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         self.backing.rdKafkaCode
     }
 
-    /// Whether this error is fatal to the client instance.
+    /// A Boolean value that indicates whether the error is fatal to the client instance.
     ///
     /// A fatal error means the client instance is no longer usable and must be
     /// destroyed and re-created. Always `false` for errors that do not originate
@@ -100,7 +100,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         self.backing.isFatal
     }
 
-    /// Whether this error is retriable.
+    /// A Boolean value that indicates whether the error is retriable.
     ///
     /// A retriable error indicates the operation may succeed if retried.
     /// Always `false` for errors that do not originate from librdkafka's
