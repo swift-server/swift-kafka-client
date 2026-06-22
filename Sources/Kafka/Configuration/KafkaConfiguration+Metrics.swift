@@ -23,7 +23,7 @@ extension KafkaConfiguration {
             self.updateInterval != nil
                 && (self.queuedOperation != nil || self.totalKafkaBrokerRequests != nil
                     || self.totalKafkaBrokerBytesSent != nil || self.totalKafkaBrokerResponses != nil
-                    || self.totalKafkaBrokerResponsesSize != nil || self.totalKafkaBrokerMessagesBytesRecieved != nil
+                    || self.totalKafkaBrokerResponsesSize != nil || self.totalKafkaBrokerMessagesBytesReceived != nil
                     || self.topicsInMetadataCache != nil)
         }
 
@@ -43,9 +43,9 @@ extension KafkaConfiguration {
         public var totalKafkaBrokerResponsesSize: Gauge?
 
         /// Total number of messages consumed, not including ignored messages (due to offset, and so on), from Kafka brokers.
-        public var totalKafkaBrokerMessagesRecieved: Gauge?
+        public var totalKafkaBrokerMessagesReceived: Gauge?
         /// Total number of message bytes (including framing) received from Kafka brokers.
-        public var totalKafkaBrokerMessagesBytesRecieved: Gauge?
+        public var totalKafkaBrokerMessagesBytesReceived: Gauge?
 
         /// Number of topics in the metadata cache.
         public var topicsInMetadataCache: Gauge?
@@ -67,10 +67,10 @@ extension KafkaConfiguration {
             Self.record(rdKafkaStatistics.totalKafkaBrokerResponses, to: self.totalKafkaBrokerResponses)
             Self.record(rdKafkaStatistics.totalKafkaBrokerResponsesSize, to: self.totalKafkaBrokerResponsesSize)
 
-            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesRecieved, to: self.totalKafkaBrokerMessagesRecieved)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesReceived, to: self.totalKafkaBrokerMessagesReceived)
             Self.record(
-                rdKafkaStatistics.totalKafkaBrokerMessagesBytesRecieved,
-                to: self.totalKafkaBrokerMessagesBytesRecieved
+                rdKafkaStatistics.totalKafkaBrokerMessagesBytesReceived,
+                to: self.totalKafkaBrokerMessagesBytesReceived
             )
 
             Self.record(rdKafkaStatistics.topicsInMetadataCache, to: self.topicsInMetadataCache)

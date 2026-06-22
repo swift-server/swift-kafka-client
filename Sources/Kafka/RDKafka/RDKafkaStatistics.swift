@@ -25,8 +25,8 @@ struct RDKafkaStatistics: Hashable, Codable {
     let totalKafkaBrokerResponsesSize: Int?
     let totalKafkaBrokerMessagesSent: Int?
     let totalKafkaBrokerMessagesBytesSent: Int?
-    let totalKafkaBrokerMessagesRecieved: Int?
-    let totalKafkaBrokerMessagesBytesRecieved: Int?
+    let totalKafkaBrokerMessagesReceived: Int?
+    let totalKafkaBrokerMessagesBytesReceived: Int?
 
     enum CodingKeys: String, CodingKey {
         case queuedOperation = "replyq"
@@ -39,7 +39,7 @@ struct RDKafkaStatistics: Hashable, Codable {
         case totalKafkaBrokerResponsesSize = "rx_bytes"
         case totalKafkaBrokerMessagesSent = "txmsgs"
         case totalKafkaBrokerMessagesBytesSent = "txmsg_bytes"
-        case totalKafkaBrokerMessagesRecieved = "rxmsgs"
-        case totalKafkaBrokerMessagesBytesRecieved = "rxmsg_bytes"
+        case totalKafkaBrokerMessagesReceived = "rxmsgs"
+        case totalKafkaBrokerMessagesBytesReceived = "rxmsg_bytes"
     }
 }
