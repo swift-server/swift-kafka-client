@@ -20,12 +20,14 @@
 public struct KafkaConsumerRebalance: Sendable, Hashable {
     /// The kind of rebalance that occurred.
     public enum Kind: Sendable, Hashable {
-        /// New partitions have been assigned to this consumer.
+        /// Kafka assigned new partitions to this consumer.
         case assign
-        /// Partitions have been revoked from this consumer.
+        /// Kafka revoked partitions from this consumer.
         case revoke
-        /// An unexpected error occurred during rebalance. All partitions have been
-        /// unassigned as a recovery measure. The associated string describes the error.
+        /// An unexpected error occurred during rebalance.
+        ///
+        /// Kafka unassigned all partitions as a recovery measure.
+        /// The associated string describes the error.
         case error(String)
     }
 
@@ -39,7 +41,7 @@ public struct KafkaConsumerRebalance: Sendable, Hashable {
     /// For ``Kind/error(_:)``: empty.
     public let partitions: [KafkaTopicPartition]
 
-    /// Create a rebalance event description.
+    /// Creates a rebalance event description.
     /// - Parameters:
     ///   - kind: Whether this is an assignment, revocation, or error.
     ///   - partitions: The partitions involved in this rebalance.

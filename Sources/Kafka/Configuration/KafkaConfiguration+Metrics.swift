@@ -17,20 +17,20 @@ import Metrics
 extension KafkaConfiguration {
     // MARK: - Metrics
 
-    /// Configuration for the consumer metrics emitted by `SwiftKafka`.
+    /// Configuration for the consumer metrics that the Kafka client emits.
     public struct ConsumerMetrics: Sendable {
         internal var enabled: Bool {
             self.updateInterval != nil
                 && (self.queuedOperation != nil || self.totalKafkaBrokerRequests != nil
                     || self.totalKafkaBrokerBytesSent != nil || self.totalKafkaBrokerResponses != nil
-                    || self.totalKafkaBrokerResponsesSize != nil || self.totalKafkaBrokerMessagesBytesRecieved != nil
+                    || self.totalKafkaBrokerResponsesSize != nil || self.totalKafkaBrokerMessagesBytesReceived != nil
                     || self.topicsInMetadataCache != nil)
         }
 
         /// Update interval for statistics.
         public var updateInterval: Duration?
 
-        /// Number of operations (callbacks, events, etc) waiting in the queue.
+        /// Number of operations (callbacks, events, and so on) waiting in the queue.
         public var queuedOperation: Gauge?
 
         /// Total number of requests sent to Kafka brokers.
@@ -42,10 +42,10 @@ extension KafkaConfiguration {
         /// Total number of bytes received from Kafka brokers.
         public var totalKafkaBrokerResponsesSize: Gauge?
 
-        /// Total number of messages consumed, not including ignored messages (due to offset, etc), from Kafka brokers.
-        public var totalKafkaBrokerMessagesRecieved: Gauge?
+        /// Total number of messages consumed, not including ignored messages (due to offset, and so on), from Kafka brokers.
+        public var totalKafkaBrokerMessagesReceived: Gauge?
         /// Total number of message bytes (including framing) received from Kafka brokers.
-        public var totalKafkaBrokerMessagesBytesRecieved: Gauge?
+        public var totalKafkaBrokerMessagesBytesReceived: Gauge?
 
         /// Number of topics in the metadata cache.
         public var topicsInMetadataCache: Gauge?
@@ -67,17 +67,17 @@ extension KafkaConfiguration {
             Self.record(rdKafkaStatistics.totalKafkaBrokerResponses, to: self.totalKafkaBrokerResponses)
             Self.record(rdKafkaStatistics.totalKafkaBrokerResponsesSize, to: self.totalKafkaBrokerResponsesSize)
 
-            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesRecieved, to: self.totalKafkaBrokerMessagesRecieved)
+            Self.record(rdKafkaStatistics.totalKafkaBrokerMessagesReceived, to: self.totalKafkaBrokerMessagesReceived)
             Self.record(
-                rdKafkaStatistics.totalKafkaBrokerMessagesBytesRecieved,
-                to: self.totalKafkaBrokerMessagesBytesRecieved
+                rdKafkaStatistics.totalKafkaBrokerMessagesBytesReceived,
+                to: self.totalKafkaBrokerMessagesBytesReceived
             )
 
             Self.record(rdKafkaStatistics.topicsInMetadataCache, to: self.topicsInMetadataCache)
         }
     }
 
-    /// Configuration for the producer metrics emitted by `SwiftKafka`.
+    /// Configuration for the producer metrics that the Kafka client emits.
     public struct ProducerMetrics: Sendable {
         internal var enabled: Bool {
             self.updateInterval != nil

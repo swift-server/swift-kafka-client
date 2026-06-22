@@ -12,7 +12,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
+/// An event reported by a Kafka consumer, such as a rebalance notification or an error.
+///
+/// Delivered through ``KafkaConsumerEvents``.
 public enum KafkaConsumerEvent: Sendable, Hashable {
     /// A consumer group rebalance occurred.
     ///
@@ -22,7 +24,7 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
     /// or initializing state on assign.
     case rebalance(KafkaConsumerRebalance)
 
-    /// An error reported by the Kafka client (e.g., broker disconnection, authentication failure).
+    /// An error reported by the Kafka client (for example, broker disconnection or authentication failure).
     case error(KafkaError)
 
     /// - Important: Always provide a `default` case when switching over this `enum`.

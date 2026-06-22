@@ -14,8 +14,8 @@
 
 /// A topic-partition pair with an associated offset.
 ///
-/// Used as both input (e.g., for ``KafkaConsumer/seek(topicPartitionOffsets:timeout:)``) and output
-/// (e.g., from ``KafkaConsumer/committed(topicPartitions:timeout:)`` and ``KafkaConsumer/position(topicPartitions:)``).
+/// Used as both input (for example, ``KafkaConsumer/seek(topicPartitionOffsets:timeout:)``) and output
+/// (for example, ``KafkaConsumer/committed(topicPartitions:timeout:)`` and ``KafkaConsumer/position(topicPartitions:)``).
 public struct KafkaTopicPartitionOffset: Sendable, Hashable {
     /// The topic and partition.
     public var topicPartition: KafkaTopicPartition
@@ -26,13 +26,17 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
     /// a `nil` value indicates that no committed offset or position exists.
     public var offset: KafkaOffset?
 
-    /// The name of the Kafka topic (convenience accessor).
+    /// The name of the Kafka topic.
+    ///
+    /// A convenience accessor for the underlying ``KafkaTopicPartition/topic``.
     public var topic: String { self.topicPartition.topic }
 
-    /// The partition within the topic (convenience accessor).
+    /// The partition within the topic.
+    ///
+    /// A convenience accessor for the underlying ``KafkaTopicPartition/partition``.
     public var partition: KafkaPartition { self.topicPartition.partition }
 
-    /// Create a new ``KafkaTopicPartitionOffset``.
+    /// Creates a topic-partition-offset triple from a topic name, partition, and offset.
     ///
     /// - Parameters:
     ///   - topic: The name of the Kafka topic.
@@ -43,7 +47,9 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
         self.offset = offset
     }
 
-    /// Create a new ``KafkaTopicPartitionOffset`` from an existing ``KafkaTopicPartition``.
+    /// Creates a topic-partition-offset triple from an existing topic-partition pair and an offset.
+    ///
+    /// Use this initializer when you already have a ``KafkaTopicPartition`` value.
     ///
     /// - Parameters:
     ///   - topicPartition: The topic and partition.

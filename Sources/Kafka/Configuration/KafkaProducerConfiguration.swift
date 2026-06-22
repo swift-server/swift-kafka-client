@@ -12,21 +12,28 @@
 //
 //===----------------------------------------------------------------------===//
 
+/// Configuration values that control a Kafka producer instance.
 public struct KafkaProducerConfiguration {
     // MARK: - Kafka-specific Config properties
 
+    /// Topic configuration applied to topics that the broker auto-creates.
+    ///
     /// If the ``isAutoCreateTopicsEnabled`` option is set to `true`,
-    /// the broker will automatically generate topics when producing data to non-existent topics.
-    /// The configuration specified in this ``KafkaTopicConfiguration`` will be applied to the newly created topic.
+    /// the broker automatically generates topics when producing data to nonexistent topics.
+    /// The configuration specified in this ``KafkaTopicConfiguration`` is applied to the newly created topic.
+    ///
     /// Default: See default values of ``KafkaTopicConfiguration``
     public var topicConfiguration: KafkaTopicConfiguration = .init()
 
     /// The time between two consecutive polls.
+    ///
     /// Effectively controls the rate at which incoming events are consumed.
+    ///
     /// Default: `.milliseconds(100)`
     public var pollInterval: Duration = .milliseconds(100)
 
-    /// Maximum timeout for flushing outstanding produce requests when the ``KafkaProducer`` is shutting down.
+    /// Maximum timeout for flushing outstanding produce requests during producer shutdown.
+    ///
     /// Default: `10000`
     public var flushTimeoutMilliseconds: Int = 10000 {
         didSet {
@@ -39,19 +46,24 @@ public struct KafkaProducerConfiguration {
 
     // MARK: - Producer-specific Config Properties
 
-    /// When set to true, the producer will ensure that messages are successfully produced exactly once and in the original produce order.
+    /// A Boolean value that indicates whether the producer guarantees idempotent message delivery.
+    ///
+    /// When set to `true`, the producer ensures that messages are successfully produced exactly once and in the original produce order.
     /// The following configuration properties are adjusted automatically (if not modified by the user) when idempotence is enabled:
     /// ``KafkaProducerConfiguration/maximumInFlightRequestsPerConnection`` = `5` (must be less than or equal to 5),
     /// ``KafkaProducerConfiguration/maximumMessageSendRetries`` = `UInt32.max` (must be greater than 0),
     /// ``KafkaTopicConfiguration/requiredAcknowledgements`` = ``KafkaTopicConfiguration/RequiredAcknowledgments/all``,
     /// queuing strategy = FIFO.
-    /// Producer instantiation will fail if the user-supplied configuration is incompatible.
+    /// Producer instantiation fails if the user-supplied configuration is incompatible.
+    ///
     /// Default: `false`
     public var isIdempotenceEnabled: Bool = false
 
-    /// Producer queue options.
+    /// Options that control producer queue size, buffering, and retry behavior.
     public struct QueueConfiguration: Sendable, Hashable {
-        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
+        /// Maximum number of messages allowed on the producer queue.
+        ///
+        /// This queue is shared by all topics and partitions.
         public struct MessageLimit: Sendable, Hashable {
             internal let rawValue: Int
 
@@ -59,6 +71,7 @@ public struct KafkaProducerConfiguration {
                 self.rawValue = rawValue
             }
 
+            /// Creates a producer-queue message limit from the maximum number of messages you provide.
             public static func maximumLimit(_ value: Int) -> MessageLimit {
                 .init(rawValue: value)
             }
@@ -67,18 +80,26 @@ public struct KafkaProducerConfiguration {
             public static let unlimited: MessageLimit = .init(rawValue: 0)
         }
 
-        /// Maximum number of messages allowed on the producer queue. This queue is shared by all topics and partitions.
+        /// Maximum number of messages allowed on the producer queue.
+        ///
+        /// This queue is shared by all topics and partitions.
+        ///
         /// Default: `.maximumLimit(100_000)`
         public var messageLimit: MessageLimit = .maximumLimit(100_000)
 
-        /// Maximum total message size sum allowed on the producer queue. This queue is shared by all topics and partitions.
+        /// Maximum total message size sum allowed on the producer queue.
+        ///
+        /// This queue is shared by all topics and partitions.
         /// This property has higher priority than ``KafkaProducerConfiguration/QueueConfiguration/MessageLimit-swift.struct``.
+        ///
         /// Default: `1_048_576 * 1024`
         public var maximumMessageBytes: Int = 1_048_576 * 1024
 
-        /// How long wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) to transmit to brokers.
+        /// The duration to wait for messages in the producer queue to accumulate before constructing message batches (MessageSets) for transmission to brokers.
+        ///
         /// A higher value allows larger and more effective (less overhead, improved compression) batches of messages to accumulate at the expense of increased message delivery latency.
         /// (Lowest granularity is milliseconds)
+        ///
         /// Default: `.milliseconds(5)`
         public var maximumMessageQueueTime: Duration = .milliseconds(5) {
             didSet {
@@ -89,48 +110,61 @@ public struct KafkaProducerConfiguration {
             }
         }
 
+        /// Creates a new producer queue configuration with default values.
         public init() {}
     }
 
-    /// Producer queue options.
+    /// Options that control producer queue size, buffering, and retry behavior.
     public var queue: QueueConfiguration = .init()
 
-    /// How many times to retry sending a failing Message.
+    /// The number of times to retry sending a failed message.
     ///
-    /// - Note: retrying may cause reordering unless ``KafkaProducerConfiguration/isIdempotenceEnabled`` is set to `true`.
+    /// - Note: Retrying may cause reordering unless ``KafkaProducerConfiguration/isIdempotenceEnabled`` is set to `true`.
+    ///
     /// Default: `2_147_483_647`
     public var maximumMessageSendRetries: Int = 2_147_483_647
 
-    /// Allow automatic topic creation on the broker when producing to non-existent topics.
+    /// A Boolean value that indicates whether the producer allows automatic topic creation on the broker when producing to nonexistent topics.
+    ///
     /// The broker must also be configured with ``isAutoCreateTopicsEnabled`` = `true` for this configuration to take effect.
+    ///
     /// Default: `true`
     public var isAutoCreateTopicsEnabled: Bool = true
 
     // MARK: - Common Client Config Properties
 
     /// Client identifier.
+    ///
     /// Default: `"rdkafka"`
     public var identifier: String = "rdkafka"
 
     /// Initial list of brokers.
+    ///
     /// Default: `[]`
     public var bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress] = []
 
-    /// Message options.
+    /// Options that govern Kafka message size and copy behavior.
     public var message: KafkaConfiguration.MessageOptions = .init()
 
-    /// Maximum Kafka protocol response message size. This serves as a safety precaution to avoid memory exhaustion in case of protocol hiccups.
+    /// The maximum Kafka protocol response message size.
+    ///
+    /// This serves as a safety precaution to avoid memory exhaustion in case of protocol errors.
+    ///
     /// Default: `100_000_000`
     public var maximumReceiveMessageBytes: Int = 100_000_000
 
     /// Maximum number of in-flight requests per broker connection.
+    ///
     /// This is a generic property applied to all broker communication, however, it is primarily relevant to produce requests.
     /// In particular, note that other mechanisms limit the number of outstanding consumer fetch requests per broker to one.
+    ///
     /// Default: `1_000_000`
     public var maximumInFlightRequestsPerConnection: Int = 1_000_000
 
     /// Metadata cache max age.
+    ///
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.milliseconds(900_000)`
     public var maximumMetadataAge: Duration = .milliseconds(900_000) {
         didSet {
@@ -145,10 +179,12 @@ public struct KafkaProducerConfiguration {
     public var topicMetadata: KafkaConfiguration.TopicMetadataOptions = .init()
 
     /// Topic denylist.
+    ///
     /// Default: `[]`
     public var topicDenylist: [String] = []
 
     /// Debug options.
+    ///
     /// Default: `[]`
     public var debugOptions: [KafkaConfiguration.DebugOption] = []
 
@@ -161,13 +197,17 @@ public struct KafkaProducerConfiguration {
     /// Reconnect options.
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
-    /// Options for librdkafka metrics updates
+    /// Options for librdkafka metrics updates.
     public var metrics: KafkaConfiguration.ProducerMetrics = .init()
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
+    ///
     /// Default: `.plaintext`
     public var securityProtocol: KafkaConfiguration.SecurityProtocol = .plaintext
 
+    /// Creates a new producer configuration; deprecated in favor of the newer config type.
+    ///
+    /// Use ``KafkaProducerConfig`` for new code.
     @available(*, deprecated, message: "Use KafkaProducerConfig instead")
     public init(
         bootstrapBrokerAddresses: [KafkaConfiguration.BrokerAddress]

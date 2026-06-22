@@ -20,6 +20,7 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
     /// The raw value corresponding to the librdkafka timestamp type.
     public let rawValue: Int32
 
+    /// Creates a timestamp type from its raw librdkafka value.
     public init(rawValue: Int32) {
         self.rawValue = rawValue
     }
@@ -37,6 +38,7 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
         rawValue: Int32(RD_KAFKA_TIMESTAMP_LOG_APPEND_TIME.rawValue)
     )
 
+    /// A textual representation of the timestamp type.
     public var description: String {
         switch self {
         case .createTime: return "createTime"
@@ -49,9 +51,9 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
 
 /// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage {
-    /// The topic that the message was received from.
+    /// The topic the consumer received the message from.
     public var topic: String
-    /// The partition that the message was received from.
+    /// The partition the consumer received the message from.
     public var partition: KafkaPartition
     /// The headers of the message.
     public var headers: [KafkaHeader]
@@ -66,7 +68,7 @@ public struct KafkaConsumerMessage {
     /// The type of timestamp on this message.
     public var timestampType: KafkaTimestampType
 
-    /// Initialize ``KafkaConsumerMessage`` from `rd_kafka_message_t` pointer.
+    /// Creates a ``KafkaConsumerMessage`` from an `rd_kafka_message_t` pointer.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
     internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee

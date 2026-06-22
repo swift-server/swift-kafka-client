@@ -12,9 +12,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// ID of message produced by the ``KafkaProducer``.
-/// The ``KafkaProducerMessageID`` can be used to relate incoming ``KafkaDeliveryReport``s
-/// with their corresponding ``KafkaProducer/send(_:)`` invocation.
+/// An identifier for a message produced by a Kafka producer.
+///
+/// Use a ``KafkaProducerMessageID`` to correlate an incoming ``KafkaDeliveryReport`` with the
+/// corresponding ``KafkaProducer/send(_:)`` call that produced it.
 public struct KafkaProducerMessageID {
     internal var rawValue: UInt
 
@@ -26,6 +27,7 @@ public struct KafkaProducerMessageID {
 // MARK: - KafkaProducerMessageID + CustomStringConvertible
 
 extension KafkaProducerMessageID: CustomStringConvertible {
+    /// A textual representation of the producer message identifier.
     public var description: String {
         String(self.rawValue)
     }
@@ -38,6 +40,7 @@ extension KafkaProducerMessageID: Hashable {}
 // MARK: - KafkaProducerMessageID + Comparable
 
 extension KafkaProducerMessageID: Comparable {
+    /// Returns a Boolean value that indicates whether the first identifier is ordered before the second.
     public static func < (lhs: KafkaProducerMessageID, rhs: KafkaProducerMessageID) -> Bool {
         lhs.rawValue < rhs.rawValue
     }

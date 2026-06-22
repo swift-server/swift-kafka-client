@@ -20,14 +20,14 @@ import NIOCore
 
 import class Foundation.JSONDecoder
 
-/// Base class for ``KafkaProducer`` and ``KafkaConsumer``,
-/// which is used to handle the connection to the Kafka ecosystem.
+/// Base class for ``KafkaProducer`` and ``KafkaConsumer``
+/// that handles the connection to the Kafka ecosystem.
 @_spi(Internal)
 public final class RDKafkaClient: Sendable {
     // Default size for Strings returned from C API
     static let stringSize = 1024
 
-    /// Shared concurrent queue for offloading blocking C calls (e.g., `rd_kafka_committed`,
+    /// Shared concurrent queue for offloading blocking C calls (for example, `rd_kafka_committed`,
     /// `rd_kafka_seek_partitions`, `rd_kafka_flush`) so they don't block Swift Concurrency's
     /// cooperative thread pool. Concurrent so independent operations can run in parallel.
     private static let blockingQueue = DispatchQueue(
@@ -117,9 +117,9 @@ public final class RDKafkaClient: Sendable {
 
     /// Produce a message to the Kafka cluster.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` that is sent to the KafkaCluster.
-    /// - Parameter newMessageID: ID that was assigned to the `message`.
-    /// - Parameter topicHandles: Topic handles that this client uses to produce new messages
+    /// - Parameter message: The ``KafkaProducerMessage`` to send to the KafkaCluster.
+    /// - Parameter newMessageID: ID assigned to the `message`.
+    /// - Parameter topicHandles: Topic handles that this client uses to produce new messages.
     func produce<Key, Value>(
         message: KafkaProducerMessage<Key, Value>,
         newMessageID: UInt,
@@ -226,7 +226,7 @@ public final class RDKafkaClient: Sendable {
 
     /// Scoped accessor that enables safe access to a ``KafkaProducerMessage``'s key and value raw buffers.
     /// - Warning: Do not escape the pointer from the closure for later use.
-    /// - Parameter body: The closure will use the pointer.
+    /// - Parameter body: The closure that uses the pointer.
     @discardableResult
     private static func withMessageKeyAndValueBuffer<T, Key, Value>(
         for message: KafkaProducerMessage<Key, Value>,
@@ -245,7 +245,7 @@ public final class RDKafkaClient: Sendable {
 
     /// Scoped accessor that enables safe access the underlying memory of an array of ``KafkaHeader``s.
     /// - Warning: Do not escape the pointer from the closure for later use.
-    /// - Parameter body: The closure will use the pointer.
+    /// - Parameter body: The closure that uses the pointer.
     @discardableResult
     private static func withKafkaCHeaders<T>(
         for headers: [KafkaHeader],
@@ -360,7 +360,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// Drains the queue, handling internal events (log, offset commit) and
     /// returning only events relevant to a consumer. Producer-only events
-    /// (e.g., delivery reports) are handled internally but never surfaced.
+    /// (for example, delivery reports) are handled internally but never surfaced.
     ///
     /// - Parameter maxEvents: Maximum number of events to serve in one invocation.
     func consumerEventPoll(maxEvents: Int = 100) -> [ConsumerPollEvent] {
@@ -700,13 +700,13 @@ public final class RDKafkaClient: Sendable {
     ///
     /// This does **not** commit the offset to the broker. Instead, it marks the offset
     /// in the local in-memory store. When `enable.auto.commit` is `true` (the default),
-    /// the auto-commit timer will periodically commit these stored offsets to the broker.
+    /// the auto-commit timer periodically commits these stored offsets to the broker.
     ///
-    /// This method is intended to be used with `enable.auto.offset.store` set to `false`,
-    /// allowing the application to store offsets only **after** successful message processing.
+    /// Use this method with `enable.auto.offset.store` set to `false` to store offsets
+    /// only **after** successful message processing.
     /// This is the recommended pattern for at-least-once delivery semantics.
     ///
-    /// - Parameter message: The message whose offset should be stored.
+    /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed.
     func storeOffset(_ message: KafkaConsumerMessage) throws {
         // rd_kafka_offsets_store expects the offset of the *next* message to consume,
@@ -731,11 +731,11 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
-    /// Non-blocking "fire-and-forget" commit of a `message`'s offset to Kafka.
-    /// Schedules a commit and returns immediately.
-    /// Any errors encountered after scheduling the commit will be discarded.
+    /// Schedules a non-blocking, fire-and-forget commit of the message's offset to Kafka.
     ///
-    /// - Parameter message: Last received message that shall be marked as read.
+    /// The client discards any errors encountered after scheduling the commit.
+    ///
+    /// - Parameter message: Last received message to mark as read.
     /// - Throws: A ``KafkaError`` if scheduling the commit failed.
     func scheduleCommit(_ message: KafkaConsumerMessage) throws {
         // The offset committed is always the offset of the next requested message.
@@ -1002,11 +1002,11 @@ public final class RDKafkaClient: Sendable {
     /// Seek consumer for partitions to the per-partition offset.
     ///
     /// The offset may be either absolute (>= 0) or a logical offset
-    /// (e.g., `.beginning`, `.end`, `.storedOffset`).
+    /// (for example, `.beginning`, `.end`, `.storedOffset`).
     ///
-    /// This call will purge all pre-fetched messages for the given partitions.
-    /// Repeated use of seek may lead to increased network usage as messages
-    /// are re-fetched from the broker.
+    /// This call purges all pre-fetched messages for the given partitions.
+    /// Repeated use of seek may lead to increased network usage as the client
+    /// re-fetches messages from the broker.
     ///
     /// - Important: Seek must only be performed for already assigned/consumed partitions.
     ///
@@ -1060,7 +1060,7 @@ public final class RDKafkaClient: Sendable {
 
     /// Scoped accessor that enables safe access to the pointer of the client's Kafka handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
-    /// - Parameter body: The closure will use the Kafka handle pointer.
+    /// - Parameter body: The closure that uses the Kafka handle pointer.
     @discardableResult
     func withKafkaHandlePointer<T>(_ body: (OpaquePointer) throws -> T) rethrows -> T {
         try body(self.kafkaHandle.pointer)

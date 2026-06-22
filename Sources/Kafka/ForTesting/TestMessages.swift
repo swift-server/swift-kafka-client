@@ -16,13 +16,18 @@ import NIOCore
 import struct Foundation.Date
 import struct Foundation.UUID
 
+/// An error thrown by the SPI test helpers when delivery report verification fails.
 @_spi(Internal)
 public enum _TestMessagesError: Error {
+    /// The set of received delivery report IDs doesn't match the IDs of the messages that were sent.
     case deliveryReportsIdsIncorrect
+    /// The number of acknowledged messages doesn't match the number of messages that were sent.
     case deliveryReportsNotAllMessagesAcknoledged
+    /// One or more delivery reports reference content that doesn't match the original messages.
     case deliveryReportsIncorrect
 }
 
+/// Builds an array of test producer messages with unique keys for the topic you provide.
 @_spi(Internal)
 public func _createTestMessages(
     topic: String,
@@ -39,6 +44,7 @@ public func _createTestMessages(
     }
 }
 
+/// Sends the messages you provide and verifies that each one is acknowledged via the producer's events sequence.
 @_spi(Internal)
 public func _sendAndAcknowledgeMessages(
     producer: KafkaProducer,

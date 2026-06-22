@@ -37,22 +37,29 @@ extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
 
 // MARK: - KafkaConsumerEvents
 
-/// `AsyncSequence` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
+/// An asynchronous sequence of consumer events emitted by Kafka.
+///
+/// The sequence yields ``KafkaConsumerEvent`` values such as rebalance notifications and errors.
 public struct KafkaConsumerEvents: Sendable, AsyncSequence {
+    /// The type of event the sequence yields.
     public typealias Element = KafkaConsumerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
     let wrappedSequence: WrappedSequence
 
-    /// `AsynceIteratorProtocol` implementation for handling ``KafkaConsumerEvent``s emitted by Kafka.
+    /// An asynchronous iterator over consumer events emitted by Kafka.
+    ///
+    /// The iterator yields ``KafkaConsumerEvent`` values such as rebalance notifications and errors.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
+        /// Returns the next consumer event, or `nil` if the sequence has finished.
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
         }
     }
 
+    /// Returns an asynchronous iterator over the consumer event sequence.
     public func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
@@ -60,16 +67,21 @@ public struct KafkaConsumerEvents: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumerMessages
 
-/// `AsyncSequence` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
+/// An asynchronous sequence of messages received from the Kafka cluster.
+///
+/// The sequence yields ``KafkaConsumerMessage`` values.
 public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
 
     let stateMachine: LockedMachine
     let pollInterval: Duration
 
+    /// The type of message the sequence yields.
     public typealias Element = KafkaConsumerMessage
 
-    /// `AsynceIteratorProtocol` implementation for handling messages received from the Kafka cluster (``KafkaConsumerMessage``).
+    /// An asynchronous iterator over messages received from the Kafka cluster.
+    ///
+    /// The iterator yields ``KafkaConsumerMessage`` values.
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
@@ -95,6 +107,9 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
             )
         }
 
+        /// Returns the next consumer message, or `nil` when the consumer has shut down or the task is canceled.
+        ///
+        /// - Throws: A ``KafkaError`` if polling for the next message fails.
         public func next() async throws -> Element? {
             while !Task.isCancelled {
                 let action = self.stateMachineHolder.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
@@ -130,6 +145,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         }
     }
 
+    /// Returns an asynchronous iterator over the consumer message sequence.
     public func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(
             stateMachine: self.stateMachine,
@@ -140,7 +156,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
 
 // MARK: - KafkaConsumer
 
-/// Can be used to consume messages from a Kafka cluster.
+/// Consumes messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     typealias ConsumerEventsProducer = NIOAsyncSequenceProducer<
         KafkaConsumerEvent,
@@ -158,19 +174,19 @@ public final class KafkaConsumer: Sendable, Service {
     ///   `rd_kafka_destroy` stops all librdkafka threads before the `RebalanceContext`
     ///   (which holds the C callback's unretained pointer target) is deallocated.
     private let stateMachine: NIOLockedValueBox<StateMachine>
-    /// Source for yielding consumer events (rebalance, etc.). `nil` when created without events.
+    /// Source for yielding consumer events (rebalance, and so on). `nil` when created without events.
     private let eventsSource: ConsumerEventsProducer.Source?
     /// Context for the C rebalance callback. Must outlive the `RDKafkaClient` because the
     /// C callback holds an unretained pointer to it.
     /// - Important: Must be declared AFTER `stateMachine` — see ordering note above.
     private let rebalanceContext: RebalanceContext
 
-    /// An asynchronous sequence containing messages from the Kafka cluster.
+    /// An asynchronous sequence of messages from the Kafka cluster.
     public let messages: KafkaConsumerMessages
 
     // Private initializer, use factory method or convenience init to create KafkaConsumer
-    /// Initialize a new ``KafkaConsumer``.
-    /// To listen to incoming messages, please subscribe to a list of topics using ``subscribe()``
+    /// Creates a new ``KafkaConsumer``.
+    /// To listen to incoming messages, subscribe to a list of topics using ``subscribe(topics:)``
     /// or assign the consumer to a particular topic + partition pair using ``assign(topic:partition:offset:)``.
     ///
     /// - Parameters:
@@ -207,9 +223,10 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Initialize a new ``KafkaConsumer``.
+    /// Creates a new consumer.
     ///
     /// This creates a consumer that does not listen to any events other than consumer messages.
+    /// To also receive events, use ``makeConsumerWithEvents(config:logger:)``.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
@@ -249,12 +266,14 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
-    /// Initialize a new ``KafkaConsumer`` and a ``KafkaConsumerEvents`` asynchronous sequence.
+    /// Creates a new consumer paired with an asynchronous event sequence.
+    ///
+    /// The returned tuple pairs a ``KafkaConsumer`` with its ``KafkaConsumerEvents`` sequence.
     ///
     /// Use the asynchronous sequence to consume events.
     ///
-    /// - Important: When the asynchronous sequence is deinited the consumer will be shut down and disallowed from sending more messages.
-    /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
+    /// - Important: When the asynchronous sequence is deinitialized, the consumer shuts down and stops accepting new messages.
+    ///   Additionally, consume the asynchronous sequence; otherwise the events buffer in memory indefinitely.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
@@ -312,6 +331,9 @@ public final class KafkaConsumer: Sendable, Service {
         return (consumer, eventsSequence)
     }
 
+    /// Creates a new consumer from a deprecated configuration value.
+    ///
+    /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
     @available(*, deprecated, message: "Use init(config:logger:) instead")
     public convenience init(
         configuration: KafkaConsumerConfiguration,
@@ -323,6 +345,9 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
+    /// Creates a new consumer and an event sequence from a deprecated configuration value.
+    ///
+    /// This method is deprecated. Use ``makeConsumerWithEvents(config:logger:)`` instead.
     @available(*, deprecated, message: "Use makeConsumerWithEvents(config:logger:) instead")
     public static func makeConsumerWithEvents(
         configuration: KafkaConsumerConfiguration,
@@ -336,11 +361,11 @@ public final class KafkaConsumer: Sendable, Service {
 
     // MARK: - Subscription Management
 
-    /// Subscribe to the given list of topics.
+    /// Subscribes to the list of topics you provide.
     ///
-    /// This replaces any previous subscription. The partition assignment happens
-    /// automatically using the consumer's consumer group. Topic names prefixed
-    /// with `^` are treated as regular expressions. Passing an empty array is
+    /// This replaces any previous subscription. The consumer assigns partitions
+    /// automatically using the consumer group. The consumer treats topic names prefixed
+    /// with `^` as regular expressions. Passing an empty array is
     /// equivalent to calling ``unsubscribe()``.
     ///
     /// - Parameter topics: An array of topic names to subscribe to.
@@ -367,11 +392,11 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Unsubscribe from the current subscription.
+    /// Unsubscribes from the current subscription.
     ///
     /// Clears all topic subscriptions. The consumer leaves the consumer group
     /// and stops receiving messages. This triggers a rebalance event.
-    /// Can re-subscribe later with ``subscribe(topics:)``.
+    /// Resubscribe later with ``subscribe(topics:)``.
     ///
     /// - Throws: A ``KafkaError`` if the consumer is closed or unsubscribing failed.
     public func unsubscribe() throws {
@@ -384,7 +409,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Get the current topic subscription.
+    /// Returns the current topic subscription.
     ///
     /// - Returns: An array of topic names or patterns the consumer is currently subscribed to.
     /// - Throws: A ``KafkaError`` if the consumer is closed or the query failed.
@@ -398,10 +423,10 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Pause consumption for the given partitions.
+    /// Pauses consumption for the partitions you provide.
     ///
     /// Paused partitions remain in the consumer group and continue heartbeating
-    /// but will not return messages from ``messages``.
+    /// but don't return messages from ``messages``.
     ///
     /// - Parameter topicPartitions: The partitions to pause.
     /// - Throws: A ``KafkaError`` if the consumer is closed or pausing failed.
@@ -419,7 +444,7 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Resume consumption for the given partitions.
+    /// Resumes consumption for the partitions you provide.
     ///
     /// - Parameter topicPartitions: The partitions to resume.
     /// - Throws: A ``KafkaError`` if the consumer is closed or resuming failed.
@@ -456,11 +481,11 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Assign the``KafkaConsumer`` to a specific `partition` of a `topic`.
-    /// - Parameter topic: Name of the topic that this ``KafkaConsumer`` will read from.
-    /// - Parameter partition: Partition that this ``KafkaConsumer`` will read from.
+    /// Assigns the ``KafkaConsumer`` to a specific `partition` of a `topic`.
+    /// - Parameter topic: Name of the topic to read from.
+    /// - Parameter partition: Partition to read from.
     /// - Parameter offset: The offset to start consuming from.
-    /// Defaults to the end of the Kafka partition queue (meaning wait for next produced message).
+    /// Defaults to the end of the Kafka partition queue (waits for the next produced message).
     /// - Throws: A ``KafkaError`` if the consumer could not be assigned to the topic + partition pair.
     private func assign(
         topic: String,
@@ -478,9 +503,11 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Start the ``KafkaConsumer``.
+    /// Starts the consumer.
     ///
-    /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
+    /// - Important: Call this method to drive the consumer. It runs until either the calling task is canceled or gracefully shut down.
+    ///
+    /// Stop the consumer with ``triggerGracefulShutdown()``.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -653,21 +680,21 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Store the offset of a consumed message in the local offset store.
+    /// Stores the offset of a consumed message in the local offset store.
     ///
-    /// This is used for **at-least-once** delivery semantics. The typical pattern is:
+    /// Use this for at-least-once delivery semantics. The typical pattern is:
     /// 1. Set `enableAutoOffsetStore` to `false` in the consumer configuration.
     /// 2. Keep `enableAutoCommit` as `true` (the default).
     /// 3. After successfully processing a message, call `storeOffset(_:)`.
-    /// 4. The auto-commit timer will periodically commit stored offsets to the broker.
+    /// 4. The auto-commit timer periodically commits stored offsets to the broker.
     ///
-    /// This ensures that only offsets for **successfully processed** messages are committed.
-    /// If the application crashes before calling `storeOffset`, the message will be
-    /// re-delivered on the next consumer start (at-least-once).
+    /// This ensures the consumer commits only offsets for successfully processed messages.
+    /// If the application crashes before calling `storeOffset`, the consumer redelivers
+    /// the message on the next consumer start (at-least-once).
     ///
-    /// - Warning: This method fails if `enableAutoOffsetStore` is not set to `false`.
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoOffsetStore`` is not set to `false`.
     ///
-    /// - Parameter message: The message whose offset should be stored.
+    /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed or the consumer is closed.
     public func storeOffset(_ message: KafkaConsumerMessage) throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
@@ -687,16 +714,17 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Mark all messages up to the passed message in the topic as read.
+    /// Marks all messages up to the passed message in the topic as read.
+    ///
     /// Schedules a commit and returns immediately.
-    /// Any errors encountered after scheduling the commit will be discarded.
+    /// The consumer discards any errors encountered after scheduling the commit.
     ///
-    /// This method is only used for manual offset management.
+    /// Use this method only for manual offset management.
     ///
-    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     ///
     /// - Parameters:
-    ///     - message: Last received message that shall be marked as read.
+    ///     - message: Last received message to mark as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func scheduleCommit(_ message: KafkaConsumerMessage) throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
@@ -712,20 +740,24 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
+    /// Synchronously commits the offset of the message you provide.
+    ///
+    /// This method is deprecated. Use ``commit(_:)`` instead.
     @available(*, deprecated, renamed: "commit")
     public func commitSync(_ message: KafkaConsumerMessage) async throws {
         try await self.commit(message)
     }
 
-    /// Mark all messages up to the passed message in the topic as read.
-    /// Awaits until the commit succeeds or an error is encountered.
+    /// Marks all messages up to the passed message in the topic as read.
     ///
-    /// This method is only used for manual offset management.
+    /// Awaits until the commit succeeds or an error occurs.
     ///
-    /// - Warning: This method fails if the ``KafkaConsumerConfiguration/isAutoCommitEnabled`` configuration property is set to `true` (default).
+    /// Use this method only for manual offset management.
+    ///
+    /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     ///
     /// - Parameters:
-    ///     - message: Last received message that shall be marked as read.
+    ///     - message: Last received message to mark as read.
     /// - Throws: A ``KafkaError`` if committing failed.
     public func commit(_ message: KafkaConsumerMessage) async throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
@@ -741,7 +773,8 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Schedule an async commit of all stored offsets.
+    /// Schedules an asynchronous commit of all stored offsets.
+    ///
     /// Returns immediately. Any errors after scheduling are discarded.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
@@ -760,8 +793,9 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Commit all stored offsets to the broker.
-    /// Awaits until the commit succeeds or an error is encountered.
+    /// Commits all stored offsets to the broker.
+    ///
+    /// Awaits until the commit succeeds or encounters an error.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     /// - Throws: A ``KafkaError`` if the commit failed or the consumer is closed.
@@ -779,10 +813,10 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Retrieve the last-committed offsets for the given topic+partition pairs from the broker.
+    /// Retrieves the last-committed offsets from the broker for the topic+partition pairs you provide.
     ///
-    /// This is useful for monitoring consumer lag and verifying that offsets have been
-    /// successfully committed.
+    /// Use this to monitor consumer lag and to verify that the broker received the
+    /// committed offsets.
     ///
     /// - Parameters:
     ///   - topicPartitions: An array of ``KafkaTopicPartition`` to query.
@@ -806,11 +840,10 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Retrieve the current positions (next offset to be fetched) for the given topic+partition pairs.
+    /// Retrieves the current positions (next offset to be fetched) for the topic+partition pairs you provide.
     ///
     /// The position reflects the consumer's in-memory position, which is the last consumed
-    /// message's offset + 1. This is useful for computing consumer lag when compared with
-    /// the committed offsets.
+    /// message's offset + 1. Use the position to compute consumer lag against the committed offsets.
     ///
     /// - Parameter topicPartitions: An array of ``KafkaTopicPartition`` to query.
     /// - Returns: An array of ``KafkaTopicPartitionOffset``. The ``KafkaTopicPartitionOffset/offset``
@@ -828,12 +861,12 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Check if the current partition assignment has been lost involuntarily.
+    /// A Boolean value that indicates whether the current partition assignment is involuntarily lost.
     ///
-    /// This is primarily useful when reacting to a rebalance event.
-    /// When partitions are lost (e.g., because `max.poll.interval.ms` was exceeded),
-    /// committing offsets for those partitions will fail because they may already
-    /// be owned by another consumer in the group.
+    /// This value is primarily useful when reacting to a rebalance event.
+    /// When the consumer loses partitions (for example, because `max.poll.interval.ms` was exceeded),
+    /// committing offsets for those partitions fails because another consumer in the group
+    /// may already own them.
     ///
     /// - Returns: `true` if the current assignment is considered lost, `false` otherwise.
     /// - Throws: A ``KafkaError`` if the consumer is closed.
@@ -849,12 +882,12 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Seek to specific offsets for the given partitions.
+    /// Seeks to specific offsets for the partitions you provide.
     ///
-    /// This is useful for replaying messages or skipping ahead. The partitions
+    /// Use this to replay messages or to skip ahead. The partitions
     /// must already be assigned to this consumer (via subscription or manual assignment).
     ///
-    /// This call purges all pre-fetched messages for the given partitions.
+    /// This call purges all pre-fetched messages for the partitions you provide.
     ///
     /// - Parameters:
     ///   - topicPartitionOffsets: An array of ``KafkaTopicPartitionOffset`` specifying where to seek.
@@ -878,10 +911,9 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// This function is used to gracefully shut down a Kafka consumer client.
+    /// Gracefully shuts down a Kafka consumer client.
     ///
-    /// - Note: Invoking this function is not always needed as the ``KafkaConsumer``
-    /// will already shut down when consumption of the ``KafkaConsumerMessages`` has ended.
+    /// - Note: Invoking this method isn't always needed; the ``KafkaConsumer`` already shuts down when consumption of ``KafkaConsumerMessages`` ends.
     public func triggerGracefulShutdown() {
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
@@ -1211,7 +1243,7 @@ extension KafkaConsumer {
             }
         }
 
-        /// Returns the client if available, for cleanup purposes (e.g., final event drain).
+        /// Returns the client if available, for cleanup purposes (for example, final event drain).
         /// Unlike ``withClient()``, this does not fatalError in transitional states —
         /// it returns `nil` when no client is available.
         func clientForCleanup() -> RDKafkaClient? {

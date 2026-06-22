@@ -39,7 +39,7 @@ internal final class RDKafkaTopicHandles: Sendable {
     /// Scoped accessor that enables safe access to the pointer of the topic's handle.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter topic: The name of the topic that is addressed.
-    /// - Parameter body: The closure will use the topic handle pointer.
+    /// - Parameter body: The closure that uses the topic handle pointer.
     @discardableResult
     func withTopicHandlePointer<T>(
         topic: String,

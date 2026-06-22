@@ -19,7 +19,7 @@ import ServiceLifecycle
 
 // MARK: - KafkaProducerCloseOnTerminate
 
-/// `NIOAsyncSequenceProducerDelegate` that terminates the closes the producer when
+/// `NIOAsyncSequenceProducerDelegate` that terminates and closes the producer when
 /// `didTerminate()` is invoked.
 internal struct KafkaProducerCloseOnTerminate: Sendable {
     let stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>
@@ -43,22 +43,29 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
 
 // MARK: - KafkaProducerEvents
 
-/// `AsyncSequence` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
+/// An asynchronous sequence of producer events emitted by Kafka.
+///
+/// The sequence yields ``KafkaProducerEvent`` values such as delivery reports and errors.
 public struct KafkaProducerEvents: Sendable, AsyncSequence {
+    /// The type of event the sequence yields.
     public typealias Element = KafkaProducerEvent
     typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
     typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
     let wrappedSequence: WrappedSequence
 
-    /// `AsynceIteratorProtocol` implementation for handling ``KafkaProducerEvent``s emitted by Kafka.
+    /// An asynchronous iterator over producer events emitted by Kafka.
+    ///
+    /// The iterator yields ``KafkaProducerEvent`` values such as delivery reports and errors.
     public struct AsyncIterator: AsyncIteratorProtocol {
         var wrappedIterator: WrappedSequence.AsyncIterator
 
+        /// Returns the next producer event, or `nil` if the sequence has finished.
         public mutating func next() async -> Element? {
             await self.wrappedIterator.next()
         }
     }
 
+    /// Returns an asynchronous iterator over the producer event sequence.
     public func makeAsyncIterator() -> AsyncIterator {
         AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
     }
@@ -66,8 +73,9 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 
 // MARK: - KafkaProducer
 
-/// Send messages to the Kafka cluster.
-/// - Note: When messages get published to a non-existent topic, a new topic is created using the default topic configuration
+/// Sends messages to the Kafka cluster.
+///
+/// - Note: When messages get published to a nonexistent topic, a new topic is created using the default topic configuration
 ///   (based on topic-level configuration properties set on `KafkaProducerConfig`).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
@@ -86,7 +94,7 @@ public final class KafkaProducer: Service, Sendable {
     private let logger: Logger
 
     // Private initializer, use factory method or convenience init to create KafkaProducer
-    /// Initialize a new ``KafkaProducer``.
+    /// Creates a new ``KafkaProducer``.
     ///
     /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -102,9 +110,10 @@ public final class KafkaProducer: Service, Sendable {
         self.logger = logger
     }
 
-    /// Initialize a new ``KafkaProducer``.
+    /// Creates a new producer.
     ///
     /// This creates a producer without listening for events.
+    /// To also receive events, use ``makeProducerWithEvents(config:logger:)``.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -143,12 +152,14 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Initialize a new ``KafkaProducer`` and a ``KafkaProducerEvents`` asynchronous sequence.
+    /// Creates a new producer paired with an asynchronous event sequence.
+    ///
+    /// The returned tuple pairs a ``KafkaProducer`` with its ``KafkaProducerEvents`` sequence.
     ///
     /// Use the asynchronous sequence to consume events.
     ///
-    /// - Important: When the asynchronous sequence is deinited the producer will be shut down and disallowed from sending more messages.
-    /// Additionally, make sure to consume the asynchronous sequence otherwise the events will be buffered in memory indefinitely.
+    /// - Important: When the asynchronous sequence is deinitialized, the producer shuts down and stops accepting new messages.
+    ///   Additionally, consume the asynchronous sequence; otherwise the events buffer in memory indefinitely.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
@@ -204,6 +215,9 @@ public final class KafkaProducer: Service, Sendable {
         return (producer, eventsSequence)
     }
 
+    /// Creates a new producer from a deprecated configuration value.
+    ///
+    /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
     @available(*, deprecated, message: "Use init(config:logger:) instead")
     public convenience init(
         configuration: KafkaProducerConfiguration,
@@ -215,6 +229,9 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
+    /// Creates a new producer and an event sequence from a deprecated configuration value.
+    ///
+    /// This method is deprecated. Use ``makeProducerWithEvents(config:logger:)`` instead.
     @available(*, deprecated, message: "Use makeProducerWithEvents(config:logger:) instead")
     public static func makeProducerWithEvents(
         configuration: KafkaProducerConfiguration,
@@ -226,9 +243,11 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Start the ``KafkaProducer``.
+    /// Starts the producer.
     ///
-    /// - Important: This method **must** be called and will run until either the calling task is cancelled or gracefully shut down.
+    /// - Important: Call this method to drive the producer. It runs until either the calling task is canceled or gracefully shut down.
+    ///
+    /// Stop the producer with ``triggerGracefulShutdown()``.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -296,8 +315,8 @@ public final class KafkaProducer: Service, Sendable {
     /// Match delivery reports against pending `sendAndAwait` continuations.
     ///
     /// For each report, if a continuation is registered for that message ID, resume it.
-    /// ALL reports are returned — they should be yielded to the events sequence regardless
-    /// of whether a continuation was resumed. This ensures the events sequence is a complete
+    /// Returns all reports; the producer yields them to the events sequence regardless
+    /// of whether it resumed a continuation. This ensures the events sequence is a complete
     /// log of all delivery reports, even for messages sent via `sendAndAwait`.
     private func resumeContinuations(for reports: [KafkaDeliveryReport]) {
         for report in reports {
@@ -316,22 +335,25 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Method to shutdown the ``KafkaProducer``.
+    /// Shuts the producer down gracefully.
     ///
-    /// This method flushes any buffered messages and waits until a callback is received for all of them.
-    /// Afterwards, it shuts down the connection to Kafka and cleans any remaining state up.
+    /// Flushes any buffered messages and waits until the producer receives a callback for each one. After flushing, this method shuts down the connection to Kafka and cleans up any remaining state.
+    ///
+    /// Pairs with ``run()``.
     public func triggerGracefulShutdown() {
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
-    /// Send a ``KafkaProducerMessage`` to the Kafka cluster.
+    /// Sends a message to the Kafka cluster.
     ///
     /// This method does not wait until the message is sent and acknowledged by the cluster.
     /// Instead, it buffers the message and returns immediately.
-    /// The message will be sent out with the next batch of messages.
+    /// The producer sends the message with the next batch of messages.
+    ///
+    /// For acknowledged delivery, use ``sendAndAwait(_:)``.
     ///
     /// - Parameter message: The ``KafkaProducerMessage`` to send.
-    /// - Returns: Unique ``KafkaProducerMessageID``matching the ``KafkaDeliveryReport/id`` property
+    /// - Returns: Unique ``KafkaProducerMessageID`` matching the ``KafkaDeliveryReport/id`` property
     /// of the corresponding ``KafkaDeliveryReport``.
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
@@ -348,7 +370,7 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Send a ``KafkaProducerMessage`` to the Kafka cluster and await the delivery report.
+    /// Sends a message to the Kafka cluster and awaits the delivery report.
     ///
     /// Unlike ``send(_:)``, this method suspends until the broker acknowledges (or rejects)
     /// the message. The returned ``KafkaDeliveryReport`` contains the acknowledgment status,
@@ -460,7 +482,7 @@ extension KafkaProducer {
             case uninitialized
             /// The ``KafkaProducer`` has started and is ready to use.
             ///
-            /// - Parameter messageIDCounter:Used to incrementally assign unique IDs to messages.
+            /// - Parameter messageIDCounter: Used to incrementally assign unique IDs to messages.
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             /// - Parameter source: ``NIOAsyncSequenceProducer/Source`` used for yielding new elements.
             /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
@@ -470,8 +492,8 @@ extension KafkaProducer {
                 source: Producer.Source?,
                 topicHandles: RDKafkaTopicHandles
             )
-            /// Producer is still running but the event asynchronous sequence was terminated.
-            /// All incoming events will be dropped.
+            /// The producer is still running but the events asynchronous sequence terminated.
+            /// The producer drops all incoming events.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case eventConsumptionFinished(client: RDKafkaClient)
@@ -534,7 +556,7 @@ extension KafkaProducer {
         /// Returns the next action to be taken when wanting to poll.
         /// - Returns: The next action to be taken, either polling or terminating the poll loop.
         ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        /// - Important: This function traps with a `fatalError` if called while in the `.uninitialized` state.
         mutating func nextPollLoopAction() -> PollLoopAction {
             switch self.state {
             case .uninitialized:
@@ -601,8 +623,8 @@ extension KafkaProducer {
             case finishSource(source: Producer.Source?)
         }
 
-        /// The events asynchronous sequence was terminated.
-        /// All incoming events will be dropped.
+        /// The events asynchronous sequence terminated.
+        /// The producer drops all incoming events.
         mutating func stopConsuming() -> StopConsumingAction? {
             switch self.state {
             case .uninitialized:
@@ -624,7 +646,7 @@ extension KafkaProducer {
 
         /// Get action to be taken when wanting to do close the producer.
         ///
-        /// - Important: This function throws a `fatalError` if called while in the `.initializing` state.
+        /// - Important: This function traps with a `fatalError` if called while in the `.uninitialized` state.
         mutating func finish() {
             switch self.state {
             case .uninitialized:
@@ -648,7 +670,7 @@ extension KafkaProducer {
         /// Initialize a continuation slot.
         ///
         /// Pre-allocates the slot so `cancelContinuation` can safely detect
-        /// if it's cancelling an active request versus a stale ID.
+        /// if it's canceling an active request versus a stale ID.
         mutating func initializeContinuation(for messageID: UInt) {
             self.pendingContinuations[messageID] = .initialized
         }

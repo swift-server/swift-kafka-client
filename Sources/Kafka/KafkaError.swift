@@ -14,7 +14,7 @@
 
 import Crdkafka
 
-/// An error that can occur on `Kafka` operations
+/// An error that can occur during Kafka operations.
 ///
 /// - Note: `Hashable` conformance considers both the ``KafkaError/code``
 ///   and the ``KafkaError/rdKafkaCode``.
@@ -23,14 +23,15 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 
     // MARK: - RDKafkaCode
 
-    /// A type-safe wrapper around librdkafka's `rd_kafka_resp_err_t` error codes.
+    /// A type-safe representation of a librdkafka `rd_kafka_resp_err_t` error code.
     ///
-    /// Use the static constants (e.g., `.allBrokersDown`, `.authentication`) to match
+    /// Use the static constants (for example, `.allBrokersDown` or `.authentication`) to match
     /// against the ``KafkaError/rdKafkaCode`` property without importing Crdkafka.
     public struct RDKafkaCode: Hashable, Sendable, CustomStringConvertible {
-        /// The raw `Int32` value corresponding to the librdkafka error code.
+        /// The raw 32-bit value corresponding to the librdkafka error code.
         public let rawValue: Int32
 
+        /// Creates a librdkafka error code from its raw 32-bit value.
         public init(rawValue: Int32) {
             self.rawValue = rawValue
         }
@@ -64,6 +65,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         /// No error.
         public static let noError = RDKafkaCode(rawValue: 0)
 
+        /// A textual representation of the librdkafka error code, including its name and numeric value.
         public var description: String {
             let name = String(cString: rd_kafka_err2str(rd_kafka_resp_err_t(rawValue: self.rawValue)))
             return "\(name) (code: \(self.rawValue))"
@@ -72,7 +74,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 
     private var backing: Backing
 
-    /// Represents the kind of error that was encountered.
+    /// The kind of error that was encountered.
     public var code: ErrorCode {
         get {
             self.backing.code
@@ -86,12 +88,12 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     /// The underlying librdkafka error code, if this error originated from librdkafka.
     ///
     /// Returns `nil` for errors that do not wrap a `rd_kafka_resp_err_t`
-    /// (e.g., pure configuration or lifecycle errors).
+    /// (for example, pure configuration or lifecycle errors).
     public var rdKafkaCode: RDKafkaCode? {
         self.backing.rdKafkaCode
     }
 
-    /// Whether this error is fatal to the client instance.
+    /// A Boolean value that indicates whether the error is fatal to the client instance.
     ///
     /// A fatal error means the client instance is no longer usable and must be
     /// destroyed and re-created. Always `false` for errors that do not originate
@@ -100,7 +102,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         self.backing.isFatal
     }
 
-    /// Whether this error is retriable.
+    /// A Boolean value that indicates whether the error is retriable.
     ///
     /// A retriable error indicates the operation may succeed if retried.
     /// Always `false` for errors that do not originate from librdkafka's
@@ -121,6 +123,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         self.backing.line
     }
 
+    /// A textual representation of the error, including its code, reason, and originating source location.
     public var description: String {
         "KafkaError.\(self.code): \(self.reason) \(self.file):\(self.line)"
     }
@@ -165,13 +168,13 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         )
     }
 
-    /// Create a ``KafkaError`` from a rich `rd_kafka_error_t*` error.
+    /// Creates a ``KafkaError`` from a rich `rd_kafka_error_t*` error.
     ///
     /// Extracts the error code, reason string, isFatal, and isRetriable flags
     /// before destroying the error object. This preserves the full error metadata
     /// that is only available on the rich error type.
     ///
-    /// - Parameter error: A non-nil `rd_kafka_error_t*` pointer. Will be destroyed after extraction.
+    /// - Parameter error: A non-nil `rd_kafka_error_t*` pointer. The pointer is destroyed after extraction.
     static func rdKafkaError(
         wrapping error: OpaquePointer,
         file: String = #fileID,
@@ -303,11 +306,11 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 }
 
 extension KafkaError {
-    /// Represents the kind of error.
+    /// The high-level classification of a Kafka error.
     ///
-    /// The same error may be thrown from more than one place for more than one reason.
-    /// This type represents only a relatively high-level error:
-    /// use the string representation of ``KafkaError`` to get more details about the specific cause.
+    /// The same error may originate from more than one place for more than one reason.
+    /// This type captures only a relatively high-level error:
+    /// use the string representation of ``KafkaError`` for more details about the specific cause.
     public struct ErrorCode: Hashable, Sendable, CustomStringConvertible {
         fileprivate enum BackingCode {
             case rdKafkaError
@@ -343,6 +346,7 @@ extension KafkaError {
         /// Deleting a topic failed.
         public static let topicDeletionFailed = ErrorCode(.topicDeletion)
 
+        /// A textual representation of the error code.
         public var description: String {
             String(describing: self.backingCode)
         }
@@ -411,10 +415,12 @@ extension KafkaError {
 // MARK: - KafkaError + Hashable
 
 extension KafkaError: Hashable {
+    /// Returns a Boolean value that indicates whether two errors are equal.
     public static func == (lhs: KafkaError, rhs: KafkaError) -> Bool {
         lhs.backing == rhs.backing
     }
 
+    /// Hashes the essential components of the error by feeding them into the given hasher.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(self.backing)
     }
