@@ -28,6 +28,8 @@ struct RDKafkaStatistics: Hashable, Codable {
     let totalKafkaBrokerMessagesReceived: Int?
     let totalKafkaBrokerMessagesBytesReceived: Int?
 
+    let topics: [String: RDKafkaTopicStatistics]?
+
     enum CodingKeys: String, CodingKey {
         case queuedOperation = "replyq"
         case queuedProducerMessages = "msg_cnt"
@@ -41,5 +43,38 @@ struct RDKafkaStatistics: Hashable, Codable {
         case totalKafkaBrokerMessagesBytesSent = "txmsg_bytes"
         case totalKafkaBrokerMessagesReceived = "rxmsgs"
         case totalKafkaBrokerMessagesBytesReceived = "rxmsg_bytes"
+        case topics
     }
+}
+
+struct RDKafkaTopicStatistics: Hashable, Codable {
+    let topic: String
+    let batchSize: RDKafkaWindowStatistics?
+    let batchCount: RDKafkaWindowStatistics?
+    let partitions: [String: RDKafkaPartitionStatistics]?
+
+    enum CodingKeys: String, CodingKey {
+        case topic
+        case batchSize = "batchsize"
+        case batchCount = "batchcnt"
+        case partitions
+    }
+}
+
+struct RDKafkaPartitionStatistics: Hashable, Codable {
+    let partition: Int
+    let consumerLag: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case partition
+        case consumerLag = "consumer_lag"
+    }
+}
+
+struct RDKafkaWindowStatistics: Hashable, Codable {
+    let min: Int
+    let max: Int
+    let avg: Int
+    let sum: Int
+    let cnt: Int
 }

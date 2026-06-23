@@ -176,6 +176,8 @@ public final class KafkaConsumer: Sendable, Service {
     private let stateMachine: NIOLockedValueBox<StateMachine>
     /// Source for yielding consumer events (rebalance, and so on). `nil` when created without events.
     private let eventsSource: ConsumerEventsProducer.Source?
+    /// Metrics recorder for the consumer. `nil` when metrics are disabled.
+    private let clientMetrics: KafkaConsumerMetrics?
     /// Context for the C rebalance callback. Must outlive the `RDKafkaClient` because the
     /// C callback holds an unretained pointer to it.
     /// - Important: Must be declared AFTER `stateMachine` — see ordering note above.
@@ -210,6 +212,12 @@ public final class KafkaConsumer: Sendable, Service {
         self.eventsSource = eventsSource
         self.rebalanceContext = rebalanceContext
 
+        if config.metrics.isEnabled {
+            self.clientMetrics = KafkaConsumerMetrics(prefix: config.metrics.prefix)
+        } else {
+            self.clientMetrics = nil
+        }
+
         self.messages = KafkaConsumerMessages(
             stateMachine: self.stateMachine,
             pollInterval: config.pollInterval
@@ -241,7 +249,7 @@ public final class KafkaConsumer: Sendable, Service {
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
         }
-        if config.metrics.enabled {
+        if config.metrics.isEnabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -290,7 +298,7 @@ public final class KafkaConsumer: Sendable, Service {
         if !isAutoCommitEnabled {
             subscribedEvents.append(.offsetCommit)
         }
-        if config.metrics.enabled {
+        if config.metrics.isEnabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -582,8 +590,9 @@ public final class KafkaConsumer: Sendable, Service {
         for event in events {
             switch event {
             case .statistics(let statistics):
-                self.config.metrics.update(with: statistics)
+                self.clientMetrics?.updateFromStatistics(statistics)
             case .error(let kafkaError):
+                self.clientMetrics?.recordError()
                 if let source = self.eventsSource {
                     _ = source.yield(.error(kafkaError))
                 }
@@ -615,6 +624,7 @@ public final class KafkaConsumer: Sendable, Service {
             if let source = self.eventsSource {
                 _ = source.yield(.rebalance(rebalance))
             }
+            self.clientMetrics?.recordRebalance()
             self.logger.info(
                 "Consumer rebalance",
                 metadata: [
@@ -637,8 +647,9 @@ public final class KafkaConsumer: Sendable, Service {
         for event in events {
             switch event {
             case .statistics(let statistics):
-                self.config.metrics.update(with: statistics)
+                self.clientMetrics?.updateFromStatistics(statistics)
             case .error(let kafkaError):
+                self.clientMetrics?.recordError()
                 if let source = self.eventsSource {
                     _ = source.yield(.error(kafkaError))
                 }
@@ -670,6 +681,7 @@ public final class KafkaConsumer: Sendable, Service {
             if let source = self.eventsSource {
                 _ = source.yield(.rebalance(rebalance))
             }
+            self.clientMetrics?.recordRebalance()
             self.logger.info(
                 "Consumer rebalance",
                 metadata: [
@@ -769,7 +781,16 @@ public final class KafkaConsumer: Sendable, Service {
                 throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
             }
 
-            try await client.commit(message)
+            let clock = ContinuousClock()
+            let start = clock.now
+            do {
+                try await client.commit(message)
+                let duration = clock.now - start
+                self.clientMetrics?.recordCommit(duration: duration)
+            } catch {
+                self.clientMetrics?.recordCommitFailure()
+                throw error
+            }
         }
     }
 
@@ -809,7 +830,16 @@ public final class KafkaConsumer: Sendable, Service {
                 throw KafkaError.config(reason: "Committing manually only works if enableAutoCommit is set to false")
             }
 
-            try await client.commitAll()
+            let clock = ContinuousClock()
+            let start = clock.now
+            do {
+                try await client.commitAll()
+                let duration = clock.now - start
+                self.clientMetrics?.recordCommit(duration: duration)
+            } catch {
+                self.clientMetrics?.recordCommitFailure()
+                throw error
+            }
         }
     }
 

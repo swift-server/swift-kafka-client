@@ -90,6 +90,9 @@ public final class KafkaProducer: Service, Sendable {
     /// The configuration object of the producer client.
     private let config: KafkaProducerConfig
 
+    /// Metrics recorder for the producer. `nil` when metrics are disabled.
+    private let clientMetrics: KafkaProducerMetrics?
+
     /// A logger.
     private let logger: Logger
 
@@ -108,6 +111,12 @@ public final class KafkaProducer: Service, Sendable {
         self.stateMachine = stateMachine
         self.config = config
         self.logger = logger
+
+        if config.metrics.isEnabled {
+            self.clientMetrics = KafkaProducerMetrics(prefix: config.metrics.prefix)
+        } else {
+            self.clientMetrics = nil
+        }
     }
 
     /// Creates a new producer.
@@ -127,7 +136,7 @@ public final class KafkaProducer: Service, Sendable {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
 
-        if config.metrics.enabled {
+        if config.metrics.isEnabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -175,7 +184,7 @@ public final class KafkaProducer: Service, Sendable {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
         // Listen to statistics events when statistics enabled
-        if config.metrics.enabled {
+        if config.metrics.isEnabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -265,10 +274,11 @@ public final class KafkaProducer: Service, Sendable {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        self.config.metrics.update(with: statistics)
+                        self.clientMetrics?.updateFromStatistics(statistics)
                     case .deliveryReport(let reports):
                         self.resumeContinuations(for: reports)
                     case .error(let kafkaError):
+                        self.clientMetrics?.recordError()
                         self.logger.error(
                             "Kafka client error",
                             metadata: ["error": "\(kafkaError)"]
@@ -281,11 +291,12 @@ public final class KafkaProducer: Service, Sendable {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        self.config.metrics.update(with: statistics)
+                        self.clientMetrics?.updateFromStatistics(statistics)
                     case .deliveryReport(let reports):
                         self.resumeContinuations(for: reports)
                         _ = source?.yield(.deliveryReports(reports))
                     case .error(let kafkaError):
+                        self.clientMetrics?.recordError()
                         _ = source?.yield(.error(kafkaError))
                         self.logger.error(
                             "Kafka client error",
@@ -327,9 +338,18 @@ public final class KafkaProducer: Service, Sendable {
             if let continuation {
                 switch report.status {
                 case .acknowledged:
+                    self.clientMetrics?.recordDeliverySuccess()
                     continuation.resume(returning: report)
                 case .failure(let error):
+                    self.clientMetrics?.recordDeliveryFailure()
                     continuation.resume(throwing: error)
+                }
+            } else {
+                switch report.status {
+                case .acknowledged:
+                    self.clientMetrics?.recordDeliverySuccess()
+                case .failure:
+                    self.clientMetrics?.recordDeliveryFailure()
                 }
             }
         }
@@ -361,11 +381,20 @@ public final class KafkaProducer: Service, Sendable {
         let action = try self.stateMachine.withLockedValue { try $0.send() }
         switch action {
         case .send(let client, let newMessageID, let topicHandles):
-            try client.produce(
-                message: message,
-                newMessageID: newMessageID,
-                topicHandles: topicHandles
-            )
+            let clock = ContinuousClock()
+            let start = clock.now
+            do {
+                try client.produce(
+                    message: message,
+                    newMessageID: newMessageID,
+                    topicHandles: topicHandles
+                )
+                let elapsed = clock.now - start
+                self.clientMetrics?.recordSend(duration: elapsed)
+            } catch {
+                self.clientMetrics?.recordSendError()
+                throw error
+            }
             return KafkaProducerMessageID(rawValue: newMessageID)
         }
     }
