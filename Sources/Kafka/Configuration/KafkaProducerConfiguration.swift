@@ -198,7 +198,7 @@ public struct KafkaProducerConfiguration {
     public var reconnect: KafkaConfiguration.ReconnectOptions = .init()
 
     /// Options for librdkafka metrics updates.
-    public var metrics: KafkaConfiguration.ProducerMetrics = .init()
+    public var metrics: KafkaMetricsConfig = .disabled
 
     /// Security protocol to use (plaintext, ssl, sasl_plaintext, sasl_ssl).
     ///
@@ -258,10 +258,8 @@ extension KafkaProducerConfiguration {
         resultDict["reconnect.backoff.ms"] = String(self.reconnect.backoff.rawValue)
         resultDict["reconnect.backoff.max.ms"] = String(self.reconnect.maximumBackoff.inMilliseconds)
 
-        if self.metrics.enabled,
-            let updateInterval = self.metrics.updateInterval
-        {
-            resultDict["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
+        if self.metrics.isEnabled {
+            resultDict["statistics.interval.ms"] = String(self.metrics.updateInterval.inMilliseconds)
         }
 
         // Merge with SecurityProtocol configuration dictionary

@@ -40,15 +40,15 @@ final class KafkaMetricsTests {
     deinit {
         MetricsSystem.bootstrapInternal(NOOPMetricsHandler.instance)
     }
-    @Test func consumerStatistics() async throws {
+
+    @Test func consumerMetricsRegistered() async throws {
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfig()
         config.consumptionStrategy = .group(
             id: uniqueGroupID,
             topics: ["this-topic-does-not-exist"]
         )
-        config.metrics.updateInterval = .milliseconds(100)
-        config.metrics.queuedOperation = .init(label: "operations")
+        config.metrics = .enabled(prefix: "kafka", updateInterval: .milliseconds(100))
         config.useMockBroker()
         config.brokerAddressFamily = .v4
 
@@ -58,27 +58,24 @@ final class KafkaMetricsTests {
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
             group.addTask {
                 try await serviceGroup.run()
             }
 
             try await Task.sleep(for: .seconds(1))
 
-            // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
 
-        let value = try metrics.expectGauge("operations").lastValue
+        let value = try metrics.expectGauge("kafka.consumer.queue.operations").lastValue
         #expect(value != nil)
     }
 
-    @Test func producerStatistics() async throws {
+    @Test func producerMetricsRegistered() async throws {
         var config = KafkaProducerConfig()
         config.useMockBroker()
         config.brokerAddressFamily = .v4
-        config.metrics.updateInterval = .milliseconds(100)
-        config.metrics.queuedOperation = .init(label: "operations")
+        config.metrics = .enabled(prefix: "kafka", updateInterval: .milliseconds(100))
 
         let producer = try KafkaProducer(
             config: config,
@@ -89,18 +86,21 @@ final class KafkaMetricsTests {
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
 
         try await withThrowingTaskGroup(of: Void.self) { group in
-            // Run Task
             group.addTask {
                 try await serviceGroup.run()
             }
 
             try await Task.sleep(for: .seconds(1))
 
-            // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
 
-        let value = try metrics.expectGauge("operations").lastValue
+        let value = try metrics.expectGauge("kafka.producer.queue.messages").lastValue
         #expect(value != nil)
+    }
+
+    @Test func disabledMetricsCreatesNothing() {
+        let config = KafkaMetricsConfig.disabled
+        #expect(config.isEnabled == false)
     }
 }

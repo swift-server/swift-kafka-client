@@ -3,3 +3,5 @@ API breakage: enumelement KafkaConsumerEvent.error has been added as a new enum 
 API breakage: enumelement KafkaProducerEvent.error has been added as a new enum case
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesRecieved has been removed
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesBytesRecieved has been removed
+API breakage: struct KafkaConfiguration.ConsumerMetrics has been removed
+API breakage: struct KafkaConfiguration.ProducerMetrics has been removed

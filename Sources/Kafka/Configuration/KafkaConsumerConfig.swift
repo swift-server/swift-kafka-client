@@ -32,7 +32,7 @@ public struct KafkaConsumerConfig: Sendable {
     public var consumptionStrategy: KafkaConsumerConfiguration.ConsumptionStrategy?
 
     /// Consumer metrics configuration.
-    public var metrics: KafkaConfiguration.ConsumerMetrics = .init()
+    public var metrics: KafkaMetricsConfig = .disabled
 
     // MARK: - Properties generated from librdkafka config list
 
@@ -1186,11 +1186,8 @@ public struct KafkaConsumerConfig: Sendable {
             }
         }
 
-        if config["statistics.interval.ms"] == nil,
-            metrics.enabled,
-            let updateInterval = metrics.updateInterval
-        {
-            config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
+        if config["statistics.interval.ms"] == nil, metrics.isEnabled {
+            config["statistics.interval.ms"] = String(metrics.updateInterval.inMilliseconds)
         }
 
         for (key, value) in self.additionalConfig {
