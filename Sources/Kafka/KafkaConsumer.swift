@@ -85,7 +85,7 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let stateMachineHolder: MachineHolder
         let pollInterval: Duration
-        private let queue: DispatchQueueTaskExecutor
+        private let queue: Any?
 
         private final class MachineHolder: Sendable {  // only for deinit
             let stateMachine: LockedMachine
@@ -102,9 +102,13 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
         init(stateMachine: LockedMachine, pollInterval: Duration) {
             self.stateMachineHolder = .init(stateMachine: stateMachine)
             self.pollInterval = pollInterval
-            self.queue = DispatchQueueTaskExecutor(
-                DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer")
-            )
+            if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
+                self.queue = DispatchQueueTaskExecutor(
+                    DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer")
+                )
+            } else {
+                self.queue = nil
+            }
         }
 
         /// Returns the next consumer message, or `nil` when the consumer has shut down or the task is canceled.
@@ -122,11 +126,12 @@ public struct KafkaConsumerMessages: Sendable, AsyncSequence {
                         return message
                     }
 
-                    if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
+                    if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *),
+                       let executor = self.queue as? DispatchQueueTaskExecutor {
                         // Wait on a separate thread for the next message.
                         // The call below will block for `pollInterval`.
                         if let message = try await withTaskExecutorPreference(
-                            queue,
+                            executor,
                             operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
                         ) {
                             return message
