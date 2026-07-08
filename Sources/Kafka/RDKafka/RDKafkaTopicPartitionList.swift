@@ -15,7 +15,12 @@
 import Crdkafka
 
 /// Swift wrapper type for `rd_kafka_topic_partition_list_t`.
-final class RDKafkaTopicPartitionList {
+///
+/// Marked `@unchecked Sendable` because it wraps a C heap allocation
+/// (`rd_kafka_topic_partition_list_t*`). Callers are responsible for
+/// ensuring the list is not accessed concurrently — the typical pattern
+/// is single-owner (create → populate → pass to blocking C call → read result).
+final class RDKafkaTopicPartitionList: @unchecked Sendable {
     private let _internal: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>
 
     /// Create a new topic+partition list.
@@ -64,9 +69,20 @@ final class RDKafkaTopicPartitionList {
 
     /// Scoped accessor that enables safe access to the pointer of the underlying `rd_kafka_topic_partition_t`.
     /// - Warning: Do not escape the pointer from the closure for later use.
-    /// - Parameter body: The closure will use the pointer.
+    /// - Parameter body: The closure that uses the pointer.
     @discardableResult
     func withListPointer<T>(_ body: (UnsafeMutablePointer<rd_kafka_topic_partition_list_t>) throws -> T) rethrows -> T {
         try body(self._internal)
+    }
+
+    /// Returns the first error encountered in the list of partitions, if any.
+    func firstError() -> rd_kafka_resp_err_t? {
+        for i in 0..<Int(self._internal.pointee.cnt) {
+            let element = self._internal.pointee.elems[i]
+            if element.err != RD_KAFKA_RESP_ERR_NO_ERROR {
+                return element.err
+            }
+        }
+        return nil
     }
 }

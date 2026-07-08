@@ -15,10 +15,11 @@
 extension KafkaConfiguration {
     // MARK: - TLSConfiguration
 
-    /// Use to configure a TLS connection.
+    /// A configuration for a TLS connection.
     public struct TLSConfiguration: Sendable, Hashable {
         /// Certificate chain consisting of one leaf certificate and potentially multiple intermediate certificates.
-        /// The public key of the leaf certificate will be used for authentication.
+        ///
+        /// Authentication uses the public key of the leaf certificate.
         public struct LeafAndIntermediates: Sendable, Hashable {
             internal enum _Key: Sendable, Hashable {
                 case file(location: String)
@@ -42,6 +43,7 @@ extension KafkaConfiguration {
             }
         }
 
+        /// A set of trust roots used to verify the broker's TLS certificate.
         public struct TrustRoots: Sendable, Hashable {
             internal enum _TrustRoots: Sendable, Hashable {
                 case probe
@@ -51,7 +53,7 @@ extension KafkaConfiguration {
 
             let _internal: _TrustRoots
 
-            /// A list of standard paths will be probed and the first one found will be used as the default root certificate location path.
+            /// Probes a list of standard paths and uses the first one found as the default root certificate location.
             public static let probe = TrustRoots(_internal: .probe)
 
             /// File or directory path to root certificate(s) for verifying the broker's key.
@@ -69,8 +71,9 @@ extension KafkaConfiguration {
             }
         }
 
-        /// A TLS private key.
+        /// A TLS private key with its associated password.
         public struct PrivateKey: Sendable, Hashable {
+            /// The source of a TLS private key, either a file path or an inline PEM string.
             public struct Location: Sendable, Hashable {
                 internal enum _Location: Sendable, Hashable {
                     case file(location: String)
@@ -79,7 +82,7 @@ extension KafkaConfiguration {
 
                 let _internal: _Location
 
-                /// A key located in a file at the given `location`.
+                /// A key loaded from a file at the path you provide.
                 public static func file(location: String) -> Location {
                     Location(
                         _internal: .file(location: location)
@@ -99,19 +102,29 @@ extension KafkaConfiguration {
             /// The password associated with the private key.
             public var password: String
 
+            /// Creates a new private key reference from the location and password you provide.
+            ///
+            /// - Parameters:
+            ///   - location: The private key's location, either a file path or an inline PEM string.
+            ///   - password: The password associated with the private key.
             public init(location: Location, password: String) {
                 self.key = location
                 self.password = password
             }
         }
 
-        /// A TLS key store (PKCS#12).
+        /// A TLS key store in PKCS#12 format.
         public struct KeyStore: Sendable, Hashable {
             /// Path to the key store.
             public var location: String
             /// The key store's password.
             public var password: String
 
+            /// Creates a new key store reference from the file location and password you provide.
+            ///
+            /// - Parameters:
+            ///   - location: Path to the PKCS#12 key store.
+            ///   - password: The key store's password.
             public init(location: String, password: String) {
                 self.location = location
                 self.password = password
@@ -130,7 +143,7 @@ extension KafkaConfiguration {
 
             let _internal: _ClientIdentity
 
-            /// Use TLS client verification with a given private/public key pair.
+            /// Use TLS client verification with the private/public key pair you provide.
             ///
             /// - Parameters:
             ///     - privateKey: The client's private key (PEM) used for authentication.
@@ -147,7 +160,7 @@ extension KafkaConfiguration {
                 )
             }
 
-            /// Use TLS client verification with a given key store.
+            /// Use TLS client verification with the key store you provide.
             ///
             /// - Parameters:
             ///     - keyStore: The client's keystore (PKCS#12) used for authentication.
@@ -190,16 +203,21 @@ extension KafkaConfiguration {
         }
 
         /// Configuration for the TLS verification of the client.
+        ///
         /// Default: `nil`
         public var clientIdentity: ClientIdentity? = nil
 
         /// Configuration for the TLS verification of the broker.
-        /// Default:  `verify(trustRoots: .probe, certificateRevocationListPath: nil)``
+        ///
+        /// Default: `.verify(trustRoots: .probe, certificateRevocationListPath: nil)`
         public var brokerVerification: BrokerVerification = .verify(
             trustRoots: .probe,
             certificateRevocationListPath: nil
         )
 
+        /// Creates a new TLS configuration with default values.
+        ///
+        /// By default, no client identity is configured and the broker is verified using probed trust roots.
         public init() {}
 
         // MARK: TLSConfiguration + Dictionary
@@ -254,25 +272,32 @@ extension KafkaConfiguration {
 
     // MARK: - SASLMechanism
 
-    /// Available SASL mechanisms that can be used for authentication.
+    /// SASL mechanisms available for authentication.
     public struct SASLMechanism: Sendable, Hashable {
         /// Used to configure Kerberos.
         public struct KerberosConfiguration: Sendable, Hashable {
             /// Kerberos principal name that Kafka runs as, not including `/hostname@REALM`.
+            ///
             /// Default: `"kafka"`
             public var serviceName: String = "kafka"
-            /// This client's Kerberos principal name. (Not supported on Windows, will use the logon user's principal).
+            /// This client's Kerberos principal name.
+            ///
+            /// (Not supported on Windows, uses the logon user's principal).
+            ///
             /// Default: `"kafkaclient"`
             public var principal: String = "kafkaclient"
             /// Shell command to refresh or acquire the client's Kerberos ticket.
+            ///
             /// This command is executed on client creation and every ``KafkaConfiguration/SASLMechanism/KerberosConfiguration/minTimeBeforeRelogin``.
             /// %{config.prop.name} is replaced by corresponding config object value.
+            ///
             /// Default: `kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"`.
             public var kinitCommand: String = """
                 kinit -R -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal} || \
                 kinit -t "%{sasl.kerberos.keytab}" -k %{sasl.kerberos.principal}"
                 """
             /// Path to Kerberos keytab file.
+            ///
             /// This configuration property is only used as a variable in ``KafkaConfiguration/SASLMechanism/KerberosConfiguration/kinitCommand``
             /// as  ... -t "%{sasl.kerberos.keytab}".
             public var keytab: String
@@ -285,7 +310,9 @@ extension KafkaConfiguration {
                     self.rawValue = rawValue
                 }
 
-                /// (Lowest granularity is milliseconds)
+                /// Creates a minimum interval between key refresh attempts from the duration you provide.
+                ///
+                /// - Note: The lowest granularity is milliseconds.
                 public static func value(_ value: Duration) -> KeyRefreshAttempts {
                     precondition(
                         value.canBeRepresentedAsMilliseconds,
@@ -299,11 +326,16 @@ extension KafkaConfiguration {
             }
 
             /// Minimum time in between key refresh attempts.
+            ///
             /// Disable automatic key refresh by setting this property to 0.
             /// (Lowest granularity is milliseconds)
+            ///
             /// Default: `.value(.milliseconds(60000))`
             public var minTimeBeforeRelogin: KeyRefreshAttempts = .value(.milliseconds(60000))
 
+            /// Creates a new Kerberos configuration that authenticates using the keytab you provide.
+            ///
+            /// - Parameter keytab: Path to the Kerberos keytab file.
             public init(keytab: String) {
                 self.keytab = keytab
             }
@@ -354,11 +386,11 @@ extension KafkaConfiguration {
             ///         For example: `principal=admin extension_traceId=123`
             ///     - clientID: Public identifier for the application. Must be unique across all clients that the authorization server handles.
             ///     - clientSecret: Client secret only known to the application and the authorization server.
-            ///     This should be a sufficiently random string that is not guessable.
+            ///     Use a sufficiently random string that isn't guessable.
             ///     - tokenEndPointURL: OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token.
             ///     - scope: The client uses this to specify the scope of the access request to the broker.
             ///     - extensions: Allow additional information to be provided to the broker.
-            ///     Comma-separated list of key=value pairs. E.g., "supportFeatureX=true,organizationId=sales-emea".
+            ///     Comma-separated list of key=value pairs. For example, "supportFeatureX=true,organizationId=sales-emea".
             static func oidc(
                 configuration: String? = nil,
                 clientID: String,
@@ -483,7 +515,7 @@ extension KafkaConfiguration {
 
     // MARK: - SecurityProtocol
 
-    /// Protocol used to communicate with brokers.
+    /// The protocol the client uses to communicate with brokers.
     public struct SecurityProtocol: Sendable, Hashable {
         internal enum _SecurityProtocol: Sendable, Hashable {
             case plaintext
@@ -494,7 +526,7 @@ extension KafkaConfiguration {
 
         private let _internal: _SecurityProtocol
 
-        /// Send messages as plaintext (no security protocol used).
+        /// Sends messages as plaintext without any security protocol.
         public static let plaintext = SecurityProtocol(
             _internal: .plaintext
         )

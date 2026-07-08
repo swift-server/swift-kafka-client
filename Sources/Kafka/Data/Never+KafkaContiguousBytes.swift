@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 extension Never: KafkaContiguousBytes {
+    /// Unreachable conformance; `Never` is uninhabited and this method always traps if invoked.
     public func withUnsafeBytes<R>(_: (UnsafeRawBufferPointer) throws -> R) rethrows -> R {
         fatalError("This statement should never be reached")
     }

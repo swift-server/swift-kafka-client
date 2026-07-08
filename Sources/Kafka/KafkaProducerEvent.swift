@@ -12,10 +12,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An enumeration representing events that can be received through the ``KafkaProducerEvents`` asynchronous sequence.
+/// An event reported by a Kafka producer, such as a delivery report or an error.
+///
+/// Delivered through ``KafkaProducerEvents``.
 public enum KafkaProducerEvent: Sendable, Hashable {
     /// A collection of delivery reports received from the Kafka cluster indicating the status of produced messages.
     case deliveryReports([KafkaDeliveryReport])
+    /// An error reported by the Kafka client (for example, broker disconnection or authentication failure).
+    case error(KafkaError)
     /// - Important: Always provide a `default` case when switching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
 
@@ -23,6 +27,8 @@ public enum KafkaProducerEvent: Sendable, Hashable {
         switch event {
         case .deliveryReport(let results):
             self = .deliveryReports(results)
+        case .error(let kafkaError):
+            self = .error(kafkaError)
         case .statistics:
             fatalError("Cannot cast \(event) to KafkaProducerEvent")
         }

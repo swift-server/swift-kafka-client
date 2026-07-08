@@ -12,15 +12,21 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
+/// An event reported by a Kafka consumer, such as a rebalance notification or an error.
+///
+/// Delivered through ``KafkaConsumerEvents``.
 public enum KafkaConsumerEvent: Sendable, Hashable {
+    /// A consumer group rebalance occurred.
+    ///
+    /// The library has already performed the necessary assign/unassign
+    /// operations — this notification is informational. Use it to perform
+    /// application-level bookkeeping such as committing offsets on revoke
+    /// or initializing state on assign.
+    case rebalance(KafkaConsumerRebalance)
+
+    /// An error reported by the Kafka client (for example, broker disconnection or authentication failure).
+    case error(KafkaError)
+
     /// - Important: Always provide a `default` case when switching over this `enum`.
     case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
-
-    internal init(_ event: RDKafkaClient.ConsumerPollEvent) {
-        switch event {
-        case .statistics:
-            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
-        }
-    }
 }

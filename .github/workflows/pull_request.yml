@@ -14,6 +14,7 @@ jobs:
     with:
       linux_pre_build_command: "apt-get update -y -q && apt-get install -y -q libsasl2-dev libssl-dev"
       license_header_check_project_name: "swift-kafka-client"
+      api_breakage_check_allowlist_path: "api-breakages.txt"
 
   unit-tests:
     name: Unit tests

@@ -17,9 +17,9 @@ import NIOCore
 
 /// A message acknowledged by the Kafka cluster.
 public struct KafkaAcknowledgedMessage {
-    /// The topic that the message was sent to.
+    /// The topic the producer sent the message to.
     public var topic: String
-    /// The partition that the message was sent to.
+    /// The partition the producer sent the message to.
     public var partition: KafkaPartition
     /// The key of the message.
     public var key: ByteBuffer?
@@ -30,8 +30,8 @@ public struct KafkaAcknowledgedMessage {
     /// The headers of the message.
     public var headers: [KafkaHeader]
 
-    /// Initialize ``KafkaAcknowledgedMessage`` from `rd_kafka_message_t` pointer.
-    /// - Throws: A ``KafkaAcknowledgedMessageError`` for failed acknowledgements or malformed messages.
+    /// Creates a ``KafkaAcknowledgedMessage`` from an `rd_kafka_message_t` pointer.
+    /// - Throws: A ``KafkaError`` for failed acknowledgments or malformed messages.
     internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
         let rdKafkaMessage = messagePointer.pointee
 

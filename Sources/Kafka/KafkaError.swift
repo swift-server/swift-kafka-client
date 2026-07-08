@@ -14,15 +14,67 @@
 
 import Crdkafka
 
-/// An error that can occur on `Kafka` operations
+/// An error that can occur during Kafka operations.
 ///
-/// - Note: `Hashable` conformance only considers the ``KafkaError/code``.
+/// - Note: `Hashable` conformance considers both the ``KafkaError/code``
+///   and the ``KafkaError/rdKafkaCode``.
 public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
     // Note: @unchecked because we use a backing class for storage (copy-on-write).
 
+    // MARK: - RDKafkaCode
+
+    /// A type-safe representation of a librdkafka `rd_kafka_resp_err_t` error code.
+    ///
+    /// Use the static constants (for example, `.allBrokersDown` or `.authentication`) to match
+    /// against the ``KafkaError/rdKafkaCode`` property without importing Crdkafka.
+    public struct RDKafkaCode: Hashable, Sendable, CustomStringConvertible {
+        /// The raw 32-bit value corresponding to the librdkafka error code.
+        public let rawValue: Int32
+
+        /// Creates a librdkafka error code from its raw 32-bit value.
+        public init(rawValue: Int32) {
+            self.rawValue = rawValue
+        }
+
+        // MARK: - Common error codes
+
+        /// All broker connections are down.
+        public static let allBrokersDown = RDKafkaCode(rawValue: -187)
+        /// Authentication failure.
+        public static let authentication = RDKafkaCode(rawValue: -169)
+        /// Broker transport failure.
+        public static let transport = RDKafkaCode(rawValue: -195)
+        /// Operation timed out.
+        public static let timedOut = RDKafkaCode(rawValue: -185)
+        /// SSL error.
+        public static let ssl = RDKafkaCode(rawValue: -181)
+        /// Message timed out.
+        public static let messageTimedOut = RDKafkaCode(rawValue: -192)
+        /// Queue full.
+        public static let queueFull = RDKafkaCode(rawValue: -184)
+        /// Fatal error.
+        public static let fatal = RDKafkaCode(rawValue: -150)
+        /// Maximum poll interval exceeded.
+        public static let maxPollExceeded = RDKafkaCode(rawValue: -147)
+        /// Invalid argument.
+        public static let invalidArgument = RDKafkaCode(rawValue: -186)
+        /// Unknown topic.
+        public static let unknownTopic = RDKafkaCode(rawValue: -188)
+        /// Unknown partition.
+        public static let unknownPartition = RDKafkaCode(rawValue: -190)
+        /// No error.
+        public static let noError = RDKafkaCode(rawValue: 0)
+
+        /// A textual representation of the librdkafka error code, including its name and numeric value.
+        public var description: String {
+            let name = String(cString: rd_kafka_err2str(rd_kafka_resp_err_t(rawValue: self.rawValue)))
+            return "\(name) (code: \(self.rawValue))"
+        }
+    }
+
     private var backing: Backing
 
-    /// Represents the kind of error that was encountered.
+    /// The kind of error that was encountered.
     public var code: ErrorCode {
         get {
             self.backing.code
@@ -31,6 +83,32 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
             self.makeUnique()
             self.backing.code = newValue
         }
+    }
+
+    /// The underlying librdkafka error code, if this error originated from librdkafka.
+    ///
+    /// Returns `nil` for errors that do not wrap a `rd_kafka_resp_err_t`
+    /// (for example, pure configuration or lifecycle errors).
+    public var rdKafkaCode: RDKafkaCode? {
+        self.backing.rdKafkaCode
+    }
+
+    /// A Boolean value that indicates whether the error is fatal to the client instance.
+    ///
+    /// A fatal error means the client instance is no longer usable and must be
+    /// destroyed and re-created. Always `false` for errors that do not originate
+    /// from librdkafka's rich error type (`rd_kafka_error_t`).
+    public var isFatal: Bool {
+        self.backing.isFatal
+    }
+
+    /// A Boolean value that indicates whether the error is retriable.
+    ///
+    /// A retriable error indicates the operation may succeed if retried.
+    /// Always `false` for errors that do not originate from librdkafka's
+    /// rich error type (`rd_kafka_error_t`).
+    public var isRetriable: Bool {
+        self.backing.isRetriable
     }
 
     private var reason: String {
@@ -45,6 +123,7 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         self.backing.line
     }
 
+    /// A textual representation of the error, including its code, reason, and originating source location.
     public var description: String {
         "KafkaError.\(self.code): \(self.reason) \(self.file):\(self.line)"
     }
@@ -66,7 +145,56 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
                 code: .underlying,
                 reason: errorMessage,
                 file: file,
-                line: line
+                line: line,
+                rdKafkaCode: RDKafkaCode(rawValue: error.rawValue)
+            )
+        )
+    }
+
+    static func rdKafkaError(
+        wrapping error: rd_kafka_resp_err_t,
+        reason: String,
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> KafkaError {
+        KafkaError(
+            backing: .init(
+                code: .underlying,
+                reason: reason,
+                file: file,
+                line: line,
+                rdKafkaCode: RDKafkaCode(rawValue: error.rawValue)
+            )
+        )
+    }
+
+    /// Creates a ``KafkaError`` from a rich `rd_kafka_error_t*` error.
+    ///
+    /// Extracts the error code, reason string, isFatal, and isRetriable flags
+    /// before destroying the error object. This preserves the full error metadata
+    /// that is only available on the rich error type.
+    ///
+    /// - Parameter error: A non-nil `rd_kafka_error_t*` pointer. The pointer is destroyed after extraction.
+    static func rdKafkaError(
+        wrapping error: OpaquePointer,
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> KafkaError {
+        let code = rd_kafka_error_code(error)
+        let reason = String(cString: rd_kafka_error_string(error))
+        let isFatal = rd_kafka_error_is_fatal(error) == 1
+        let isRetriable = rd_kafka_error_is_retriable(error) == 1
+        rd_kafka_error_destroy(error)
+
+        return KafkaError(
+            backing: .init(
+                code: .underlying,
+                reason: reason,
+                file: file,
+                line: line,
+                rdKafkaCode: RDKafkaCode(rawValue: code.rawValue),
+                isFatal: isFatal,
+                isRetriable: isRetriable
             )
         )
     }
@@ -178,11 +306,11 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
 }
 
 extension KafkaError {
-    /// Represents the kind of error.
+    /// The high-level classification of a Kafka error.
     ///
-    /// The same error may be thrown from more than one place for more than one reason.
-    /// This type represents only a relatively high-level error:
-    /// use the string representation of ``KafkaError`` to get more details about the specific cause.
+    /// The same error may originate from more than one place for more than one reason.
+    /// This type captures only a relatively high-level error:
+    /// use the string representation of ``KafkaError`` for more details about the specific cause.
     public struct ErrorCode: Hashable, Sendable, CustomStringConvertible {
         fileprivate enum BackingCode {
             case rdKafkaError
@@ -218,6 +346,7 @@ extension KafkaError {
         /// Deleting a topic failed.
         public static let topicDeletionFailed = ErrorCode(.topicDeletion)
 
+        /// A textual representation of the error code.
         public var description: String {
             String(describing: self.backingCode)
         }
@@ -236,29 +365,49 @@ extension KafkaError {
 
         let line: UInt
 
+        let rdKafkaCode: RDKafkaCode?
+
+        let isFatal: Bool
+
+        let isRetriable: Bool
+
         fileprivate init(
             code: KafkaError.ErrorCode,
             reason: String,
             file: String,
-            line: UInt
+            line: UInt,
+            rdKafkaCode: RDKafkaCode? = nil,
+            isFatal: Bool = false,
+            isRetriable: Bool = false
         ) {
             self.code = code
             self.reason = reason
             self.file = file
             self.line = line
+            self.rdKafkaCode = rdKafkaCode
+            self.isFatal = isFatal
+            self.isRetriable = isRetriable
         }
 
-        // Only the error code matters for equality.
         static func == (lhs: Backing, rhs: Backing) -> Bool {
-            lhs.code == rhs.code
+            lhs.code == rhs.code && lhs.rdKafkaCode == rhs.rdKafkaCode
         }
 
         func hash(into hasher: inout Hasher) {
             hasher.combine(self.code)
+            hasher.combine(self.rdKafkaCode)
         }
 
         fileprivate func copy() -> Backing {
-            Backing(code: self.code, reason: self.reason, file: self.file, line: self.line)
+            Backing(
+                code: self.code,
+                reason: self.reason,
+                file: self.file,
+                line: self.line,
+                rdKafkaCode: self.rdKafkaCode,
+                isFatal: self.isFatal,
+                isRetriable: self.isRetriable
+            )
         }
     }
 }
@@ -266,10 +415,12 @@ extension KafkaError {
 // MARK: - KafkaError + Hashable
 
 extension KafkaError: Hashable {
+    /// Returns a Boolean value that indicates whether two errors are equal.
     public static func == (lhs: KafkaError, rhs: KafkaError) -> Bool {
         lhs.backing == rhs.backing
     }
 
+    /// Hashes the essential components of the error by feeding them into the given hasher.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(self.backing)
     }

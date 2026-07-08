@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
 import Logging
 import ServiceLifecycle
 import Testing
@@ -46,6 +47,8 @@ import Foundation
         if let enableAutoOffsetStore {
             config.enableAutoOffsetStore = enableAutoOffsetStore
         }
+        config.useMockBroker()
+        config.brokerAddressFamily = .v4
         return config
     }
 
@@ -166,13 +169,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         // After shutdown, all withClient()-based methods should throw connectionClosed
@@ -181,6 +185,311 @@ import Foundation
                 topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))]
             )
         }
+    }
+
+    // MARK: - Subscription Management Tests
+
+    @Test func subscribedTopicsFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.subscribedTopics()
+        }
+    }
+
+    @Test func subscribeFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.subscribe(topics: ["new-topic"])
+        }
+    }
+
+    @Test func unsubscribeFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.unsubscribe()
+        }
+    }
+
+    @Test func subscribeWithEmptyTopicsCallsUnsubscribe() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            // Empty topics should not crash — delegates to unsubscribe()
+            try consumer.subscribe(topics: [])
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func subscribeBeforeRunSucceeds() throws {
+        // Consumer without consumptionStrategy — user subscribes manually
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // subscribe() in .initializing state should not crash
+        try consumer.subscribe(topics: ["test-topic"])
+    }
+
+    @Test func subscribedTopicsReturnsEmptyBeforeSubscribing() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // No subscription set — should return empty
+        let topics = try consumer.subscribedTopics()
+        #expect(topics.isEmpty)
+    }
+
+    @Test func runWithoutConsumptionStrategyDoesNotCrash() async throws {
+        // Consumer with nil consumptionStrategy — should start and shut down cleanly
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+        // No crash = test passes
+    }
+
+    @Test func subscribeBeforeRunThenRunSucceeds() async throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // Subscribe before run
+        try consumer.subscribe(topics: ["test-topic"])
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+    }
+
+    @Test func unsubscribeBeforeSubscribeDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // Unsubscribe when never subscribed — should not crash
+        try consumer.unsubscribe()
+    }
+
+    @Test func subscribeDuplicateTopicsThrows() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // librdkafka rejects duplicate topics with "Invalid argument"
+        #expect(throws: KafkaError.self) {
+            try consumer.subscribe(topics: ["topic-a", "topic-a", "topic-a"])
+        }
+    }
+
+    @Test func subscribeWithRegexPatternDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = UUID().uuidString
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // Regex pattern subscription — librdkafka supports ^-prefixed patterns
+        try consumer.subscribe(topics: ["^test-.*"])
+    }
+
+    // MARK: - Pause/Resume Tests
+
+    @Test func pauseFailsOnUnknownPartition() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            #expect(throws: KafkaError.self) {
+                try consumer.pause(
+                    topicPartitions: [
+                        KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))
+                    ]
+                )
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func resumeFailsOnUnknownPartition() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            #expect(throws: KafkaError.self) {
+                try consumer.resume(
+                    topicPartitions: [
+                        KafkaTopicPartition(topic: "nonexistent", partition: KafkaPartition(rawValue: 999))
+                    ]
+                )
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func pauseFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.pause(
+                topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))]
+            )
+        }
+    }
+
+    @Test func resumeFailsOnClosedConsumer() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.resume(
+                topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))]
+            )
+        }
+    }
+
+    // MARK: - KafkaTimestampType Tests
+
+    @Test func timestampTypeStaticConstants() {
+        #expect(KafkaTimestampType.notAvailable.rawValue == 0)
+        #expect(KafkaTimestampType.createTime.rawValue == 1)
+        #expect(KafkaTimestampType.logAppendTime.rawValue == 2)
+    }
+
+    @Test func timestampTypeEquality() {
+        #expect(KafkaTimestampType.createTime == KafkaTimestampType(rawValue: 1))
+        #expect(KafkaTimestampType.createTime != KafkaTimestampType.logAppendTime)
+    }
+
+    @Test func timestampTypeDescription() {
+        #expect(KafkaTimestampType.createTime.description == "createTime")
+        #expect(KafkaTimestampType.logAppendTime.description == "logAppendTime")
+        #expect(KafkaTimestampType.notAvailable.description == "notAvailable")
     }
 
     // MARK: - committed / position Tests
@@ -192,17 +501,18 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
-        #expect(throws: KafkaError.self) {
-            _ = try consumer.committed(
+        await #expect(throws: KafkaError.self) {
+            _ = try await consumer.committed(
                 topicPartitions: [KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))],
                 timeout: .milliseconds(1000)
             )
@@ -216,13 +526,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         #expect(throws: KafkaError.self) {
@@ -241,13 +552,14 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
         #expect(throws: KafkaError.self) {
@@ -262,17 +574,28 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-
-            let lost = try! consumer.isAssignmentLost
-            #expect(lost == false)
+            // Wait until the consumer is in .running state
+            var success = false
+            for _ in 0..<20 {
+                do {
+                    let lost = try consumer.isAssignmentLost
+                    #expect(lost == false)
+                    success = true
+                    break
+                } catch {
+                    // Consumer not yet running (still initializing), retry
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            }
+            #expect(success, "Consumer never entered running state")
 
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
     }
 
@@ -285,17 +608,18 @@ import Foundation
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
 
-        await withThrowingTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await serviceGroup.run()
             }
 
-            try! await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
             await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
         }
 
-        #expect(throws: KafkaError.self) {
-            try consumer.seek(
+        await #expect(throws: KafkaError.self) {
+            try await consumer.seek(
                 topicPartitionOffsets: [
                     KafkaTopicPartitionOffset(topic: "test", partition: KafkaPartition(rawValue: 0), offset: .beginning)
                 ]
@@ -310,6 +634,84 @@ import Foundation
     // indirectly: if enableAutoCommit is true (default), calling scheduleCommit would
     // throw a config error. The closed-consumer path is the same as other withClient()
     // methods, already tested above.
+
+    // MARK: - Commit All Tests
+
+    @Test func scheduleCommitAllFailsWithAutoCommitEnabled() async throws {
+        let config = makeConfig(enableAutoCommit: true)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            #expect(throws: KafkaError.self) {
+                try consumer.scheduleCommit()
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func commitAllFailsWithAutoCommitEnabled() async throws {
+        let config = makeConfig(enableAutoCommit: true)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            await #expect(throws: KafkaError.self) {
+                try await consumer.commit()
+            }
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    @Test func scheduleCommitAllFailsOnClosedConsumer() async throws {
+        let config = makeConfig(enableAutoCommit: false)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        #expect(throws: KafkaError.self) {
+            try consumer.scheduleCommit()
+        }
+    }
+
+    @Test func commitAllFailsOnClosedConsumer() async throws {
+        let config = makeConfig(enableAutoCommit: false)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        await #expect(throws: KafkaError.self) {
+            try await consumer.commit()
+        }
+    }
 
     // MARK: - makeConsumerWithEvents Tests
 
@@ -457,4 +859,562 @@ import Foundation
         #expect(set.count == 2)
     }
 
+    // MARK: - KafkaConsumerRebalance Tests
+
+    @Test func rebalanceAssignConstruction() {
+        let partitions = [
+            KafkaTopicPartition(topic: "topic-a", partition: KafkaPartition(rawValue: 0)),
+            KafkaTopicPartition(topic: "topic-a", partition: KafkaPartition(rawValue: 1)),
+        ]
+        let rebalance = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        #expect(rebalance.kind == .assign)
+        #expect(rebalance.partitions.count == 2)
+        #expect(rebalance.partitions[0].topic == "topic-a")
+        #expect(rebalance.partitions[0].partition == KafkaPartition(rawValue: 0))
+        #expect(rebalance.partitions[1].partition == KafkaPartition(rawValue: 1))
+    }
+
+    @Test func rebalanceRevokeConstruction() {
+        let rebalance = KafkaConsumerRebalance(kind: .revoke, partitions: [])
+        #expect(rebalance.kind == .revoke)
+        #expect(rebalance.partitions.isEmpty)
+    }
+
+    @Test func rebalanceEquality() {
+        let partitions = [
+            KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))
+        ]
+        let r1 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r2 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r3 = KafkaConsumerRebalance(kind: .revoke, partitions: partitions)
+        let r4 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+
+        #expect(r1 == r2)
+        #expect(r1 != r3)
+        #expect(r1 != r4)
+    }
+
+    @Test func rebalanceHashable() {
+        let partitions = [
+            KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))
+        ]
+        let r1 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r2 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let r3 = KafkaConsumerRebalance(kind: .revoke, partitions: partitions)
+
+        var set: Set<KafkaConsumerRebalance> = []
+        set.insert(r1)
+        set.insert(r2)
+        set.insert(r3)
+        #expect(set.count == 2)
+    }
+
+    @Test func rebalanceKindEquality() {
+        #expect(KafkaConsumerRebalance.Kind.assign == KafkaConsumerRebalance.Kind.assign)
+        #expect(KafkaConsumerRebalance.Kind.revoke == KafkaConsumerRebalance.Kind.revoke)
+        #expect(KafkaConsumerRebalance.Kind.assign != KafkaConsumerRebalance.Kind.revoke)
+    }
+
+    // MARK: - KafkaConsumerEvent Rebalance Tests
+
+    @Test func consumerEventRebalancePatternMatch() {
+        let rebalance = KafkaConsumerRebalance(
+            kind: .assign,
+            partitions: [KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))]
+        )
+        let event = KafkaConsumerEvent.rebalance(rebalance)
+
+        switch event {
+        case .rebalance(let r):
+            #expect(r.kind == .assign)
+            #expect(r.partitions.count == 1)
+        default:
+            Issue.record("Expected .rebalance event")
+        }
+    }
+
+    @Test func consumerEventFromConsumerPollEvent() {
+        let rebalance = KafkaConsumerRebalance(
+            kind: .revoke,
+            partitions: [
+                KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0)),
+                KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 1)),
+            ]
+        )
+        let event = KafkaConsumerEvent.rebalance(rebalance)
+
+        switch event {
+        case .rebalance(let r):
+            #expect(r.kind == .revoke)
+            #expect(r.partitions.count == 2)
+        default:
+            Issue.record("Expected .rebalance event")
+        }
+    }
+
+    // MARK: - KafkaConsumerRebalance.Kind.error Tests
+
+    @Test func rebalanceErrorConstruction() {
+        let rebalance = KafkaConsumerRebalance(kind: .error("broker unavailable"), partitions: [])
+        #expect(rebalance.partitions.isEmpty)
+        if case .error(let description) = rebalance.kind {
+            #expect(description == "broker unavailable")
+        } else {
+            Issue.record("Expected .error kind")
+        }
+    }
+
+    @Test func rebalanceErrorEquality() {
+        let r1 = KafkaConsumerRebalance(kind: .error("err1"), partitions: [])
+        let r2 = KafkaConsumerRebalance(kind: .error("err1"), partitions: [])
+        let r3 = KafkaConsumerRebalance(kind: .error("err2"), partitions: [])
+        let r4 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+
+        #expect(r1 == r2)
+        #expect(r1 != r3)
+        #expect(r1 != r4)
+    }
+
+    @Test func rebalanceErrorHashable() {
+        let r1 = KafkaConsumerRebalance(kind: .error("err"), partitions: [])
+        let r2 = KafkaConsumerRebalance(kind: .error("err"), partitions: [])
+        let r3 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+
+        var set: Set<KafkaConsumerRebalance> = []
+        set.insert(r1)
+        set.insert(r2)
+        set.insert(r3)
+        #expect(set.count == 2)
+    }
+
+    @Test func rebalanceErrorEventPatternMatch() {
+        let rebalance = KafkaConsumerRebalance(kind: .error("group coordinator not available"), partitions: [])
+        let event = KafkaConsumerEvent.rebalance(rebalance)
+
+        switch event {
+        case .rebalance(let r):
+            if case .error(let desc) = r.kind {
+                #expect(desc == "group coordinator not available")
+            } else {
+                Issue.record("Expected .error kind")
+            }
+            #expect(r.partitions.isEmpty)
+        default:
+            Issue.record("Expected .rebalance event")
+        }
+    }
+
+    // MARK: - RebalanceContext Tests
+
+    @Test func rebalanceContextDrainEventsEmpty() {
+        let context = RebalanceContext(logger: .kafkaTest)
+        let events = context.drainEvents()
+        #expect(events.isEmpty)
+    }
+
+    @Test func rebalanceContextInjectAndDrain() {
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(
+                kind: .assign,
+                partitions: [("topic-a", 0), ("topic-a", 1)]
+            )
+        )
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(
+                kind: .revoke,
+                partitions: [("topic-a", 1)]
+            )
+        )
+
+        let events = context.drainEvents()
+        #expect(events.count == 2)
+
+        // Verify FIFO ordering
+        if case .assign = events[0].kind {
+            #expect(events[0].partitions.count == 2)
+        } else {
+            Issue.record("Expected first event to be .assign")
+        }
+
+        if case .revoke = events[1].kind {
+            #expect(events[1].partitions.count == 1)
+        } else {
+            Issue.record("Expected second event to be .revoke")
+        }
+    }
+
+    @Test func rebalanceContextDrainClearsBuffer() {
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(kind: .assign, partitions: [("t", 0)])
+        )
+
+        let first = context.drainEvents()
+        #expect(first.count == 1)
+
+        let second = context.drainEvents()
+        #expect(second.isEmpty, "Second drain should return empty after first drain consumed the event")
+    }
+
+    @Test func rebalanceContextErrorEventInjection() {
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        context._testInjectEvent(
+            RebalanceContext.ConsumerRebalanceEvent(kind: .error("coordinator not available"), partitions: [])
+        )
+
+        let events = context.drainEvents()
+        #expect(events.count == 1)
+        if case .error(let desc) = events[0].kind {
+            #expect(desc == "coordinator not available")
+        } else {
+            Issue.record("Expected .error kind")
+        }
+        #expect(events[0].partitions.isEmpty)
+    }
+
+    @Test func rebalanceContextConcurrentInjectAndDrain() async {
+        // This tests the core race condition: the C callback thread appends events
+        // while the Swift event loop drains them concurrently.
+        let context = RebalanceContext(logger: .kafkaTest)
+
+        // Use an actor to safely count drained events across tasks
+        actor Counter {
+            var value = 0
+            func add(_ n: Int) { value += n }
+            func get() -> Int { value }
+        }
+        let drainCounter = Counter()
+
+        await withTaskGroup(of: Void.self) { group in
+            // Simulate C callback thread: rapidly inject events
+            group.addTask {
+                for i in 0..<200 {
+                    context._testInjectEvent(
+                        RebalanceContext.ConsumerRebalanceEvent(
+                            kind: i % 2 == 0 ? .assign : .revoke,
+                            partitions: [("topic", i)]
+                        )
+                    )
+                }
+            }
+
+            // Simulate event loop: drain repeatedly
+            group.addTask {
+                for _ in 0..<500 {
+                    let events = context.drainEvents()
+                    await drainCounter.add(events.count)
+                    await Task.yield()
+                }
+            }
+
+            await group.waitForAll()
+        }
+
+        // Drain any remaining events after both tasks complete
+        let remaining = context.drainEvents()
+        await drainCounter.add(remaining.count)
+
+        // Every injected event must be drained exactly once — no loss, no duplication
+        let finalDrained = await drainCounter.get()
+        #expect(finalDrained == 200, "Expected 200 drained events, got \(finalDrained)")
+    }
+
+    @Test func rebalanceContextConcurrentMultipleInjectersAndDrain() async {
+        // Multiple "C callback threads" appending simultaneously while event loop drains
+        let context = RebalanceContext(logger: .kafkaTest)
+        let injectersCount = 5
+        let eventsPerInjecter = 50
+
+        actor Counter {
+            var value = 0
+            func add(_ n: Int) { value += n }
+            func get() -> Int { value }
+        }
+        let drainCounter = Counter()
+
+        await withTaskGroup(of: Void.self) { group in
+            // Multiple concurrent injecters
+            for t in 0..<injectersCount {
+                group.addTask {
+                    for i in 0..<eventsPerInjecter {
+                        context._testInjectEvent(
+                            RebalanceContext.ConsumerRebalanceEvent(
+                                kind: .assign,
+                                partitions: [("topic-\(t)", i)]
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Single drain loop
+            group.addTask {
+                for _ in 0..<1000 {
+                    let events = context.drainEvents()
+                    await drainCounter.add(events.count)
+                    await Task.yield()
+                }
+            }
+
+            await group.waitForAll()
+        }
+
+        let remaining = context.drainEvents()
+        await drainCounter.add(remaining.count)
+        let finalDrained = await drainCounter.get()
+        let expected = injectersCount * eventsPerInjecter
+        #expect(finalDrained == expected, "Expected \(expected) drained events, got \(finalDrained)")
+    }
+
+    @Test func rebalanceContextFIFOOrderingPreservedUnderConcurrency() async {
+        // Verify events from a single injecter maintain FIFO order
+        let context = RebalanceContext(logger: .kafkaTest)
+        var allDrained: [RebalanceContext.ConsumerRebalanceEvent] = []
+
+        // Inject 100 events with sequential partition IDs
+        for i in 0..<100 {
+            context._testInjectEvent(
+                RebalanceContext.ConsumerRebalanceEvent(
+                    kind: .assign,
+                    partitions: [("topic", i)]
+                )
+            )
+        }
+
+        // Drain in batches
+        while true {
+            let batch = context.drainEvents()
+            if batch.isEmpty { break }
+            allDrained.append(contentsOf: batch)
+        }
+
+        #expect(allDrained.count == 100)
+
+        // Verify ordering: partition IDs should be 0, 1, 2, ... 99
+        for (index, event) in allDrained.enumerated() {
+            #expect(
+                event.partitions[0].partition == index,
+                "Event at index \(index) has partition \(event.partitions[0].partition), expected \(index)"
+            )
+        }
+    }
+
+    // MARK: - KafkaConsumerEvent.error Tests
+
+    @Test func consumerEventErrorPatternMatch() {
+        let error = KafkaError.config(reason: "All brokers are down")
+        let event = KafkaConsumerEvent.error(error)
+
+        switch event {
+        case .error(let e):
+            #expect(e.description.contains("All brokers are down"))
+        default:
+            Issue.record("Expected .error event")
+        }
+    }
+
+    @Test func consumerEventErrorEquality() {
+        let error1 = KafkaError.config(reason: "All brokers are down")
+        let error2 = KafkaError.config(reason: "Authentication failed")
+
+        let event1 = KafkaConsumerEvent.error(error1)
+        let event2 = KafkaConsumerEvent.error(error2)
+
+        // Same error code (.config), so they are equal per current Equatable (known limitation)
+        #expect(event1 == event2)
+    }
+
+    // MARK: - Iterator Drop Shutdown Tests
+
+    @Test func iteratorDropDoesNotCrashServiceGroup() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Start consuming messages in a separate task, then drop the iterator
+            group.addTask {
+                for try await _ in consumer.messages {
+                    break  // immediately drop the iterator
+                }
+            }
+
+            // Wait for iterator drop to take effect
+            try await Task.sleep(for: .seconds(1))
+
+            // If we get here, run() did NOT exit early — ServiceGroup is still alive.
+            // Now shut down cleanly.
+            await serviceGroup.triggerGracefulShutdown()
+        }
+        // Test passes if no ServiceGroupError was thrown
+    }
+
+    @Test func iteratorDropThenGracefulShutdownSucceeds() async throws {
+        let config = makeConfig()
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            // Drop the iterator by creating and immediately discarding it
+            var iterator: KafkaConsumerMessages.AsyncIterator? = consumer.messages.makeAsyncIterator()
+            _ = iterator
+            iterator = nil
+
+            // Wait for state transition
+            try await Task.sleep(for: .seconds(1))
+
+            // Graceful shutdown should succeed without error
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    // MARK: - KafkaError.RDKafkaCode Tests
+
+    @Test func rdKafkaCodeStaticConstants() {
+        #expect(KafkaError.RDKafkaCode.allBrokersDown.rawValue == -187)
+        #expect(KafkaError.RDKafkaCode.authentication.rawValue == -169)
+        #expect(KafkaError.RDKafkaCode.transport.rawValue == -195)
+        #expect(KafkaError.RDKafkaCode.timedOut.rawValue == -185)
+        #expect(KafkaError.RDKafkaCode.ssl.rawValue == -181)
+        #expect(KafkaError.RDKafkaCode.fatal.rawValue == -150)
+        #expect(KafkaError.RDKafkaCode.noError.rawValue == 0)
+    }
+
+    @Test func rdKafkaCodeEquality() {
+        #expect(KafkaError.RDKafkaCode.allBrokersDown == KafkaError.RDKafkaCode(rawValue: -187))
+        #expect(KafkaError.RDKafkaCode.allBrokersDown != KafkaError.RDKafkaCode.transport)
+    }
+
+    @Test func rdKafkaCodeHashable() {
+        var set = Set<KafkaError.RDKafkaCode>()
+        set.insert(.allBrokersDown)
+        set.insert(KafkaError.RDKafkaCode(rawValue: -187))
+        set.insert(.authentication)
+        #expect(set.count == 2)
+    }
+
+    @Test func rdKafkaCodeDescription() {
+        let code = KafkaError.RDKafkaCode.allBrokersDown
+        #expect(code.description.contains("-187"))
+        #expect(code.description.contains("broker"))
+    }
+
+    // MARK: - KafkaError Error Code Preservation Tests
+
+    @Test func kafkaErrorPreservesRDKafkaCode() {
+        let error = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        #expect(error.rdKafkaCode == .allBrokersDown)
+        #expect(error.code == .underlying)
+    }
+
+    @Test func kafkaErrorPreservesRDKafkaCodeWithReason() {
+        let error = KafkaError.rdKafkaError(
+            wrapping: rd_kafka_resp_err_t(rawValue: -185),
+            reason: "custom reason"
+        )
+        #expect(error.rdKafkaCode == .timedOut)
+    }
+
+    @Test func kafkaErrorNonRDKafkaErrorHasNilCode() {
+        let error = KafkaError.config(reason: "bad config")
+        #expect(error.rdKafkaCode == nil)
+    }
+
+    @Test func kafkaErrorEqualityDistinguishesDifferentRDKafkaCodes() {
+        let err1 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        let err2 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -169))
+        #expect(err1 != err2)
+    }
+
+    @Test func kafkaErrorEqualitySameRDKafkaCode() {
+        let err1 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        let err2 = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        #expect(err1 == err2)
+    }
+
+    // MARK: - KafkaError isFatal / isRetriable Tests
+
+    @Test func rdKafkaErrorFromSimpleCodeHasFalseFlags() {
+        let error = KafkaError.rdKafkaError(wrapping: rd_kafka_resp_err_t(rawValue: -187))
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
+    @Test func rdKafkaErrorWithReasonHasFalseFlags() {
+        let error = KafkaError.rdKafkaError(
+            wrapping: rd_kafka_resp_err_t(rawValue: -185),
+            reason: "Operation timed out"
+        )
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
+    @Test func configErrorHasFalseFlags() {
+        let error = KafkaError.config(reason: "Invalid setting")
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
+    @Test func connectionClosedErrorHasFalseFlags() {
+        let error = KafkaError.connectionClosed(reason: "Consumer closed")
+        #expect(error.isFatal == false)
+        #expect(error.isRetriable == false)
+    }
+
+    @Test func triggerGracefulShutdownBeforeRunDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = "test-group"
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        // This used to cause a fatalError when consumer was in the .initializing state
+        consumer.triggerGracefulShutdown()
+    }
+
+    @Test func triggerGracefulShutdownAfterSubscribeButBeforeRunDoesNotCrash() throws {
+        var config = KafkaConsumerConfig()
+        config.groupId = "test-group"
+        config.brokerAddressFamily = .v4
+
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        try consumer.subscribe(topics: ["test-topic"])
+        consumer.triggerGracefulShutdown()
+    }
+
+    @Test func scheduleCommitAllSucceeds() async throws {
+        let config = self.makeConfig(enableAutoCommit: false)
+        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await serviceGroup.run() }
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            try consumer.scheduleCommit()
+            try await Task.sleep(for: .milliseconds(1000), tolerance: .zero)
+
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
 }

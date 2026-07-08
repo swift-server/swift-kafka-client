@@ -14,24 +14,27 @@
 
 import Crdkafka
 
-/// Message offset on a Kafka partition queue.
+/// A message offset within a Kafka partition queue.
 public struct KafkaOffset: RawRepresentable {
+    /// The raw integer value of the offset.
     public var rawValue: Int
 
+    /// Creates a Kafka offset from its raw integer value.
     public init(rawValue: Int) {
         self.rawValue = rawValue
     }
 
-    /// Start consuming from the beginning of the Kafka partition queue i.e. the oldest message.
+    /// Start consuming from the beginning of the Kafka partition queue, that is, the oldest message.
     public static let beginning = KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_BEGINNING))
 
-    /// Start consuming from the end of the Kafka partition queue i.e. wait for next message to be produced.
+    /// Start consuming from the end of the Kafka partition queue, that is, wait for the next message to be produced.
     public static let end = KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_END))
 
     /// Start consuming from offset retrieved from offset store.
     public static let storedOffset = KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_STORED))
 
-    /// Start consuming with the `count` latest messages.
+    /// Start consuming with the latest messages of the topic.
+    ///
     /// Example: Current end offset is at `12345` and `count = 200`.
     /// This means start reading offset from offset `12345 - 200 = 12145`.
     public static func tail(_ count: Int) -> KafkaOffset {

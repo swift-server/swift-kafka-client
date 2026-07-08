@@ -1035,6 +1035,14 @@ public struct KafkaProducerConfig: Sendable {
     /// Default: -1
     public var compressionLevel: Int?
 
+    /// Additional librdkafka configuration properties not covered by typed properties.
+    /// Keys and values are passed directly to librdkafka.
+    ///
+    /// - Warning: Properties set here override typed properties above.
+    /// Intended for testing (e.g. `test.mock.num.brokers`) or advanced configurations
+    /// not explicitly supported by this library.
+    internal var additionalConfig: [String: String] = [:]
+
     public init() {}
 
     internal var config: [String: String] {
@@ -1152,6 +1160,10 @@ public struct KafkaProducerConfig: Sendable {
             let updateInterval = metrics.updateInterval
         {
             config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
+        }
+
+        for (key, value) in self.additionalConfig {
+            config[key] = value
         }
 
         return config

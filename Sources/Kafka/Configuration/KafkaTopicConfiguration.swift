@@ -12,9 +12,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// Used to configure new topics created by the ``KafkaProducer``.
+/// Configuration applied to new topics that the producer creates.
+///
+/// The ``KafkaProducer`` applies this configuration when auto-creating topics.
 public struct KafkaTopicConfiguration {
-    /// This number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
+    /// The number of acknowledgments the leader broker must receive from in-sync replica (ISR) brokers before responding to the request.
     public struct RequiredAcknowledgments: Sendable, Hashable {
         internal let rawValue: Int
 
@@ -22,24 +24,30 @@ public struct KafkaTopicConfiguration {
             self.rawValue = rawValue
         }
 
+        /// Creates a required-acknowledgments value that requires at least the number of in-sync replica acknowledgments you specify.
         public static func atLeast(_ value: Int) -> RequiredAcknowledgments {
             .init(rawValue: value)
         }
 
-        /// Broker will block until the message is committed by all in-sync replicas (ISRs).
+        /// Broker blocks until the message is committed by all in-sync replicas (ISRs).
         public static let all: RequiredAcknowledgments = .init(rawValue: -1)
 
-        /// Broker does not send any response/ack to the client.
+        /// The broker does not send any response or acknowledgment to the client.
         public static let noAcknowledgments: RequiredAcknowledgments = .init(rawValue: 0)
     }
 
-    /// This field indicates the number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
-    /// If there are less than `min.insync.replicas` (broker configuration) in the ISR set the produce request will fail.
+    /// The number of acknowledgments the leader broker must receive from ISR brokers before responding to the request.
+    ///
+    /// If there are less than `min.insync.replicas` (broker configuration) in the ISR set, the produce request fails.
+    ///
     /// Default: `.all`
     public var requiredAcknowledgements: RequiredAcknowledgments = .all
 
-    /// The ack timeout of the producer request. This value is only enforced by the broker and relies on ``requiredAcknowledgements`` being != 0.
+    /// The acknowledgment timeout of the producer request.
+    ///
+    /// This value is only enforced by the broker and relies on ``requiredAcknowledgements`` being != 0.
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.milliseconds(30000)`
     public var requestTimeout: Duration = .milliseconds(30000) {
         didSet {
@@ -50,7 +58,7 @@ public struct KafkaTopicConfiguration {
         }
     }
 
-    /// Local message timeout.
+    /// A local timeout for delivering a produced message.
     public struct MessageTimeout: Sendable, Hashable {
         internal let rawValue: UInt
 
@@ -58,7 +66,9 @@ public struct KafkaTopicConfiguration {
             self.rawValue = rawValue
         }
 
-        /// (Lowest granularity is milliseconds)
+        /// Creates a message-delivery timeout from the duration you provide.
+        ///
+        /// - Note: The lowest granularity is milliseconds.
         public static func timeout(_ value: Duration) -> MessageTimeout {
             precondition(
                 value.canBeRepresentedAsMilliseconds,
@@ -67,45 +77,59 @@ public struct KafkaTopicConfiguration {
             return .init(rawValue: value.inMilliseconds)
         }
 
+        /// A message timeout that never expires; messages remain queued for delivery indefinitely.
         public static let infinite: MessageTimeout = .init(rawValue: 0)
     }
 
-    /// Local message timeout.
+    /// The local timeout for delivering a produced message.
+    ///
     /// This value is only enforced locally and limits the time a produced message waits for successful delivery.
     /// This is the maximum time librdkafka may use to deliver a message (including retries).
     /// Delivery error occurs when either the retry count or the message timeout is exceeded.
     /// (Lowest granularity is milliseconds)
+    ///
     /// Default: `.timeout(.milliseconds(300_000))`
     public var messageTimeout: MessageTimeout = .timeout(.milliseconds(300_000))
 
-    /// Partitioner. Computes the partition that a message is stored in.
+    /// The algorithm a producer uses to assign each message to a partition of its topic.
+    ///
+    /// Most algorithms hash the message key so identical keys map to the same partition; messages with no key are typically distributed at random.
     public struct Partitioner: Sendable, Hashable, CustomStringConvertible {
+        /// A textual representation of the partitioner algorithm.
         public let description: String
 
         /// Random distribution.
         public static let random = Partitioner(description: "random")
-        /// CRC32 hash of key (Empty and NULL keys are mapped to a single partition).
+        /// CRC32 hash of key. Maps empty and NULL keys to a single partition.
         public static let consistent = Partitioner(description: "consistent")
-        /// CRC32 hash of key (Empty and NULL keys are randomly partitioned).
+        /// CRC32 hash of key. Randomly partitions empty and NULL keys.
         public static let consistentRandom = Partitioner(description: "consistent_random")
-        /// Java Producer compatible Murmur2 hash of key (NULL keys are mapped to a single partition).
+        /// Java Producer compatible Murmur2 hash of key. Maps NULL keys to a single partition.
         public static let murmur2 = Partitioner(description: "murmur2")
-        /// Java Producer compatible Murmur2 hash of key (NULL keys are randomly partitioned. This is functionally equivalent to the default partitioner in the Java Producer).
+        /// Java Producer compatible Murmur2 hash of key.
+        ///
+        /// Randomly partitions NULL keys. This is functionally equivalent to the default partitioner in the Java Producer.
         public static let murmur2Random = Partitioner(description: "murmur2_random")
-        /// FNV-1a hash of key (NULL keys are mapped to a single partition).
+        /// FNV-1a hash of key. Maps NULL keys to a single partition.
         public static let fnv1a = Partitioner(description: "fnv1a")
-        /// FNV-1a hash of key (NULL keys are randomly partitioned).
+        /// FNV-1a hash of key. Randomly partitions NULL keys.
         public static let fnv1aRandom = Partitioner(description: "fnv1a_random")
     }
 
-    /// Partitioner. See ``KafkaTopicConfiguration/Partitioner-swift.struct`` for more information.
+    /// The partitioning algorithm applied to messages produced to this topic.
+    ///
+    /// See ``KafkaTopicConfiguration/Partitioner-swift.struct`` for the available algorithms.
+    ///
     /// Default: `.consistentRandom`
     public var partitioner: Partitioner = .consistentRandom
 
     /// Compression-related configuration options.
     public struct Compression: Sendable, Hashable {
-        /// Compression level parameter for algorithm selected by configuration property ``codec-swift.property``.
-        /// Higher values will result in better compression at the cost of more CPU usage.
+        /// A compression level for the configured codec.
+        ///
+        /// The valid range depends on the codec selected by ``codec-swift.property``.
+        ///
+        /// Higher values produce better compression at the cost of more CPU usage.
         public struct Level: Sendable, Hashable {
             internal let rawValue: Int
 
@@ -113,6 +137,9 @@ public struct KafkaTopicConfiguration {
                 self.rawValue = rawValue
             }
 
+            /// Creates a compression level with the numeric value you provide.
+            ///
+            /// Valid ranges depend on the selected codec.
             public static func level(_ value: Int) -> Level {
                 .init(rawValue: value)
             }
@@ -121,7 +148,7 @@ public struct KafkaTopicConfiguration {
             public static let codecDependent: Level = .init(rawValue: -1)
         }
 
-        /// Process to compress and decompress data.
+        /// A compression codec that compresses and decompresses message data.
         public struct Codec: Sendable, Hashable, CustomStringConvertible {
             private enum _Codec: Sendable, Hashable, CustomStringConvertible {
                 case none
@@ -168,10 +195,12 @@ public struct KafkaTopicConfiguration {
 
             private let _internal: _Codec
 
+            /// A textual representation of the compression codec name.
             public var description: String {
                 self._internal.description
             }
 
+            /// The compression level associated with the codec, or `.codecDependent` when the codec has no configurable level.
             public var level: Level {
                 self._internal.level
             }
@@ -214,6 +243,7 @@ public struct KafkaTopicConfiguration {
         }
 
         /// Compression codec to use for compressing message sets.
+        ///
         /// Default: `.inherit`
         public var codec: Codec = .inherit
     }
@@ -221,6 +251,7 @@ public struct KafkaTopicConfiguration {
     /// Compression-related configuration options.
     public var compression: Compression = .init()
 
+    /// Creates a new topic configuration with default values.
     public init() {}
 }
 
