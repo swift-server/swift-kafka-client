@@ -206,7 +206,15 @@ public final class KafkaConsumer: Sendable, Service {
     ) throws {
         self.config = config
         self.stateMachine = stateMachine
-        self.logger = logger
+        var enrichedLogger = logger
+        if let clientId = config.clientId {
+            enrichedLogger[metadataKey: KafkaLoggingKeys.clientId] = "\(clientId)"
+        }
+        if let groupId = config.groupId {
+            enrichedLogger[metadataKey: KafkaLoggingKeys.groupId] = "\(groupId)"
+        }
+        enrichedLogger[metadataKey: KafkaLoggingKeys.clientType] = "consumer"
+        self.logger = enrichedLogger
         self.eventsSource = eventsSource
         self.rebalanceContext = rebalanceContext
 
@@ -221,6 +229,13 @@ public final class KafkaConsumer: Sendable, Service {
                 rebalanceContext: rebalanceContext
             )
         }
+
+        self.logger.debug(
+            "Kafka consumer initialized",
+            metadata: [
+                KafkaLoggingKeys.bootstrapServers: "\(config.bootstrapServers?.joined(separator: ",") ?? "default")"
+            ]
+        )
     }
 
     /// Creates a new consumer.
@@ -376,6 +391,8 @@ public final class KafkaConsumer: Sendable, Service {
             return
         }
 
+        self.logger.debug("Subscribing to topics", metadata: [KafkaLoggingKeys.topics: "\(topics)"])
+
         let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
         switch action {
         case .client(let client):
@@ -403,6 +420,8 @@ public final class KafkaConsumer: Sendable, Service {
         let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
         switch action {
         case .client(let client):
+            let currentTopics = (try? client.subscription()) ?? []
+            self.logger.debug("Unsubscribing from all topics", metadata: [KafkaLoggingKeys.topics: "\(currentTopics)"])
             try client.unsubscribe()
         case .throwClosedError:
             throw KafkaError.connectionClosed(reason: "Consumer is closed")
@@ -554,7 +573,7 @@ public final class KafkaConsumer: Sendable, Service {
                 do {
                     try client.consumerClose()
                 } catch {
-                    self.logger.error("Closing KafkaConsumer failed", metadata: ["error": "\(error)"])
+                    self.logger.info("Closing KafkaConsumer failed", error: error)
                     self.stateMachine.withLockedValue { $0.closeFailed() }
                 }
                 self.pollAndDrainEvents(client: client)
@@ -571,6 +590,7 @@ public final class KafkaConsumer: Sendable, Service {
                 if let client {
                     self.finalDrain(client: client)
                 }
+                self.logger.debug("Kafka consumer shut down")
                 return
             }
         }
@@ -587,9 +607,9 @@ public final class KafkaConsumer: Sendable, Service {
                 if let source = self.eventsSource {
                     _ = source.yield(.error(kafkaError))
                 }
-                self.logger.error(
+                self.logger.info(
                     "Kafka client error",
-                    metadata: ["error": "\(kafkaError)"]
+                    error: kafkaError
                 )
             }
         }
@@ -615,11 +635,11 @@ public final class KafkaConsumer: Sendable, Service {
             if let source = self.eventsSource {
                 _ = source.yield(.rebalance(rebalance))
             }
-            self.logger.info(
+            self.logger.debug(
                 "Consumer rebalance",
                 metadata: [
-                    "kind": "\(rebalance.kind)",
-                    "partitions": "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
+                    KafkaLoggingKeys.rebalanceKind: "\(rebalance.kind)",
+                    KafkaLoggingKeys.partitions: "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
                 ]
             )
         }
@@ -642,9 +662,9 @@ public final class KafkaConsumer: Sendable, Service {
                 if let source = self.eventsSource {
                     _ = source.yield(.error(kafkaError))
                 }
-                self.logger.error(
+                self.logger.info(
                     "Kafka client error",
-                    metadata: ["error": "\(kafkaError)"]
+                    error: kafkaError
                 )
             }
         }
@@ -670,11 +690,11 @@ public final class KafkaConsumer: Sendable, Service {
             if let source = self.eventsSource {
                 _ = source.yield(.rebalance(rebalance))
             }
-            self.logger.info(
+            self.logger.debug(
                 "Consumer rebalance",
                 metadata: [
-                    "kind": "\(rebalance.kind)",
-                    "partitions": "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
+                    KafkaLoggingKeys.rebalanceKind: "\(rebalance.kind)",
+                    KafkaLoggingKeys.partitions: "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
                 ]
             )
         }
@@ -915,6 +935,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Note: Invoking this method isn't always needed; the ``KafkaConsumer`` already shuts down when consumption of ``KafkaConsumerMessages`` ends.
     public func triggerGracefulShutdown() {
+        self.logger.debug("Kafka consumer shutting down")
         let action = self.stateMachine.withLockedValue { $0.finish() }
         switch action {
         case .triggerGracefulShutdown(let client):
@@ -934,11 +955,10 @@ public final class KafkaConsumer: Sendable, Service {
         do {
             try client.consumerClose()
         } catch {
-            if let error = error as? KafkaError {
-                logger.error("Closing KafkaConsumer failed: \(error.description)")
-            } else {
-                logger.error("Caught unknown error: \(error)")
-            }
+            logger.info(
+                "Closing KafkaConsumer failed",
+                error: error
+            )
         }
     }
 }
