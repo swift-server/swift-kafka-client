@@ -29,11 +29,11 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
   client:
-    image: swift-kafka-client:${IMAGE_TAG:-local-${SWIFT_VERSION:-6.0}-${UBUNTU_VERSION:-jammy}-${IMAGE_PLATFORM:-amd64}}
+    image: swift-kafka-client:${IMAGE_TAG:-local-${SWIFT_VERSION:-6.1}-${UBUNTU_VERSION:-jammy}-${IMAGE_PLATFORM:-amd64}}
     build:
       args:
         ubuntu_version: "${UBUNTU_VERSION:-jammy}"
-        swift_version: "${SWIFT_VERSION:-6.0}"
+        swift_version: "${SWIFT_VERSION:-6.1}"
       platforms:
         - linux/${IMAGE_PLATFORM:-amd64}
     depends_on: [kafka]
