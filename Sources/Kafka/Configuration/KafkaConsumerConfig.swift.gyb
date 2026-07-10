@@ -57,6 +57,53 @@ public struct KafkaConsumerConfig: Sendable {
     public var ${rdconf["swiftName"]}: ${rdconf["swiftType"].replace("enum", f"KafkaConfig.{rdconf["swiftEnumName"]}")}?
   % end
 
+    // MARK: - Hand-maintained additions
+    // Preserved across regeneration: additionalConfig (test infrastructure) and
+    // properties for librdkafka options that librdkafka has since marked DEPRECATED
+    // (gyb_utils.py filters those out, so they must be re-added here to avoid
+    // removing them from swift-kafka-client's public API).
+
+    /// Additional librdkafka configuration properties not covered by typed properties.
+    /// Keys and values are passed directly to librdkafka.
+    ///
+    /// - Warning: Properties set here override typed properties above.
+    /// Intended for testing (e.g. `test.mock.num.brokers`) or advanced configurations
+    /// not explicitly supported by this library.
+    internal var additionalConfig: [String: String] = [:]
+
+    /// Request broker's supported API versions to adjust functionality to available protocol features.
+    /// If set to false, or the ApiVersionRequest fails, the fallback version `broker.version.fallback` will be used.
+    /// **NOTE**: Depends on broker version >=0.10.0.
+    /// If the request is not supported by (an older) broker the `broker.version.fallback` fallback is used.
+    ///
+    /// librdkafka property name: `"api.version.request"`
+    ///
+    /// Default: True
+    ///
+    /// - Note: Marked DEPRECATED by librdkafka; brokers < 0.10.0 will not be supported in librdkafka 3.x.
+    public var apiVersionRequest: Bool?
+
+    /// Dictates how long the `broker.version.fallback` fallback is used in the case the ApiVersionRequest fails.
+    /// **NOTE**: The ApiVersionRequest is only issued when a new connection to the broker is made (such as after an upgrade).
+    ///
+    /// librdkafka property name: `"api.version.fallback.ms"`
+    ///
+    /// - Note: Marked DEPRECATED by librdkafka; brokers < 0.10.0 will not be supported in librdkafka 3.x.
+    public var apiVersionFallbackMs: Int?
+
+    /// Older broker versions (before 0.10.0) provide no way for a client to query for supported protocol features (ApiVersionRequest, see `api.version.request`) making it impossible for the client to know what features it may use.
+    /// As a workaround a user may set this property to the expected broker version and the client will automatically adjust its feature set accordingly if the ApiVersionRequest fails (or is disabled).
+    /// The fallback broker version will be used for `api.version.fallback.ms`.
+    /// Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0.
+    /// Any other value >= 0.10, such as 0.10.2.1, enables ApiVersionRequests.
+    ///
+    /// librdkafka property name: `"broker.version.fallback"`
+    ///
+    /// Default: 0.10.0
+    ///
+    /// - Note: Marked DEPRECATED by librdkafka; brokers < 0.10.0 will not be supported in librdkafka 3.x.
+    public var brokerVersionFallback: String?
+
     public init() {}
 
     internal var config: [String: String] {
@@ -98,6 +145,22 @@ public struct KafkaConsumerConfig: Sendable {
             config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 
+        // Hand-maintained: deprecated librdkafka properties dropped by gyb.
+        if let apiVersionRequest = self.apiVersionRequest {
+            config["api.version.request"] = apiVersionRequest.description
+        }
+        if let apiVersionFallbackMs = self.apiVersionFallbackMs {
+            config["api.version.fallback.ms"] = apiVersionFallbackMs.description
+        }
+        if let brokerVersionFallback = self.brokerVersionFallback {
+            config["broker.version.fallback"] = brokerVersionFallback
+        }
+
+        // Hand-maintained: additionalConfig overrides typed properties above.
+        for (key, value) in self.additionalConfig {
+            config[key] = value
+        }
+
         return config
     }
 
@@ -120,5 +183,10 @@ public struct KafkaConsumerConfig: Sendable {
         self.${rdconf["swiftName"]} = configDict["${rdconf["name"]}"]?.components(separatedBy: ",").map { ${f"KafkaConfig.{rdconf["swiftEnumName"]}"}(description: $0) }
         % end
       % end
+
+        // Hand-maintained: deprecated librdkafka properties dropped by gyb.
+        self.apiVersionRequest = Bool(configDict["api.version.request"] ?? "")
+        self.apiVersionFallbackMs = Int(configDict["api.version.fallback.ms"] ?? "")
+        self.brokerVersionFallback = configDict["broker.version.fallback"]
     }
 }

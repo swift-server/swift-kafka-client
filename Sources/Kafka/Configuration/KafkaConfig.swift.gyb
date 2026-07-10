@@ -27,7 +27,7 @@ public enum KafkaConfig {
         public let description: String
 
     % for value in enum_type["values"]:
-        public static let `${value}` = ${enum_type["name"]}(description: "${value}")
+        public static let `${swift_identifier(value)}` = ${enum_type["name"]}(description: "${value}")
     % end
     }
   % end

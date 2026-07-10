@@ -119,6 +119,28 @@ public struct KafkaProducerConfig: Sendable {
     ///
     /// Default: 1000000
     public var maxInFlight: Int?
+    /// Controls how the client recovers when none of the brokers known to it is available.
+    /// If set to `none`, the client doesn't re-bootstrap.
+    /// If set to `rebootstrap`, the client repeats the bootstrap process using `bootstrap.servers` and brokers added through `rd_kafka_brokers_add()`.
+    /// Rebootstrapping is useful when a client communicates with brokers so infrequently that the set of brokers may change entirely before the client refreshes metadata.
+    /// Metadata recovery is triggered when all last-known brokers appear unavailable simultaneously or the client cannot refresh metadata within `metadata.recovery.rebootstrap.trigger.ms` or it's requested in a metadata response.
+    ///
+    /// Importance: low
+    ///
+    /// Values: `"none"`, `"rebootstrap"`
+    ///
+    /// librdkafka property name: `"metadata.recovery.strategy"`
+    ///
+    /// Default: rebootstrap
+    public var metadataRecoveryStrategy: KafkaConfig.MetadataRecoveryStrategy?
+    /// If a client configured to rebootstrap using `metadata.recovery.strategy=rebootstrap` is unable to obtain metadata from any of the brokers for this interval, client repeats the bootstrap process using `bootstrap.servers` configuration and brokers added through `rd_kafka_brokers_add()`.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"metadata.recovery.rebootstrap.trigger.ms"`
+    ///
+    /// Default: 300000
+    public var metadataRecoveryRebootstrapTriggerMs: Int?
     /// Period of time in milliseconds at which topic and broker metadata is refreshed in order to proactively discover any new brokers, topics, partitions or partition leader changes.
     /// Use -1 to disable the intervalled refresh (not recommended).
     /// If there are no locally referenced topics (no topic objects created, no messages produced, no subscription or no assignment) then only the broker list will be refreshed every interval but no more often than every 10s.
@@ -275,6 +297,7 @@ public struct KafkaProducerConfig: Sendable {
     /// Close broker connections after the specified time of inactivity.
     /// Disable with 0.
     /// If this property is left at its default value some heuristics are performed to determine a suitable default value, this is currently limited to identifying brokers on Azure (see librdkafka issue #3109 for more info).
+    /// Actual value can be lower, up to 2s lower, only if `connections.max.idle.ms` >= 4s, as jitter is added to avoid disconnecting all brokers at the same time.
     ///
     /// Importance: medium
     ///
@@ -366,17 +389,6 @@ public struct KafkaProducerConfig: Sendable {
     ///
     /// librdkafka property name: `"internal.termination.signal"`
     public var internalTerminationSignal: Int?
-    /// Request broker's supported API versions to adjust functionality to available protocol features.
-    /// If set to false, or the ApiVersionRequest fails, the fallback version `broker.version.fallback` will be used.
-    /// **NOTE**: Depends on broker version >=0.10.0.
-    /// If the request is not supported by (an older) broker the `broker.version.fallback` fallback is used.
-    ///
-    /// Importance: high
-    ///
-    /// librdkafka property name: `"api.version.request"`
-    ///
-    /// Default: True
-    public var apiVersionRequest: Bool?
     /// Timeout for broker API version requests.
     ///
     /// Importance: low
@@ -387,25 +399,6 @@ public struct KafkaProducerConfig: Sendable {
     ///
     /// Default: 10000
     public var apiVersionRequestTimeoutMs: Int?
-    /// Dictates how long the `broker.version.fallback` fallback is used in the case the ApiVersionRequest fails.
-    /// **NOTE**: The ApiVersionRequest is only issued when a new connection to the broker is made (such as after an upgrade).
-    ///
-    /// Importance: medium
-    ///
-    /// librdkafka property name: `"api.version.fallback.ms"`
-    public var apiVersionFallbackMs: Int?
-    /// Older broker versions (before 0.10.0) provide no way for a client to query for supported protocol features (ApiVersionRequest, see `api.version.request`) making it impossible for the client to know what features it may use.
-    /// As a workaround a user may set this property to the expected broker version and the client will automatically adjust its feature set accordingly if the ApiVersionRequest fails (or is disabled).
-    /// The fallback broker version will be used for `api.version.fallback.ms`.
-    /// Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0.
-    /// Any other value >= 0.10, such as 0.10.2.1, enables ApiVersionRequests.
-    ///
-    /// Importance: medium
-    ///
-    /// librdkafka property name: `"broker.version.fallback"`
-    ///
-    /// Default: 0.10.0
-    public var brokerVersionFallback: String?
     /// Allow automatic topic creation on the broker when subscribing to or assigning non-existent topics.
     /// The broker must also be configured with `auto.create.topics.enable=true` for this configuration to take effect.
     /// Note: the default value (true) for the producer is different from the default value (false) for the consumer.
@@ -493,6 +486,27 @@ public struct KafkaProducerConfig: Sendable {
     ///
     /// librdkafka property name: `"ssl.ca.location"`
     public var sslCaLocation: String?
+    /// File or directory path to CA certificate(s) for verifying HTTPS endpoints, like `sasl.oauthbearer.token.endpoint.url` used for OAUTHBEARER/OIDC authentication.
+    /// Mutually exclusive with `https.ca.pem`.
+    /// Defaults: On Windows the system's CA certificates are automatically looked up in the Windows Root certificate store.
+    /// On Mac OSX this configuration defaults to `probe`.
+    /// It is recommended to install openssl using Homebrew, to provide CA certificates.
+    /// On Linux install the distribution's ca-certificates package.
+    /// If OpenSSL is statically linked or `https.ca.location` is set to `probe` a list of standard paths will be probed and the first one found will be used as the default CA certificate location path.
+    /// If OpenSSL is dynamically linked the OpenSSL library's default path will be used (see `OPENSSLDIR` in `openssl version -a`).
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"https.ca.location"`
+    public var httpsCaLocation: String?
+    /// CA certificate string (PEM format) for verifying HTTPS endpoints.
+    /// Mutually exclusive with `https.ca.location`.
+    /// Optional: see `https.ca.location`.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"https.ca.pem"`
+    public var httpsCaPem: String?
     /// CA certificate string (PEM format) for verifying the broker's key.
     ///
     /// Importance: low
@@ -684,6 +698,22 @@ public struct KafkaProducerConfig: Sendable {
     ///
     /// librdkafka property name: `"sasl.oauthbearer.client.id"`
     public var saslOauthbearerClientId: String?
+    /// Alias for `sasl.oauthbearer.client.id`: Public identifier for the application.
+    /// Must be unique across all clients that the authorization server handles.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc".
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.client.credentials.client.id"`
+    public var saslOauthbearerClientCredentialsClientId: String?
+    /// Alias for `sasl.oauthbearer.client.secret`: Client secret only known to the application and the authorization server.
+    /// This should be a sufficiently random string that is not guessable.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc".
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.client.credentials.client.secret"`
+    public var saslOauthbearerClientCredentialsClientSecret: String?
     /// Client secret only known to the application and the authorization server.
     /// This should be a sufficiently random string that is not guessable.
     /// Only used when `sasl.oauthbearer.method` is set to "oidc".
@@ -714,6 +744,132 @@ public struct KafkaProducerConfig: Sendable {
     ///
     /// librdkafka property name: `"sasl.oauthbearer.token.endpoint.url"`
     public var saslOauthbearerTokenEndpointUrl: String?
+    /// JWT claim name to use as the subject (principal) when validating OIDC access tokens.
+    /// Must be present in the JWT payload with a non-empty value.
+    /// Should match the broker's `sasl.oauthbearer.sub.claim.name` configuration for consistent authentication.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc".
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.sub.claim.name"`
+    ///
+    /// Default: sub
+    public var saslOauthbearerSubClaimName: String?
+    /// OAuth grant type to use when communicating with the identity provider.
+    ///
+    /// Importance: low
+    ///
+    /// Values: `"client_credentials"`, `"urn:ietf:params:oauth:grant-type:jwt-bearer"`
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.grant.type"`
+    ///
+    /// Default: client_credentials
+    public var saslOauthbearerGrantType: KafkaConfig.SaslOauthbearerGrantType?
+    /// Algorithm the client should use to sign the assertion sent to the identity provider and in the OAuth alg header in the JWT assertion.
+    ///
+    /// Importance: low
+    ///
+    /// Values: `"RS256"`, `"ES256"`
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.algorithm"`
+    ///
+    /// Default: RS256
+    public var saslOauthbearerAssertionAlgorithm: KafkaConfig.SaslOauthbearerAssertionAlgorithm?
+    /// Path to client's private key (PEM) used for authentication when using the JWT assertion.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.private.key.file"`
+    public var saslOauthbearerAssertionPrivateKeyFile: String?
+    /// Private key passphrase for `sasl.oauthbearer.assertion.private.key.file` or `sasl.oauthbearer.assertion.private.key.pem`.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.private.key.passphrase"`
+    public var saslOauthbearerAssertionPrivateKeyPassphrase: String?
+    /// Client's private key (PEM) used for authentication when using the JWT assertion.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.private.key.pem"`
+    public var saslOauthbearerAssertionPrivateKeyPem: String?
+    /// Path to the assertion file.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.file"`
+    public var saslOauthbearerAssertionFile: String?
+    /// JWT audience claim.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.claim.aud"`
+    public var saslOauthbearerAssertionClaimAud: String?
+    /// Assertion expiration time in seconds.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// Value range: 1 .. 2147483647
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.claim.exp.seconds"`
+    ///
+    /// Default: 300
+    public var saslOauthbearerAssertionClaimExpSeconds: Int?
+    /// JWT issuer claim.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.claim.iss"`
+    public var saslOauthbearerAssertionClaimIss: String?
+    /// JWT ID claim.
+    /// When set to `true`, a random UUID is generated.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.claim.jti.include"`
+    ///
+    /// Default: True
+    public var saslOauthbearerAssertionClaimJtiInclude: Bool?
+    /// Assertion not before time in seconds.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.claim.nbf.seconds"`
+    ///
+    /// Default: 60
+    public var saslOauthbearerAssertionClaimNbfSeconds: Int?
+    /// JWT subject claim.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.claim.sub"`
+    public var saslOauthbearerAssertionClaimSub: String?
+    /// Path to the JWT template file.
+    /// Only used when `sasl.oauthbearer.method` is set to "oidc" and JWT assertion is needed.
+    ///
+    /// Importance: low
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.assertion.jwt.template.file"`
+    public var saslOauthbearerAssertionJwtTemplateFile: String?
+    /// Type of metadata-based authentication to use for OAUTHBEARER/OIDC `azure_imds` authenticates using the Azure IMDS endpoint.
+    /// Sets a default value for `sasl.oauthbearer.token.endpoint.url` if missing.
+    /// Configuration values specific of chosen authentication type can be passed through `sasl.oauthbearer.config`.
+    ///
+    /// Importance: low
+    ///
+    /// Values: `"none"`, `"azure_imds"`
+    ///
+    /// librdkafka property name: `"sasl.oauthbearer.metadata.authentication.type"`
+    ///
+    /// Default: none
+    public var saslOauthbearerMetadataAuthenticationType: KafkaConfig.SaslOauthbearerMetadataAuthenticationType?
     /// List of plugin libraries to load (; separated).
     /// The library search path is platform dependent (see dlopen(3) for Unix and LoadLibrary() for Windows).
     /// If no filename extension is specified the platform-specific extension (such as .dll or .so) will be appended automatically.
@@ -1035,6 +1191,12 @@ public struct KafkaProducerConfig: Sendable {
     /// Default: -1
     public var compressionLevel: Int?
 
+    // MARK: - Hand-maintained additions
+    // Preserved across regeneration: additionalConfig (test infrastructure) and
+    // properties for librdkafka options that librdkafka has since marked DEPRECATED
+    // (gyb_utils.py filters those out, so they must be re-added here to avoid
+    // removing them from swift-kafka-client's public API).
+
     /// Additional librdkafka configuration properties not covered by typed properties.
     /// Keys and values are passed directly to librdkafka.
     ///
@@ -1042,6 +1204,39 @@ public struct KafkaProducerConfig: Sendable {
     /// Intended for testing (e.g. `test.mock.num.brokers`) or advanced configurations
     /// not explicitly supported by this library.
     internal var additionalConfig: [String: String] = [:]
+
+    /// Request broker's supported API versions to adjust functionality to available protocol features.
+    /// If set to false, or the ApiVersionRequest fails, the fallback version `broker.version.fallback` will be used.
+    /// **NOTE**: Depends on broker version >=0.10.0.
+    /// If the request is not supported by (an older) broker the `broker.version.fallback` fallback is used.
+    ///
+    /// librdkafka property name: `"api.version.request"`
+    ///
+    /// Default: True
+    ///
+    /// - Note: Marked DEPRECATED by librdkafka; brokers < 0.10.0 will not be supported in librdkafka 3.x.
+    public var apiVersionRequest: Bool?
+
+    /// Dictates how long the `broker.version.fallback` fallback is used in the case the ApiVersionRequest fails.
+    /// **NOTE**: The ApiVersionRequest is only issued when a new connection to the broker is made (such as after an upgrade).
+    ///
+    /// librdkafka property name: `"api.version.fallback.ms"`
+    ///
+    /// - Note: Marked DEPRECATED by librdkafka; brokers < 0.10.0 will not be supported in librdkafka 3.x.
+    public var apiVersionFallbackMs: Int?
+
+    /// Older broker versions (before 0.10.0) provide no way for a client to query for supported protocol features (ApiVersionRequest, see `api.version.request`) making it impossible for the client to know what features it may use.
+    /// As a workaround a user may set this property to the expected broker version and the client will automatically adjust its feature set accordingly if the ApiVersionRequest fails (or is disabled).
+    /// The fallback broker version will be used for `api.version.fallback.ms`.
+    /// Valid values are: 0.9.0, 0.8.2, 0.8.1, 0.8.0.
+    /// Any other value >= 0.10, such as 0.10.2.1, enables ApiVersionRequests.
+    ///
+    /// librdkafka property name: `"broker.version.fallback"`
+    ///
+    /// Default: 0.10.0
+    ///
+    /// - Note: Marked DEPRECATED by librdkafka; brokers < 0.10.0 will not be supported in librdkafka 3.x.
+    public var brokerVersionFallback: String?
 
     public init() {}
 
@@ -1056,6 +1251,8 @@ public struct KafkaProducerConfig: Sendable {
         config["receive.message.max.bytes"] = self.receiveMessageMaxBytes?.description
         config["max.in.flight.requests.per.connection"] = self.maxInFlightRequestsPerConnection?.description
         config["max.in.flight"] = self.maxInFlight?.description
+        config["metadata.recovery.strategy"] = self.metadataRecoveryStrategy?.description
+        config["metadata.recovery.rebootstrap.trigger.ms"] = self.metadataRecoveryRebootstrapTriggerMs?.description
         config["topic.metadata.refresh.interval.ms"] = self.topicMetadataRefreshIntervalMs?.description
         config["metadata.max.age.ms"] = self.metadataMaxAgeMs?.description
         config["topic.metadata.refresh.fast.interval.ms"] = self.topicMetadataRefreshFastIntervalMs?.description
@@ -1083,10 +1280,7 @@ public struct KafkaProducerConfig: Sendable {
         config["enable.random.seed"] = self.enableRandomSeed?.description
         config["log.connection.close"] = self.logConnectionClose?.description
         config["internal.termination.signal"] = self.internalTerminationSignal?.description
-        config["api.version.request"] = self.apiVersionRequest?.description
         config["api.version.request.timeout.ms"] = self.apiVersionRequestTimeoutMs?.description
-        config["api.version.fallback.ms"] = self.apiVersionFallbackMs?.description
-        config["broker.version.fallback"] = self.brokerVersionFallback?.description
         config["allow.auto.create.topics"] = self.allowAutoCreateTopics?.description
         config["security.protocol"] = self.securityProtocol?.description
         config["ssl.cipher.suites"] = self.sslCipherSuites?.description
@@ -1098,6 +1292,8 @@ public struct KafkaProducerConfig: Sendable {
         config["ssl.certificate.location"] = self.sslCertificateLocation?.description
         config["ssl.certificate.pem"] = self.sslCertificatePem?.description
         config["ssl.ca.location"] = self.sslCaLocation?.description
+        config["https.ca.location"] = self.httpsCaLocation?.description
+        config["https.ca.pem"] = self.httpsCaPem?.description
         config["ssl.ca.pem"] = self.sslCaPem?.description
         config["ssl.ca.certificate.stores"] = self.sslCaCertificateStores?.description
         config["ssl.crl.location"] = self.sslCrlLocation?.description
@@ -1120,10 +1316,35 @@ public struct KafkaProducerConfig: Sendable {
         config["enable.sasl.oauthbearer.unsecure.jwt"] = self.enableSaslOauthbearerUnsecureJwt?.description
         config["sasl.oauthbearer.method"] = self.saslOauthbearerMethod?.description
         config["sasl.oauthbearer.client.id"] = self.saslOauthbearerClientId?.description
+        config["sasl.oauthbearer.client.credentials.client.id"] =
+            self.saslOauthbearerClientCredentialsClientId?.description
+        config["sasl.oauthbearer.client.credentials.client.secret"] =
+            self.saslOauthbearerClientCredentialsClientSecret?.description
         config["sasl.oauthbearer.client.secret"] = self.saslOauthbearerClientSecret?.description
         config["sasl.oauthbearer.scope"] = self.saslOauthbearerScope?.description
         config["sasl.oauthbearer.extensions"] = self.saslOauthbearerExtensions?.description
         config["sasl.oauthbearer.token.endpoint.url"] = self.saslOauthbearerTokenEndpointUrl?.description
+        config["sasl.oauthbearer.sub.claim.name"] = self.saslOauthbearerSubClaimName?.description
+        config["sasl.oauthbearer.grant.type"] = self.saslOauthbearerGrantType?.description
+        config["sasl.oauthbearer.assertion.algorithm"] = self.saslOauthbearerAssertionAlgorithm?.description
+        config["sasl.oauthbearer.assertion.private.key.file"] = self.saslOauthbearerAssertionPrivateKeyFile?.description
+        config["sasl.oauthbearer.assertion.private.key.passphrase"] =
+            self.saslOauthbearerAssertionPrivateKeyPassphrase?.description
+        config["sasl.oauthbearer.assertion.private.key.pem"] = self.saslOauthbearerAssertionPrivateKeyPem?.description
+        config["sasl.oauthbearer.assertion.file"] = self.saslOauthbearerAssertionFile?.description
+        config["sasl.oauthbearer.assertion.claim.aud"] = self.saslOauthbearerAssertionClaimAud?.description
+        config["sasl.oauthbearer.assertion.claim.exp.seconds"] =
+            self.saslOauthbearerAssertionClaimExpSeconds?.description
+        config["sasl.oauthbearer.assertion.claim.iss"] = self.saslOauthbearerAssertionClaimIss?.description
+        config["sasl.oauthbearer.assertion.claim.jti.include"] =
+            self.saslOauthbearerAssertionClaimJtiInclude?.description
+        config["sasl.oauthbearer.assertion.claim.nbf.seconds"] =
+            self.saslOauthbearerAssertionClaimNbfSeconds?.description
+        config["sasl.oauthbearer.assertion.claim.sub"] = self.saslOauthbearerAssertionClaimSub?.description
+        config["sasl.oauthbearer.assertion.jwt.template.file"] =
+            self.saslOauthbearerAssertionJwtTemplateFile?.description
+        config["sasl.oauthbearer.metadata.authentication.type"] =
+            self.saslOauthbearerMetadataAuthenticationType?.description
         config["plugin.library.paths"] = self.pluginLibraryPaths?.description
         config["client.rack"] = self.clientRack?.description
         config["transactional.id"] = self.transactionalId?.description
@@ -1162,6 +1383,18 @@ public struct KafkaProducerConfig: Sendable {
             config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
         }
 
+        // Hand-maintained: deprecated librdkafka properties dropped by gyb.
+        if let apiVersionRequest = self.apiVersionRequest {
+            config["api.version.request"] = apiVersionRequest.description
+        }
+        if let apiVersionFallbackMs = self.apiVersionFallbackMs {
+            config["api.version.fallback.ms"] = apiVersionFallbackMs.description
+        }
+        if let brokerVersionFallback = self.brokerVersionFallback {
+            config["broker.version.fallback"] = brokerVersionFallback
+        }
+
+        // Hand-maintained: additionalConfig overrides typed properties above.
         for (key, value) in self.additionalConfig {
             config[key] = value
         }
@@ -1179,6 +1412,8 @@ public struct KafkaProducerConfig: Sendable {
         self.receiveMessageMaxBytes = Int(configDict["receive.message.max.bytes"] ?? "")
         self.maxInFlightRequestsPerConnection = Int(configDict["max.in.flight.requests.per.connection"] ?? "")
         self.maxInFlight = Int(configDict["max.in.flight"] ?? "")
+        self.metadataRecoveryStrategy = configDict["metadata.recovery.strategy"].map(KafkaConfig.MetadataRecoveryStrategy.init)
+        self.metadataRecoveryRebootstrapTriggerMs = Int(configDict["metadata.recovery.rebootstrap.trigger.ms"] ?? "")
         self.topicMetadataRefreshIntervalMs = Int(configDict["topic.metadata.refresh.interval.ms"] ?? "")
         self.metadataMaxAgeMs = Int(configDict["metadata.max.age.ms"] ?? "")
         self.topicMetadataRefreshFastIntervalMs = Int(configDict["topic.metadata.refresh.fast.interval.ms"] ?? "")
@@ -1206,10 +1441,7 @@ public struct KafkaProducerConfig: Sendable {
         self.enableRandomSeed = Bool(configDict["enable.random.seed"] ?? "")
         self.logConnectionClose = Bool(configDict["log.connection.close"] ?? "")
         self.internalTerminationSignal = Int(configDict["internal.termination.signal"] ?? "")
-        self.apiVersionRequest = Bool(configDict["api.version.request"] ?? "")
         self.apiVersionRequestTimeoutMs = Int(configDict["api.version.request.timeout.ms"] ?? "")
-        self.apiVersionFallbackMs = Int(configDict["api.version.fallback.ms"] ?? "")
-        self.brokerVersionFallback = configDict["broker.version.fallback"]
         self.allowAutoCreateTopics = Bool(configDict["allow.auto.create.topics"] ?? "")
         self.securityProtocol = configDict["security.protocol"].map(KafkaConfig.SecurityProtocol.init)
         self.sslCipherSuites = configDict["ssl.cipher.suites"]
@@ -1221,6 +1453,8 @@ public struct KafkaProducerConfig: Sendable {
         self.sslCertificateLocation = configDict["ssl.certificate.location"]
         self.sslCertificatePem = configDict["ssl.certificate.pem"]
         self.sslCaLocation = configDict["ssl.ca.location"]
+        self.httpsCaLocation = configDict["https.ca.location"]
+        self.httpsCaPem = configDict["https.ca.pem"]
         self.sslCaPem = configDict["ssl.ca.pem"]
         self.sslCaCertificateStores = configDict["ssl.ca.certificate.stores"]
         self.sslCrlLocation = configDict["ssl.crl.location"]
@@ -1243,10 +1477,27 @@ public struct KafkaProducerConfig: Sendable {
         self.enableSaslOauthbearerUnsecureJwt = Bool(configDict["enable.sasl.oauthbearer.unsecure.jwt"] ?? "")
         self.saslOauthbearerMethod = configDict["sasl.oauthbearer.method"].map(KafkaConfig.SaslOauthbearerMethod.init)
         self.saslOauthbearerClientId = configDict["sasl.oauthbearer.client.id"]
+        self.saslOauthbearerClientCredentialsClientId = configDict["sasl.oauthbearer.client.credentials.client.id"]
+        self.saslOauthbearerClientCredentialsClientSecret = configDict["sasl.oauthbearer.client.credentials.client.secret"]
         self.saslOauthbearerClientSecret = configDict["sasl.oauthbearer.client.secret"]
         self.saslOauthbearerScope = configDict["sasl.oauthbearer.scope"]
         self.saslOauthbearerExtensions = configDict["sasl.oauthbearer.extensions"]
         self.saslOauthbearerTokenEndpointUrl = configDict["sasl.oauthbearer.token.endpoint.url"]
+        self.saslOauthbearerSubClaimName = configDict["sasl.oauthbearer.sub.claim.name"]
+        self.saslOauthbearerGrantType = configDict["sasl.oauthbearer.grant.type"].map(KafkaConfig.SaslOauthbearerGrantType.init)
+        self.saslOauthbearerAssertionAlgorithm = configDict["sasl.oauthbearer.assertion.algorithm"].map(KafkaConfig.SaslOauthbearerAssertionAlgorithm.init)
+        self.saslOauthbearerAssertionPrivateKeyFile = configDict["sasl.oauthbearer.assertion.private.key.file"]
+        self.saslOauthbearerAssertionPrivateKeyPassphrase = configDict["sasl.oauthbearer.assertion.private.key.passphrase"]
+        self.saslOauthbearerAssertionPrivateKeyPem = configDict["sasl.oauthbearer.assertion.private.key.pem"]
+        self.saslOauthbearerAssertionFile = configDict["sasl.oauthbearer.assertion.file"]
+        self.saslOauthbearerAssertionClaimAud = configDict["sasl.oauthbearer.assertion.claim.aud"]
+        self.saslOauthbearerAssertionClaimExpSeconds = Int(configDict["sasl.oauthbearer.assertion.claim.exp.seconds"] ?? "")
+        self.saslOauthbearerAssertionClaimIss = configDict["sasl.oauthbearer.assertion.claim.iss"]
+        self.saslOauthbearerAssertionClaimJtiInclude = Bool(configDict["sasl.oauthbearer.assertion.claim.jti.include"] ?? "")
+        self.saslOauthbearerAssertionClaimNbfSeconds = Int(configDict["sasl.oauthbearer.assertion.claim.nbf.seconds"] ?? "")
+        self.saslOauthbearerAssertionClaimSub = configDict["sasl.oauthbearer.assertion.claim.sub"]
+        self.saslOauthbearerAssertionJwtTemplateFile = configDict["sasl.oauthbearer.assertion.jwt.template.file"]
+        self.saslOauthbearerMetadataAuthenticationType = configDict["sasl.oauthbearer.metadata.authentication.type"].map(KafkaConfig.SaslOauthbearerMetadataAuthenticationType.init)
         self.pluginLibraryPaths = configDict["plugin.library.paths"]
         self.clientRack = configDict["client.rack"]
         self.transactionalId = configDict["transactional.id"]
@@ -1277,5 +1528,10 @@ public struct KafkaProducerConfig: Sendable {
         self.deliveryTimeoutMs = Int(configDict["delivery.timeout.ms"] ?? "")
         self.partitioner = configDict["partitioner"]
         self.compressionLevel = Int(configDict["compression.level"] ?? "")
+
+        // Hand-maintained: deprecated librdkafka properties dropped by gyb.
+        self.apiVersionRequest = Bool(configDict["api.version.request"] ?? "")
+        self.apiVersionFallbackMs = Int(configDict["api.version.fallback.ms"] ?? "")
+        self.brokerVersionFallback = configDict["broker.version.fallback"]
     }
 }

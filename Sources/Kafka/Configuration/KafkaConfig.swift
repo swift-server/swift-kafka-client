@@ -21,6 +21,17 @@
 import struct Foundation.UUID
 
 public enum KafkaConfig {
+    /// Controls how the client recovers when none of the brokers known to it is available.
+    /// If set to `none`, the client doesn't re-bootstrap.
+    /// If set to `rebootstrap`, the client repeats the bootstrap process using `bootstrap.servers` and brokers added through `rd_kafka_brokers_add()`.
+    /// Rebootstrapping is useful when a client communicates with brokers so infrequently that the set of brokers may change entirely before the client refreshes metadata.
+    /// Metadata recovery is triggered when all last-known brokers appear unavailable simultaneously or the client cannot refresh metadata within `metadata.recovery.rebootstrap.trigger.ms` or it's requested in a metadata response.
+    public struct MetadataRecoveryStrategy: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `none` = MetadataRecoveryStrategy(description: "none")
+        public static let `rebootstrap` = MetadataRecoveryStrategy(description: "rebootstrap")
+    }
     /// A comma-separated list of debug contexts to enable.
     /// Detailed Producer debugging: broker,topic,msg.
     /// Consumer: consumer,cgrp,topic,fetch.
@@ -83,6 +94,31 @@ public enum KafkaConfig {
 
         public static let `default` = SaslOauthbearerMethod(description: "default")
         public static let `oidc` = SaslOauthbearerMethod(description: "oidc")
+    }
+    /// OAuth grant type to use when communicating with the identity provider.
+    public struct SaslOauthbearerGrantType: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `client_credentials` = SaslOauthbearerGrantType(description: "client_credentials")
+        public static let `jwtBearer` = SaslOauthbearerGrantType(
+            description: "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        )
+    }
+    /// Algorithm the client should use to sign the assertion sent to the identity provider and in the OAuth alg header in the JWT assertion.
+    public struct SaslOauthbearerAssertionAlgorithm: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `RS256` = SaslOauthbearerAssertionAlgorithm(description: "RS256")
+        public static let `ES256` = SaslOauthbearerAssertionAlgorithm(description: "ES256")
+    }
+    /// Type of metadata-based authentication to use for OAUTHBEARER/OIDC `azure_imds` authenticates using the Azure IMDS endpoint.
+    /// Sets a default value for `sasl.oauthbearer.token.endpoint.url` if missing.
+    /// Configuration values specific of chosen authentication type can be passed through `sasl.oauthbearer.config`.
+    public struct SaslOauthbearerMetadataAuthenticationType: Sendable, Hashable, CustomStringConvertible {
+        public let description: String
+
+        public static let `none` = SaslOauthbearerMetadataAuthenticationType(description: "none")
+        public static let `azure_imds` = SaslOauthbearerMetadataAuthenticationType(description: "azure_imds")
     }
     /// Group protocol to use.
     /// Use `classic` for the original protocol and `consumer` for the new protocol introduced in KIP-848.
