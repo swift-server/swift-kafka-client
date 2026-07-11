@@ -15,7 +15,10 @@ Kafka integrates with [swift-log](https://github.com/apple/swift-log) for struct
 - <doc:GettingStarted>
 - <doc:ProducingMessages>
 - <doc:ConsumingMessages>
+- <doc:HandlingErrors>
+- <doc:Observability>
 - <doc:SecuringConnections>
+- <doc:Migrating>
 
 ### Producing messages
 
