@@ -107,7 +107,19 @@ public final class KafkaProducer: Service, Sendable {
     ) {
         self.stateMachine = stateMachine
         self.config = config
-        self.logger = logger
+        var enrichedLogger = logger
+        if let clientId = config.clientId {
+            enrichedLogger[metadataKey: KafkaLoggingKeys.clientId] = "\(clientId)"
+        }
+        enrichedLogger[metadataKey: KafkaLoggingKeys.clientType] = "producer"
+        self.logger = enrichedLogger
+
+        self.logger.debug(
+            "Kafka producer initialized",
+            metadata: [
+                KafkaLoggingKeys.bootstrapServers: "\(config.bootstrapServers?.joined(separator: ",") ?? "default")"
+            ]
+        )
     }
 
     /// Creates a new producer.
@@ -269,9 +281,9 @@ public final class KafkaProducer: Service, Sendable {
                     case .deliveryReport(let reports):
                         self.resumeContinuations(for: reports)
                     case .error(let kafkaError):
-                        self.logger.error(
+                        self.logger.info(
                             "Kafka client error",
-                            metadata: ["error": "\(kafkaError)"]
+                            error: kafkaError
                         )
                     }
                 }
@@ -287,9 +299,9 @@ public final class KafkaProducer: Service, Sendable {
                         _ = source?.yield(.deliveryReports(reports))
                     case .error(let kafkaError):
                         _ = source?.yield(.error(kafkaError))
-                        self.logger.error(
+                        self.logger.info(
                             "Kafka client error",
-                            metadata: ["error": "\(kafkaError)"]
+                            error: kafkaError
                         )
                     }
                 }
@@ -303,10 +315,24 @@ public final class KafkaProducer: Service, Sendable {
                     source?.finish()
                     self.stateMachine.withLockedValue { $0.failPendingContinuations() }
                 }
-                try await client.flush(timeoutMilliseconds: Int32(self.config.shutdownFlushTimeoutMs))
+                self.logger.trace("Flushing outstanding messages before shutdown")
+                do {
+                    try await client.flush(timeoutMilliseconds: Int32(self.config.shutdownFlushTimeoutMs))
+                } catch {
+                    self.logger.info(
+                        "Flush timed out during shutdown, some messages may not have been delivered",
+                        error: error,
+                        metadata: [
+                            KafkaLoggingKeys.timeoutMs: "\(self.config.shutdownFlushTimeoutMs)"
+                        ]
+                    )
+                    throw error
+                }
+                self.logger.debug("Kafka producer shut down")
                 return
             case .terminatePollLoop:
                 self.stateMachine.withLockedValue { $0.failPendingContinuations() }
+                self.logger.debug("Kafka producer shut down")
                 return
             }
         }
@@ -320,6 +346,19 @@ public final class KafkaProducer: Service, Sendable {
     /// log of all delivery reports, even for messages sent via `sendAndAwait`.
     private func resumeContinuations(for reports: [KafkaDeliveryReport]) {
         for report in reports {
+            switch report.status {
+            case .acknowledged:
+                break
+            case .failure(let error):
+                self.logger.debug(
+                    "Message delivery failed",
+                    error: error,
+                    metadata: [
+                        KafkaLoggingKeys.messageId: "\(report.id.rawValue)"
+                    ]
+                )
+            }
+
             let continuation: CheckedContinuation<KafkaDeliveryReport, Error>? =
                 self.stateMachine.withLockedValue {
                     $0.removeContinuation(for: report.id.rawValue)
@@ -341,6 +380,7 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// Pairs with ``run()``.
     public func triggerGracefulShutdown() {
+        self.logger.debug("Kafka producer shutting down")
         self.stateMachine.withLockedValue { $0.finish() }
     }
 
@@ -361,11 +401,20 @@ public final class KafkaProducer: Service, Sendable {
         let action = try self.stateMachine.withLockedValue { try $0.send() }
         switch action {
         case .send(let client, let newMessageID, let topicHandles):
-            try client.produce(
-                message: message,
-                newMessageID: newMessageID,
-                topicHandles: topicHandles
-            )
+            do {
+                try client.produce(
+                    message: message,
+                    newMessageID: newMessageID,
+                    topicHandles: topicHandles
+                )
+            } catch {
+                self.logger.info(
+                    "Failed to produce message",
+                    error: error,
+                    metadata: [KafkaLoggingKeys.topic: "\(message.topic)"]
+                )
+                throw error
+            }
             return KafkaProducerMessageID(rawValue: newMessageID)
         }
     }

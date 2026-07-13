@@ -249,14 +249,17 @@ import Foundation
         }
 
         let recordedEvents = recorder.recordedEvents
-        #expect(recordedEvents.count == 1)
+        #expect(recordedEvents.count >= 1)
 
         let expectedMessage =
             "[thrd:app]: No `bootstrap.servers` configured: client will not be able to connect to Kafka cluster"
         let expectedLevel = Logger.Level.notice
         let expectedSource = "CONFWARN"
 
-        let receivedEvent = try #require(recordedEvents.first, "Expected log event, but found none")
+        let receivedEvent = try #require(
+            recordedEvents.first(where: { $0.source == expectedSource }),
+            "Expected CONFWARN log event, but found none"
+        )
         #expect(expectedMessage == receivedEvent.message.description)
         #expect(expectedLevel == receivedEvent.level)
         #expect(expectedSource == receivedEvent.source)
