@@ -283,7 +283,7 @@ public final class KafkaProducer: Service, Sendable {
                     case .error(let kafkaError):
                         self.logger.info(
                             "Kafka client error",
-                            error: kafkaError
+                            metadata: [KafkaLoggingKeys.error: "\(kafkaError)"]
                         )
                     }
                 }
@@ -301,7 +301,7 @@ public final class KafkaProducer: Service, Sendable {
                         _ = source?.yield(.error(kafkaError))
                         self.logger.info(
                             "Kafka client error",
-                            error: kafkaError
+                            metadata: [KafkaLoggingKeys.error: "\(kafkaError)"]
                         )
                     }
                 }
@@ -321,9 +321,9 @@ public final class KafkaProducer: Service, Sendable {
                 } catch {
                     self.logger.info(
                         "Flush timed out during shutdown, some messages may not have been delivered",
-                        error: error,
                         metadata: [
-                            KafkaLoggingKeys.timeoutMs: "\(self.config.shutdownFlushTimeoutMs)"
+                            KafkaLoggingKeys.timeoutMs: "\(self.config.shutdownFlushTimeoutMs)",
+                            KafkaLoggingKeys.error: "\(error)",
                         ]
                     )
                     throw error
@@ -352,9 +352,9 @@ public final class KafkaProducer: Service, Sendable {
             case .failure(let error):
                 self.logger.debug(
                     "Message delivery failed",
-                    error: error,
                     metadata: [
-                        KafkaLoggingKeys.messageId: "\(report.id.rawValue)"
+                        KafkaLoggingKeys.messageId: "\(report.id.rawValue)",
+                        KafkaLoggingKeys.error: "\(error)",
                     ]
                 )
             }
@@ -410,8 +410,7 @@ public final class KafkaProducer: Service, Sendable {
             } catch {
                 self.logger.info(
                     "Failed to produce message",
-                    error: error,
-                    metadata: [KafkaLoggingKeys.topic: "\(message.topic)"]
+                    metadata: [KafkaLoggingKeys.topic: "\(message.topic)", KafkaLoggingKeys.error: "\(error)"]
                 )
                 throw error
             }

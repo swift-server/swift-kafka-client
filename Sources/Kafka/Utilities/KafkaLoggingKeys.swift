@@ -19,6 +19,7 @@ enum KafkaLoggingKeys {
     static let bootstrapServers = "kafka.bootstrap.servers"
     static let topics = "kafka.topics"
     static let topic = "kafka.topic"
+    static let error = "kafka.error"
     static let rebalanceKind = "kafka.rebalance.kind"
     static let partitions = "kafka.partitions"
     static let timeoutMs = "kafka.timeout.ms"

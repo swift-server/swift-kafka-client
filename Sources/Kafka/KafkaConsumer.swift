@@ -573,7 +573,7 @@ public final class KafkaConsumer: Sendable, Service {
                 do {
                     try client.consumerClose()
                 } catch {
-                    self.logger.info("Closing KafkaConsumer failed", error: error)
+                    self.logger.info("Closing KafkaConsumer failed", metadata: [KafkaLoggingKeys.error: "\(error)"])
                     self.stateMachine.withLockedValue { $0.closeFailed() }
                 }
                 self.pollAndDrainEvents(client: client)
@@ -609,7 +609,7 @@ public final class KafkaConsumer: Sendable, Service {
                 }
                 self.logger.info(
                     "Kafka client error",
-                    error: kafkaError
+                    metadata: [KafkaLoggingKeys.error: "\(kafkaError)"]
                 )
             }
         }
@@ -664,7 +664,7 @@ public final class KafkaConsumer: Sendable, Service {
                 }
                 self.logger.info(
                     "Kafka client error",
-                    error: kafkaError
+                    metadata: [KafkaLoggingKeys.error: "\(kafkaError)"]
                 )
             }
         }
@@ -957,7 +957,7 @@ public final class KafkaConsumer: Sendable, Service {
         } catch {
             logger.info(
                 "Closing KafkaConsumer failed",
-                error: error
+                metadata: [KafkaLoggingKeys.error: "\(error)"]
             )
         }
     }
