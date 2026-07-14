@@ -1,6 +1,6 @@
 # Handling errors
 
-Learn where Kafka errors surface and how to classify them to decide whether to retry, recreate the client, or fail.
+Find where Kafka errors surface and classify them to decide whether to retry, recreate the client, or fail.
 
 ## Overview
 

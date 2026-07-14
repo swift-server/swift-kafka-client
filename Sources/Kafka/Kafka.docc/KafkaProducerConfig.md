@@ -1,6 +1,6 @@
 # ``Kafka/KafkaProducerConfig``
 
-Configures a ``KafkaProducer``.
+Configures a Kafka producer.
 
 ## Overview
 
