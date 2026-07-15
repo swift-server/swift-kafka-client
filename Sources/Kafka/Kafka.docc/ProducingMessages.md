@@ -99,6 +99,13 @@ Beyond delivery reports, the events sequence emits errors and other broker event
 
 ## Topics
 
+### Articles
+
+- <doc:GettingStarted>
+- <doc:SecuringConnections>
+- <doc:HandlingErrors>
+- <doc:Observability>
+
 ### Sending records
 
 - ``KafkaProducer/send(_:)``
