@@ -37,10 +37,10 @@ let rdkafkaExclude = [
 let package = Package(
     name: "swift-kafka-client",
     platforms: [
-        .macOS(.v13),
-        .iOS(.v16),
-        .watchOS(.v9),
-        .tvOS(.v16),
+        .macOS(.v15),
+        .iOS(.v18),
+        .watchOS(.v11),
+        .tvOS(.v18),
     ],
     products: [
         .library(
