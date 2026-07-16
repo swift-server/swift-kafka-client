@@ -60,12 +60,6 @@ Set the `Logger`'s log level to control verbosity — the client logs routine pr
 
 ## Topics
 
-### Articles
-
-- <doc:ProducingMessages>
-- <doc:ConsumingMessages>
-- <doc:HandlingErrors>
-
 ### Metrics
 
 - ``KafkaConfiguration/ConsumerMetrics``

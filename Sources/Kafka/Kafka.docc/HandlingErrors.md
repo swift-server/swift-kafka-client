@@ -49,12 +49,6 @@ func handle(_ error: KafkaError, logger: Logger) {
 
 ## Topics
 
-### Articles
-
-- <doc:ProducingMessages>
-- <doc:ConsumingMessages>
-- <doc:Observability>
-
 ### Errors
 
 - ``KafkaError``

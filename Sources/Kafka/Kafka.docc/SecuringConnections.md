@@ -58,11 +58,6 @@ config.saslPassword = "password"
 
 ## Topics
 
-### Articles
-
-- <doc:ProducingMessages>
-- <doc:ConsumingMessages>
-
 ### Configuration
 
 - ``KafkaProducerConfig``

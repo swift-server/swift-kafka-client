@@ -194,13 +194,6 @@ Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStra
 
 ## Topics
 
-### Articles
-
-- <doc:GettingStarted>
-- <doc:SecuringConnections>
-- <doc:HandlingErrors>
-- <doc:Observability>
-
 ### Reading records
 
 - ``KafkaConsumer/messages``
