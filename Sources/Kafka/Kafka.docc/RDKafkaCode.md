@@ -21,7 +21,7 @@ Each code's ``description`` includes the underlying name and numeric value, whic
 - ``authentication``
 - ``ssl``
 
-### Producing and consuming
+### Message delivery
 
 - ``messageTimedOut``
 - ``queueFull``
