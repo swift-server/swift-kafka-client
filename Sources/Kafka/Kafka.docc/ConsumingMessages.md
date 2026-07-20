@@ -134,6 +134,64 @@ try consumer.resume(topicPartitions: [partition])
 
 While a partition is paused, the consumer stops fetching records for it but continues to participate in the group, including heartbeats and rebalances.
 
+### Observe rebalances
+
+When the membership of a consumer group changes — a consumer joins, leaves, or fails — Kafka redistributes the group's partitions across the remaining members. This is a *rebalance*. ``KafkaConsumer`` performs the assign and unassign automatically and surfaces a ``KafkaConsumerRebalance`` notification through the ``KafkaConsumerEvents`` sequence, so you can react — for example, by committing offsets for partitions that are moving away.
+
+The following example creates the consumer with ``KafkaConsumer/makeConsumerWithEvents(config:logger:)`` and iterates the event sequence alongside the messages:
+
+```swift
+config.partitionAssignmentStrategy = "cooperative-sticky"
+
+let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: logger)
+
+let serviceGroup = ServiceGroup(
+    services: [consumer],
+    gracefulShutdownSignals: [.sigterm],
+    logger: logger
+)
+
+await withThrowingTaskGroup(of: Void.self) { group in
+    group.addTask { try await serviceGroup.run() }
+
+    // Consume records.
+    group.addTask {
+        for try await message in consumer.messages {
+            // Process the record, then store or commit its offset.
+        }
+    }
+
+    // Observe rebalances.
+    group.addTask {
+        for await event in events {
+            switch event {
+            case .rebalance(let rebalance):
+                switch rebalance.kind {
+                case .assign:
+                    // Partitions were assigned; initialize per-partition state.
+                    break
+                case .revoke:
+                    // Partitions are moving away; commit their offsets first.
+                    break
+                case .error(let description):
+                    logger.warning("Rebalance error", metadata: ["error": "\(description)"])
+                }
+            case .error(let error):
+                logger.error("Kafka client error", metadata: ["error": "\(error)"])
+            default:
+                break
+            }
+        }
+    }
+}
+```
+
+Each ``KafkaConsumerRebalance`` reports its ``KafkaConsumerRebalance/kind`` — ``KafkaConsumerRebalance/Kind/assign``, ``KafkaConsumerRebalance/Kind/revoke``, or ``KafkaConsumerRebalance/Kind/error(_:)`` — and the ``KafkaConsumerRebalance/partitions`` involved. Commit offsets on revoke so another consumer resumes from the right position.
+
+Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStrategy``: `cooperative-sticky` for incremental cooperative rebalancing, or `range` and `roundrobin` for eager rebalancing. ``KafkaConsumer`` adapts to the negotiated protocol, so your handling code is identical either way. Cooperative and eager strategies must not be mixed within a group.
+
+> Important: Consume the events sequence. If you create it but never iterate it, events buffer in memory indefinitely.
+
 ## Topics
 
 ### Reading records
@@ -161,6 +219,7 @@ While a partition is paused, the consumer stops fetching records for it but cont
 
 ### Observing rebalances and events
 
+- ``KafkaConsumer/makeConsumerWithEvents(config:logger:)``
 - ``KafkaConsumerRebalance``
 - ``KafkaConsumerEvent``
 - ``KafkaConsumerEvents``

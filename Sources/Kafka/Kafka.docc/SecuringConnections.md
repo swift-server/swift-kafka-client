@@ -55,3 +55,11 @@ config.saslPassword = "password"
 ```
 
 `SCRAM-SHA-256` and `SCRAM-SHA-512` keep the password from traveling in the clear during the handshake; `PLAIN` does not, so reserve `PLAIN` for transports already protected by TLS.
+
+## Topics
+
+### Configuration
+
+- ``KafkaProducerConfig``
+- ``KafkaConsumerConfig``
+- ``KafkaConfig``
