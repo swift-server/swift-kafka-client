@@ -10,6 +10,8 @@ The Kafka client integrates with [swift-metrics](https://github.com/apple/swift-
 
 The client periodically samples internal statistics and records them into [swift-metrics](https://github.com/apple/swift-metrics) gauges that you supply. Configure this through the ``KafkaConsumerConfig/metrics`` (or ``KafkaProducerConfig/metrics``) property: set an update interval and assign a `Gauge` to each statistic you want to track.
 
+The following example illustrates configuring a Kafka client with metrics:
+
 ```swift
 import Kafka
 import Metrics

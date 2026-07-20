@@ -6,7 +6,7 @@ Find where Kafka errors surface and classify them to decide whether to retry, re
 
 Both the producer and the consumer report failures as ``KafkaError`` values. A ``KafkaError`` carries a ``KafkaError/code`` describing the kind of failure and, when the error originates from librdkafka, a ``KafkaError/rdKafkaCode`` with the specific underlying code. The ``KafkaError/isFatal`` and ``KafkaError/isRetriable`` flags tell you how to respond.
 
-## Where errors surface
+## Find where errors surface
 
 A ``KafkaError`` reaches your code in three ways:
 

@@ -1,6 +1,6 @@
 # ``Kafka/KafkaConsumerConfig``
 
-Configures a Kafka consumer.
+Configuration for a Kafka consumer.
 
 ## Overview
 

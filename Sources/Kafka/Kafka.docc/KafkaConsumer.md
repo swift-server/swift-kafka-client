@@ -1,6 +1,6 @@
 # ``Kafka/KafkaConsumer``
 
-Consumes messages from a Kafka cluster as part of a service lifecycle.
+An object that consumes messages from a Kafka cluster as part of a service lifecycle.
 
 ## Overview
 

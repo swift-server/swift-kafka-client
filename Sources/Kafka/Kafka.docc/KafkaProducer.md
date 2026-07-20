@@ -1,6 +1,6 @@
 # ``Kafka/KafkaProducer``
 
-Sends messages to a Kafka cluster as part of a service lifecycle.
+An object that sends messages to a Kafka cluster as part of a service lifecycle.
 
 ## Overview
 

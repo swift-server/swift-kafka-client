@@ -138,7 +138,7 @@ While a partition is paused, the consumer stops fetching records for it but cont
 
 When the membership of a consumer group changes — a consumer joins, leaves, or fails — Kafka redistributes the group's partitions across the remaining members. This is a *rebalance*. ``KafkaConsumer`` performs the assign and unassign automatically and surfaces a ``KafkaConsumerRebalance`` notification through the ``KafkaConsumerEvents`` sequence, so you can react — for example, by committing offsets for partitions that are moving away.
 
-Create the consumer with ``KafkaConsumer/makeConsumerWithEvents(config:logger:)`` and iterate the event sequence alongside the messages:
+The following example creates the consumer with ``KafkaConsumer/makeConsumerWithEvents(config:logger:)`` and iterates the event sequence alongside the messages:
 
 ```swift
 config.partitionAssignmentStrategy = "cooperative-sticky"
