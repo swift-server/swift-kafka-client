@@ -341,34 +341,6 @@ public final class KafkaConsumer: Sendable, Service {
         return (consumer, eventsSequence)
     }
 
-    /// Creates a new consumer from a deprecated configuration value.
-    ///
-    /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
-    @available(*, deprecated, message: "Use init(config:logger:) instead")
-    public convenience init(
-        configuration: KafkaConsumerConfiguration,
-        logger: Logger
-    ) throws {
-        try self.init(
-            config: configuration.asKafkaConsumerConfig,
-            logger: logger
-        )
-    }
-
-    /// Creates a new consumer and an event sequence from a deprecated configuration value.
-    ///
-    /// This method is deprecated. Use ``makeConsumerWithEvents(config:logger:)`` instead.
-    @available(*, deprecated, message: "Use makeConsumerWithEvents(config:logger:) instead")
-    public static func makeConsumerWithEvents(
-        configuration: KafkaConsumerConfiguration,
-        logger: Logger
-    ) throws -> (KafkaConsumer, KafkaConsumerEvents) {
-        try Self.makeConsumerWithEvents(
-            config: configuration.asKafkaConsumerConfig,
-            logger: logger
-        )
-    }
-
     // MARK: - Subscription Management
 
     /// Subscribes to the list of topics you provide.
@@ -755,14 +727,6 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Synchronously commits the offset of the message you provide.
-    ///
-    /// This method is deprecated. Use ``commit(_:)`` instead.
-    @available(*, deprecated, renamed: "commit")
-    public func commitSync(_ message: KafkaConsumerMessage) async throws {
-        try await self.commit(message)
-    }
-
     /// Marks all messages up to the passed message in the topic as read.
     ///
     /// Awaits until the commit succeeds or an error occurs.
@@ -808,13 +772,15 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Commits all stored offsets to the broker.
+    /// Commits every offset currently in the local offset store.
     ///
+    /// The store is populated automatically when ``KafkaConsumerConfig/enableAutoOffsetStore`` is `true`,
+    /// or by explicit calls to ``storeOffset(_:)`` when it is `false`.
     /// Awaits until the commit succeeds or encounters an error.
     ///
     /// - Warning: This method fails if ``KafkaConsumerConfig/enableAutoCommit`` is `true` (default).
     /// - Throws: A ``KafkaError`` if the commit failed or the consumer is closed.
-    public func commit() async throws {
+    public func commitStoredOffsets() async throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:

@@ -3,3 +3,10 @@ API breakage: enumelement KafkaConsumerEvent.error has been added as a new enum 
 API breakage: enumelement KafkaProducerEvent.error has been added as a new enum case
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesRecieved has been removed
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesBytesRecieved has been removed
+API breakage: constructor KafkaConsumer.init(configuration:logger:) has been removed
+API breakage: func KafkaConsumer.makeConsumerWithEvents(configuration:logger:) has been removed
+API breakage: func KafkaConsumer.commitSync(_:) has been removed
+API breakage: func KafkaConsumer.commit() has been renamed to func commitStoredOffsets()
+API breakage: constructor KafkaProducer.init(configuration:logger:) has been removed
+API breakage: func KafkaProducer.makeProducerWithEvents(configuration:logger:) has been removed
+API breakage: func RDKafkaClient.makeClientForTopics(config:logger:) with KafkaConsumerConfiguration has been removed

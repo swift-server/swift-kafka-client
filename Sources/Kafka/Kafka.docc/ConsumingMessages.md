@@ -97,10 +97,10 @@ for try await message in consumer.messages {
 }
 ```
 
-To commit every previously stored offset in one call, use ``KafkaConsumer/commit()``:
+To commit every previously stored offset in one call, use ``KafkaConsumer/commitStoredOffsets()``:
 
 ```swift
-try await consumer.commit()
+try await consumer.commitStoredOffsets()
 ```
 
 ### Manage subscriptions dynamically
@@ -210,7 +210,7 @@ Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStra
 
 - ``KafkaConsumer/storeOffset(_:)``
 - ``KafkaConsumer/commit(_:)``
-- ``KafkaConsumer/commit()``
+- ``KafkaConsumer/commitStoredOffsets()``
 
 ### Pausing partitions
 

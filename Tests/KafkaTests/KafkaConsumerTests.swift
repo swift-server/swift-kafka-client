@@ -668,7 +668,7 @@ import Foundation
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
 
             await #expect(throws: KafkaError.self) {
-                try await consumer.commit()
+                try await consumer.commitStoredOffsets()
             }
 
             await serviceGroup.triggerGracefulShutdown()
@@ -709,7 +709,7 @@ import Foundation
         }
 
         await #expect(throws: KafkaError.self) {
-            try await consumer.commit()
+            try await consumer.commitStoredOffsets()
         }
     }
 

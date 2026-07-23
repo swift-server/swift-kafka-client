@@ -1208,7 +1208,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                         if consumedCount >= testMessages.count {
                             // Commit and verify BEFORE breaking — breaking drops the
                             // iterator which triggers consumer shutdown.
-                            try await consumer.commit()
+                            try await consumer.commitStoredOffsets()
 
                             let tp = KafkaTopicPartition(
                                 topic: message.topic,

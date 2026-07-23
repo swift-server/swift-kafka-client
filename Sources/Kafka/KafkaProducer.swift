@@ -227,34 +227,6 @@ public final class KafkaProducer: Service, Sendable {
         return (producer, eventsSequence)
     }
 
-    /// Creates a new producer from a deprecated configuration value.
-    ///
-    /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
-    @available(*, deprecated, message: "Use init(config:logger:) instead")
-    public convenience init(
-        configuration: KafkaProducerConfiguration,
-        logger: Logger
-    ) throws {
-        try self.init(
-            config: configuration.asKafkaProducerConfig,
-            logger: logger
-        )
-    }
-
-    /// Creates a new producer and an event sequence from a deprecated configuration value.
-    ///
-    /// This method is deprecated. Use ``makeProducerWithEvents(config:logger:)`` instead.
-    @available(*, deprecated, message: "Use makeProducerWithEvents(config:logger:) instead")
-    public static func makeProducerWithEvents(
-        configuration: KafkaProducerConfiguration,
-        logger: Logger
-    ) throws -> (KafkaProducer, KafkaProducerEvents) {
-        try Self.makeProducerWithEvents(
-            config: configuration.asKafkaProducerConfig,
-            logger: logger
-        )
-    }
-
     /// Starts the producer.
     ///
     /// - Important: Call this method to drive the producer. It runs until either the calling task is canceled or gracefully shut down.
