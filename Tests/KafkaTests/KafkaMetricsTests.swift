@@ -52,7 +52,7 @@ final class KafkaMetricsTests {
         config.useMockBroker()
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let consumer = try KafkaConsumer.makeConsumer(config: config, logger: .kafkaTest).consumer
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
@@ -80,10 +80,10 @@ final class KafkaMetricsTests {
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
 
-        let producer = try KafkaProducer(
+        let producer = try KafkaProducer.makeProducer(
             config: config,
             logger: .kafkaTest
-        )
+        ).producer
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)

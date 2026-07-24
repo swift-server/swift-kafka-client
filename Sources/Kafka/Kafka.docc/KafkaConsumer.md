@@ -15,7 +15,7 @@ For an end-to-end guide including configuration, rebalance handling, and offset 
 ### Creating a consumer
 
 - ``init(config:logger:)``
-- ``makeConsumerWithEvents(config:logger:)``
+- ``makeConsumer(config:logger:)``
 
 ### Consuming messages
 
@@ -39,8 +39,6 @@ For an end-to-end guide including configuration, rebalance handling, and offset 
 - ``storeOffset(_:)``
 - ``commit(_:)``
 - ``commitStoredOffsets()``
-- ``scheduleCommit(_:)``
-- ``scheduleCommit()``
 
 ### Querying position
 

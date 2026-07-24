@@ -57,7 +57,7 @@ let logger = Logger(label: "kafka-example")
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let producer = try KafkaProducer(config: config, logger: logger)
+let producer = try KafkaProducer.makeProducer(config: config, logger: logger).producer
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -96,7 +96,7 @@ config.consumptionStrategy = .group(
     topics: ["topic-name"]
 )
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let consumer = try KafkaConsumer.makeConsumer(config: config, logger: logger).consumer
 
 let serviceGroup = ServiceGroup(
     services: [consumer],

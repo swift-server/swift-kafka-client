@@ -10,3 +10,9 @@ API breakage: func KafkaConsumer.commit() has been renamed to func commitStoredO
 API breakage: constructor KafkaProducer.init(configuration:logger:) has been removed
 API breakage: func KafkaProducer.makeProducerWithEvents(configuration:logger:) has been removed
 API breakage: func RDKafkaClient.makeClientForTopics(config:logger:) with KafkaConsumerConfiguration has been removed
+API breakage: constructor KafkaConsumer.init(config:logger:) has been removed
+API breakage: func KafkaConsumer.scheduleCommit(_:) has been removed
+API breakage: func KafkaConsumer.scheduleCommit() has been removed
+API breakage: func KafkaConsumer.makeConsumerWithEvents(config:logger:) has been renamed to func makeConsumer(config:logger:) with return type (consumer:events:)
+API breakage: constructor KafkaProducer.init(config:logger:) has been removed
+API breakage: func KafkaProducer.makeProducerWithEvents(config:logger:) has been renamed to func makeProducer(config:logger:) with return type (producer:events:)

@@ -26,7 +26,7 @@ For configurable security options, see <doc:SecuringConnections>.
 Construct a ``KafkaProducer``, run it inside a `ServiceGroup`, and call ``KafkaProducer/sendAndAwait(_:)`` from a sibling task. The returned ``KafkaDeliveryReport`` carries a ``KafkaDeliveryReport/status`` value of `.acknowledged(KafkaAcknowledgedMessage)` on success, or `.failure(KafkaError)` if the broker rejects the record.
 
 ```swift
-let producer = try KafkaProducer(config: config, logger: logger)
+let producer = try KafkaProducer.makeProducer(config: config, logger: logger).producer
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -52,10 +52,10 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 ### Send records with batched delivery reports
 
-For high-throughput pipelines, create the producer alongside its events sequence with ``KafkaProducer/makeProducerWithEvents(config:logger:)``. Call ``KafkaProducer/send(_:)`` to enqueue records, and consume ``KafkaProducerEvent`` values from the events sequence to learn outcomes:
+For high-throughput pipelines, create the producer alongside its events sequence with ``KafkaProducer/makeProducer(config:logger:)``. Call ``KafkaProducer/send(_:)`` to enqueue records, and consume ``KafkaProducerEvent`` values from the events sequence to learn outcomes:
 
 ```swift
-let (producer, events) = try KafkaProducer.makeProducerWithEvents(
+let (producer, events) = try KafkaProducer.makeProducer(
     config: config,
     logger: logger
 )
@@ -103,7 +103,7 @@ Beyond delivery reports, the events sequence emits errors and other broker event
 
 - ``KafkaProducer/send(_:)``
 - ``KafkaProducer/sendAndAwait(_:)``
-- ``KafkaProducer/makeProducerWithEvents(config:logger:)``
+- ``KafkaProducer/makeProducer(config:logger:)``
 
 ### Inspecting outcomes
 

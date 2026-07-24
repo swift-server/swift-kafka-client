@@ -122,67 +122,26 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Creates a new producer.
+    /// Creates a producer and its paired events sequence.
     ///
-    /// This creates a producer without listening for events.
-    /// To also receive events, use ``makeProducerWithEvents(config:logger:)``.
+    /// Every producer receives an events sequence for delivery reports from
+    /// ``send(_:)`` and for error observation. Callers who only use
+    /// ``sendAndAwait(_:)`` may discard the returned `events` value.
     ///
-    /// - Parameters:
-    ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
-    ///     - logger: A logger.
-    /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public convenience init(
-        config: KafkaProducerConfig,
-        logger: Logger
-    ) throws {
-        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
-
-        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
-
-        if config.metrics.enabled {
-            subscribedEvents.append(.statistics)
-        }
-
-        let client = try RDKafkaClient.makeClient(
-            type: .producer,
-            configDictionary: config.config,
-            events: subscribedEvents,
-            logger: logger
-        )
-
-        stateMachine.withLockedValue {
-            $0.initialize(
-                client: client,
-                source: nil
-            )
-        }
-
-        self.init(
-            stateMachine: stateMachine,
-            config: config,
-            logger: logger
-        )
-    }
-
-    /// Creates a new producer paired with an asynchronous event sequence.
-    ///
-    /// The returned tuple pairs a ``KafkaProducer`` with its ``KafkaProducerEvents`` sequence.
-    ///
-    /// Use the asynchronous sequence to consume events.
-    ///
-    /// - Important: When the asynchronous sequence is deinitialized, the producer shuts down and stops accepting new messages.
-    ///   Additionally, consume the asynchronous sequence; otherwise the events buffer in memory indefinitely.
+    /// - Important: When the events sequence is deinitialized, the producer shuts down
+    ///   and stops accepting new messages. Iterate the sequence; otherwise events buffer
+    ///   in memory indefinitely.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     ///     - logger: A logger.
-    /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaProducerEvents``
-    /// `AsyncSequence` used for receiving message events.
+    /// - Returns: A named tuple containing the created ``KafkaProducer`` and its
+    ///   ``KafkaProducerEvents`` `AsyncSequence`.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public static func makeProducerWithEvents(
+    public static func makeProducer(
         config: KafkaProducerConfig,
         logger: Logger
-    ) throws -> (KafkaProducer, KafkaProducerEvents) {
+    ) throws -> (producer: KafkaProducer, events: KafkaProducerEvents) {
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
@@ -224,7 +183,7 @@ public final class KafkaProducer: Service, Sendable {
         }
 
         let eventsSequence = KafkaProducerEvents(wrappedSequence: sourceAndSequence.sequence)
-        return (producer, eventsSequence)
+        return (producer: producer, events: eventsSequence)
     }
 
     /// Starts the producer.
