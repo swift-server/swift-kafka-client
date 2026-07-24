@@ -2219,12 +2219,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 // Give time for send() delivery report to arrive via events sequence
                 try await Task.sleep(for: .milliseconds(500))
 
-                // Verify ALL delivery reports arrived through events sequence —
-                // both send() and sendAndAwait() reports should appear
+                // Verify each delivery lands on exactly one channel — send() reports
+                // arrive on the events sequence, sendAndAwait() reports resolve on the
+                // continuation only. The events counter must equal the number of send()
+                // calls (1), not both.
                 let eventsCount = eventReportCount.load(ordering: .relaxed)
                 #expect(
-                    eventsCount >= 2,
-                    "Both send() and sendAndAwait() reports should arrive via events, got \(eventsCount)"
+                    eventsCount == 1,
+                    "Only send() reports flow through events; sendAndAwait must not duplicate. Got \(eventsCount)"
                 )
 
                 await serviceGroup.triggerGracefulShutdown()

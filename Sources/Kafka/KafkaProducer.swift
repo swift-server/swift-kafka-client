@@ -210,7 +210,7 @@ public final class KafkaProducer: Service, Sendable {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
-                        self.resumeContinuations(for: reports)
+                        _ = self.dispatchDeliveryReports(reports)
                     case .error(let kafkaError):
                         self.logger.info(
                             "Kafka client error",
@@ -226,8 +226,10 @@ public final class KafkaProducer: Service, Sendable {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
-                        self.resumeContinuations(for: reports)
-                        _ = source?.yield(.deliveryReports(reports))
+                        let reportsForEvents = self.dispatchDeliveryReports(reports)
+                        if !reportsForEvents.isEmpty {
+                            _ = source?.yield(.deliveryReports(reportsForEvents))
+                        }
                     case .error(let kafkaError):
                         _ = source?.yield(.error(kafkaError))
                         self.logger.info(
@@ -269,13 +271,18 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Match delivery reports against pending `sendAndAwait` continuations.
+    /// Route each delivery report to exactly one channel.
     ///
-    /// For each report, if a continuation is registered for that message ID, resume it.
-    /// Returns all reports; the producer yields them to the events sequence regardless
-    /// of whether it resumed a continuation. This ensures the events sequence is a complete
-    /// log of all delivery reports, even for messages sent via `sendAndAwait`.
-    private func resumeContinuations(for reports: [KafkaDeliveryReport]) {
+    /// - Reports whose message ID has a pending `sendAndAwait(_:)` continuation are resolved
+    ///   on that continuation only. The report is not re-emitted on the events sequence.
+    /// - Reports whose message ID has no pending continuation came from `send(_:)`;
+    ///   these are returned so the caller can emit them on the events sequence.
+    ///
+    /// Each delivery lands on exactly one destination. Callers using both `sendAndAwait(_:)`
+    /// and iterating `KafkaProducerEvents` never see the same report twice.
+    private func dispatchDeliveryReports(_ reports: [KafkaDeliveryReport]) -> [KafkaDeliveryReport] {
+        var reportsForEvents: [KafkaDeliveryReport] = []
+        reportsForEvents.reserveCapacity(reports.count)
         for report in reports {
             switch report.status {
             case .acknowledged:
@@ -301,8 +308,11 @@ public final class KafkaProducer: Service, Sendable {
                 case .failure(let error):
                     continuation.resume(throwing: error)
                 }
+            } else {
+                reportsForEvents.append(report)
             }
         }
+        return reportsForEvents
     }
 
     /// Shuts the producer down gracefully.
