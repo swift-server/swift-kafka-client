@@ -28,7 +28,11 @@ For security options, see <doc:SecuringConnections>.
 Run the consumer inside a `ServiceGroup` and read records from ``KafkaConsumer/messages``:
 
 ```swift
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -62,7 +66,7 @@ config.consumptionStrategy = .group(
 )
 config.enableAutoOffsetStore = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, _) = try KafkaConsumer.makeConsumer(config: config)
 
 // ... run inside a ServiceGroup as in the previous example.
 
@@ -87,7 +91,7 @@ config.consumptionStrategy = .group(
 )
 config.enableAutoCommit = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, _) = try KafkaConsumer.makeConsumer(config: config)
 
 // ... run inside a ServiceGroup as above.
 
@@ -97,10 +101,10 @@ for try await message in consumer.messages {
 }
 ```
 
-To commit every previously stored offset in one call, use ``KafkaConsumer/commit()``:
+To commit every previously stored offset in one call, use ``KafkaConsumer/commitStoredOffsets()``:
 
 ```swift
-try await consumer.commit()
+try await consumer.commitStoredOffsets()
 ```
 
 ### Manage subscriptions dynamically
@@ -138,12 +142,14 @@ While a partition is paused, the consumer stops fetching records for it but cont
 
 When the membership of a consumer group changes — a consumer joins, leaves, or fails — Kafka redistributes the group's partitions across the remaining members. This is a *rebalance*. ``KafkaConsumer`` performs the assign and unassign automatically and surfaces a ``KafkaConsumerRebalance`` notification through the ``KafkaConsumerEvents`` sequence, so you can react — for example, by committing offsets for partitions that are moving away.
 
-The following example creates the consumer with ``KafkaConsumer/makeConsumerWithEvents(config:logger:)`` and iterates the event sequence alongside the messages:
+The following example creates the consumer with ``KafkaConsumer/makeConsumer(config:)`` and iterates the event sequence alongside the messages:
 
 ```swift
 config.partitionAssignmentStrategy = "cooperative-sticky"
 
-let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: logger)
+let (consumer, events) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -210,7 +216,7 @@ Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStra
 
 - ``KafkaConsumer/storeOffset(_:)``
 - ``KafkaConsumer/commit(_:)``
-- ``KafkaConsumer/commit()``
+- ``KafkaConsumer/commitStoredOffsets()``
 
 ### Pausing partitions
 
@@ -219,7 +225,7 @@ Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStra
 
 ### Observing rebalances and events
 
-- ``KafkaConsumer/makeConsumerWithEvents(config:logger:)``
+- ``KafkaConsumer/makeConsumer(config:)``
 - ``KafkaConsumerRebalance``
 - ``KafkaConsumerEvent``
 - ``KafkaConsumerEvents``

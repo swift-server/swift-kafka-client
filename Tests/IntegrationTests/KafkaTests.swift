@@ -39,8 +39,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     basicConfig.brokerAddressFamily = .v4
 
     let client = try RDKafkaClient.makeClientForTopics(
-        config: basicConfig,
-        logger: .kafkaTest
+        config: basicConfig
     )
     let testTopic = try await client._createUniqueTopic(partitions: partitions)
 
@@ -69,9 +68,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -128,9 +126,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -184,9 +181,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -206,7 +202,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     var consumedMessages = [KafkaConsumerMessage]()
                     for try await message in consumer.messages {
                         consumedMessages.append(message)
-                        try consumer.scheduleCommit(message)
+                        try await consumer.commit(message)
 
                         if consumedMessages.count >= testMessages.count {
                             break
@@ -235,9 +231,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -297,9 +292,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning  // Always read topics from beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -356,9 +350,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
             consumerConfig.autoOffsetReset = .beginning  // Read topic from beginning
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -415,9 +408,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer1Config.autoOffsetReset = .beginning  // Read topic from beginning
             consumer1Config.brokerAddressFamily = .v4
 
-            let consumer1 = try KafkaConsumer(
-                config: consumer1Config,
-                logger: .kafkaTest
+            let (consumer1, _) = try KafkaConsumer.makeConsumer(
+                config: consumer1Config
             )
 
             let serviceGroupConfiguration1 = ServiceGroupConfiguration(
@@ -478,9 +470,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer2Config.autoOffsetReset = .latest
             consumer2Config.brokerAddressFamily = .v4
 
-            let consumer2 = try KafkaConsumer(
-                config: consumer2Config,
-                logger: .kafkaTest
+            let (consumer2, _) = try KafkaConsumer.makeConsumer(
+                config: consumer2Config
             )
 
             let serviceGroupConfiguration2 = ServiceGroupConfiguration(services: [consumer2], logger: .kafkaTest)
@@ -545,9 +536,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer1Config.pollInterval = .milliseconds(1)
             consumer1Config.enableAutoCommit = false
 
-            let consumer1 = try KafkaConsumer(
-                config: consumer1Config,
-                logger: .kafkaTest
+            let (consumer1, _) = try KafkaConsumer.makeConsumer(
+                config: consumer1Config
             )
 
             var consumer2Config = KafkaConsumerConfig()
@@ -561,9 +551,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer2Config.pollInterval = .milliseconds(1)
             consumer2Config.enableAutoCommit = false
 
-            let consumer2 = try KafkaConsumer(
-                config: consumer2Config,
-                logger: .kafkaTest
+            let (consumer2, _) = try KafkaConsumer.makeConsumer(
+                config: consumer2Config
             )
 
             let serviceGroupConfiguration1 = ServiceGroupConfiguration(
@@ -603,7 +592,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     for try await record in consumer1.messages {
                         c1messages.wrappingIncrement(ordering: .relaxed)
 
-                        try consumer1.scheduleCommit(record)  // commit time to time
+                        try await consumer1.commit(record)  // commit time to time
                         if c2messages.load(ordering: .relaxed) == 0 {
                             // Don't read all messages before 2nd consumer
                             try await Task.sleep(for: .milliseconds(100))
@@ -617,7 +606,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     for try await record in consumer2.messages {
                         c2messages.wrappingIncrement(ordering: .relaxed)
 
-                        try consumer2.scheduleCommit(record)  // commit time to time
+                        try await consumer2.commit(record)  // commit time to time
                     }
                 }
 
@@ -651,9 +640,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func concurrentSendsDoNotLoseMessages() async throws {
         try await withTestTopic(partitions: 4) { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -741,9 +729,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             // At-least-once config: auto-commit ON, auto-offset-store OFF
             consumer1Config.enableAutoOffsetStore = false
 
-            let consumer1 = try KafkaConsumer(
-                config: consumer1Config,
-                logger: .kafkaTest
+            let (consumer1, _) = try KafkaConsumer.makeConsumer(
+                config: consumer1Config
             )
 
             let serviceGroupConfig1 = ServiceGroupConfiguration(
@@ -789,9 +776,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer2Config.autoOffsetReset = .latest
             consumer2Config.brokerAddressFamily = .v4
 
-            let consumer2 = try KafkaConsumer(
-                config: consumer2Config,
-                logger: .kafkaTest
+            let (consumer2, _) = try KafkaConsumer.makeConsumer(
+                config: consumer2Config
             )
 
             let serviceGroupConfig2 = ServiceGroupConfiguration(
@@ -851,9 +837,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -901,9 +886,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -967,9 +951,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -1028,9 +1011,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -1109,9 +1091,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             // Lower auto-commit interval so stored offsets flush quickly in this test
             consumerConfig.autoCommitIntervalMs = 500
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -1184,9 +1165,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.enableAutoCommit = false
             consumerConfig.enableAutoOffsetStore = false
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -1208,7 +1188,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                         if consumedCount >= testMessages.count {
                             // Commit and verify BEFORE breaking — breaking drops the
                             // iterator which triggers consumer shutdown.
-                            try await consumer.commit()
+                            try await consumer.commitStoredOffsets()
 
                             let tp = KafkaTopicPartition(
                                 topic: message.topic,
@@ -1238,7 +1218,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         }
     }
 
-    @Test func scheduleCommitAllCommitsStoredOffsets() async throws {
+    @Test func commitStoredOffsetsFlushesStoredOffsets() async throws {
         try await withTestTopic { testTopic in
             let testMessages = try await self.produceMessages(topic: testTopic, count: 5)
 
@@ -1255,9 +1235,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.enableAutoCommit = false
             consumerConfig.enableAutoOffsetStore = false
 
-            let consumer = try KafkaConsumer(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -1279,7 +1258,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                         if consumedCount >= testMessages.count {
                             // Schedule commit and verify BEFORE breaking — breaking
                             // drops the iterator which triggers consumer shutdown.
-                            try consumer.scheduleCommit()
+                            try await consumer.commitStoredOffsets()
 
                             // Wait for the async commit to complete on the broker
                             try await Task.sleep(for: .seconds(2))
@@ -1328,9 +1307,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer1Config.brokerAddressFamily = .v4
             consumer1Config.pollInterval = .milliseconds(1)
 
-            let (consumer1, events1) = try KafkaConsumer.makeConsumerWithEvents(
-                config: consumer1Config,
-                logger: .kafkaTest
+            let (consumer1, events1) = try KafkaConsumer.makeConsumer(
+                config: consumer1Config
             )
 
             // Consumer 2 — plain consumer, joins later to trigger rebalance
@@ -1344,9 +1322,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer2Config.brokerAddressFamily = .v4
             consumer2Config.pollInterval = .milliseconds(1)
 
-            let consumer2 = try KafkaConsumer(
-                config: consumer2Config,
-                logger: .kafkaTest
+            let (consumer2, _) = try KafkaConsumer.makeConsumer(
+                config: consumer2Config
             )
 
             let serviceGroup1 = ServiceGroup(
@@ -1433,9 +1410,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer1Config.pollInterval = .milliseconds(1)
             consumer1Config.enableAutoCommit = false
 
-            let (consumer1, events1) = try KafkaConsumer.makeConsumerWithEvents(
-                config: consumer1Config,
-                logger: .kafkaTest
+            let (consumer1, events1) = try KafkaConsumer.makeConsumer(
+                config: consumer1Config
             )
 
             var consumer2Config = KafkaConsumerConfig()
@@ -1449,9 +1425,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer2Config.pollInterval = .milliseconds(1)
             consumer2Config.enableAutoCommit = false
 
-            let consumer2 = try KafkaConsumer(
-                config: consumer2Config,
-                logger: .kafkaTest
+            let (consumer2, _) = try KafkaConsumer.makeConsumer(
+                config: consumer2Config
             )
 
             let serviceGroup1 = ServiceGroup(
@@ -1479,7 +1454,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 group.addTask {
                     for try await record in consumer1.messages {
                         c1Messages.wrappingIncrement(ordering: .relaxed)
-                        try consumer1.scheduleCommit(record)
+                        try await consumer1.commit(record)
                         if c2Messages.load(ordering: .relaxed) == 0 {
                             try await Task.sleep(for: .milliseconds(50))
                         }
@@ -1512,7 +1487,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 group.addTask {
                     for try await record in consumer2.messages {
                         c2Messages.wrappingIncrement(ordering: .relaxed)
-                        try consumer2.scheduleCommit(record)
+                        try await consumer2.commit(record)
                     }
                 }
 
@@ -1573,9 +1548,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             // Auto-commit ON (default) + auto-offset-store OFF = at-least-once
             consumer1Config.autoCommitIntervalMs = 500
 
-            let (consumer1, events1) = try KafkaConsumer.makeConsumerWithEvents(
-                config: consumer1Config,
-                logger: .kafkaTest
+            let (consumer1, events1) = try KafkaConsumer.makeConsumer(
+                config: consumer1Config
             )
 
             // Consumer 2 — same at-least-once config, joins later
@@ -1591,9 +1565,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer2Config.enableAutoOffsetStore = false
             consumer2Config.autoCommitIntervalMs = 500
 
-            let consumer2 = try KafkaConsumer(
-                config: consumer2Config,
-                logger: .kafkaTest
+            let (consumer2, _) = try KafkaConsumer.makeConsumer(
+                config: consumer2Config
             )
 
             let serviceGroup1 = ServiceGroup(
@@ -1731,9 +1704,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer1Config.pollInterval = .milliseconds(1)
             consumer1Config.partitionAssignmentStrategy = "cooperative-sticky"
 
-            let (consumer1, events1) = try KafkaConsumer.makeConsumerWithEvents(
-                config: consumer1Config,
-                logger: .kafkaTest
+            let (consumer1, events1) = try KafkaConsumer.makeConsumer(
+                config: consumer1Config
             )
 
             var consumer2Config = KafkaConsumerConfig()
@@ -1747,9 +1719,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumer2Config.pollInterval = .milliseconds(1)
             consumer2Config.partitionAssignmentStrategy = "cooperative-sticky"
 
-            let consumer2 = try KafkaConsumer(
-                config: consumer2Config,
-                logger: .kafkaTest
+            let (consumer2, _) = try KafkaConsumer.makeConsumer(
+                config: consumer2Config
             )
 
             let serviceGroup1 = ServiceGroup(
@@ -1841,9 +1812,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             config.brokerAddressFamily = .v4
             config.pollInterval = .milliseconds(10)
 
-            let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
-                config: config,
-                logger: .kafkaTest
+            let (consumer, events) = try KafkaConsumer.makeConsumer(
+                config: config
             )
 
             let serviceGroup = ServiceGroup(
@@ -1912,9 +1882,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.brokerAddressFamily = .v4
 
             // Important: we leave `consumptionStrategy` nil to test the dynamic subscribe path.
-            let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, events) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroup = ServiceGroup(
@@ -1996,9 +1965,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndAwaitReturnsDeliveryReport() async throws {
         try await withTestTopic { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2042,9 +2010,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndAwaitMultipleMessages() async throws {
         try await withTestTopic { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2083,9 +2050,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     @Test func sendAndAwaitWorksWithoutEventsSequence() async throws {
         try await withTestTopic { testTopic in
             // Producer created WITHOUT events — sendAndAwait should still work
-            let producer = try KafkaProducer(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, _) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2117,9 +2083,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndAwaitConcurrentSends() async throws {
         try await withTestTopic(partitions: 4) { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2166,9 +2131,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndSendAndAwaitMixedOnSameProducer() async throws {
         try await withTestTopic { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2219,12 +2183,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 // Give time for send() delivery report to arrive via events sequence
                 try await Task.sleep(for: .milliseconds(500))
 
-                // Verify ALL delivery reports arrived through events sequence —
-                // both send() and sendAndAwait() reports should appear
+                // Verify each delivery lands on exactly one channel — send() reports
+                // arrive on the events sequence, sendAndAwait() reports resolve on the
+                // continuation only. The events counter must equal the number of send()
+                // calls (1), not both.
                 let eventsCount = eventReportCount.load(ordering: .relaxed)
                 #expect(
-                    eventsCount >= 2,
-                    "Both send() and sendAndAwait() reports should arrive via events, got \(eventsCount)"
+                    eventsCount == 1,
+                    "Only send() reports flow through events; sendAndAwait must not duplicate. Got \(eventsCount)"
                 )
 
                 await serviceGroup.triggerGracefulShutdown()
@@ -2243,9 +2209,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     func produceMessages(
         messages: [KafkaProducerMessage<String, String>]
     ) async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            config: self.producerConfig,
-            logger: .kafkaTest
+        let (producer, events) = try KafkaProducer.makeProducer(
+            config: self.producerConfig
         )
         let serviceGroupConfiguration = ServiceGroupConfiguration(
             services: [producer],
@@ -2305,7 +2270,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
         consumerConfig.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+        let (consumer, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -2338,7 +2303,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
         consumerConfig.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+        let (consumer, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -2368,7 +2333,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
         consumerConfig.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+        let (consumer, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -2402,7 +2367,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+            let (consumer, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
                 services: [consumer],
@@ -2437,9 +2402,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         try await withTestTopic { testTopic1 in
             try await withTestTopic { testTopic2 in
                 // Produce a message to each topic
-                let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                    config: self.producerConfig,
-                    logger: .kafkaTest
+                let (producer, events) = try KafkaProducer.makeProducer(
+                    config: self.producerConfig
                 )
 
                 let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2473,7 +2437,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 consumerConfig.autoOffsetReset = .beginning
                 consumerConfig.brokerAddressFamily = .v4
 
-                let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+                let (consumer, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
                 let consumerServiceGroupConfig = ServiceGroupConfiguration(
                     services: [consumer],
@@ -2518,7 +2482,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let consumer = try KafkaConsumer(config: consumerConfig, logger: .kafkaTest)
+            let (consumer, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
                 services: [consumer],
@@ -2563,9 +2527,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.autoOffsetReset = .beginning
             consumerConfig.brokerAddressFamily = .v4
 
-            let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
-                config: consumerConfig,
-                logger: .kafkaTest
+            let (consumer, events) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(

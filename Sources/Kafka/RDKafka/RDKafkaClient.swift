@@ -731,52 +731,6 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
-    /// Schedules a non-blocking, fire-and-forget commit of the message's offset to Kafka.
-    ///
-    /// The client discards any errors encountered after scheduling the commit.
-    ///
-    /// - Parameter message: Last received message to mark as read.
-    /// - Throws: A ``KafkaError`` if scheduling the commit failed.
-    func scheduleCommit(_ message: KafkaConsumerMessage) throws {
-        // The offset committed is always the offset of the next requested message.
-        // Thus, we increase the offset of the current message by one before committing it.
-        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        let changesList = RDKafkaTopicPartitionList()
-        changesList.setOffset(
-            topic: message.topic,
-            partition: message.partition,
-            offset: Int64(message.offset.rawValue + 1)
-        )
-
-        let error = changesList.withListPointer { listPointer in
-            rd_kafka_commit(
-                self.kafkaHandle.pointer,
-                listPointer,
-                1  // async = true
-            )
-        }
-
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
-        }
-    }
-
-    /// Schedule an async commit of all stored offsets.
-    /// Returns immediately. Any errors after scheduling are discarded.
-    ///
-    /// Equivalent to `rd_kafka_commit(rk, NULL, async=1)`.
-    func scheduleCommitAll() throws {
-        let error = rd_kafka_commit(
-            self.kafkaHandle.pointer,
-            nil,
-            1  // async = true
-        )
-
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
-        }
-    }
-
     /// Non-blocking **awaitable** commit of all stored offsets.
     ///
     /// Equivalent to `rd_kafka_commit_queue(rk, NULL, ...)`.

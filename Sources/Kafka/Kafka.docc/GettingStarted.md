@@ -57,7 +57,9 @@ let logger = Logger(label: "kafka-example")
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let producer = try KafkaProducer(config: config, logger: logger)
+let (producer, _) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -89,6 +91,8 @@ await withThrowingTaskGroup(of: Void.self) { group in
 To consume messages, create a ``KafkaConsumer`` with a group consumption strategy, run it inside a `ServiceGroup`, and iterate ``KafkaConsumer/messages``:
 
 ```swift
+let logger = Logger(label: "kafka-example")
+
 var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(
@@ -96,7 +100,9 @@ config.consumptionStrategy = .group(
     topics: ["topic-name"]
 )
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],

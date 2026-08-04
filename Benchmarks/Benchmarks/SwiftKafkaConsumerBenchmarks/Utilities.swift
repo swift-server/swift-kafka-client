@@ -73,7 +73,7 @@ func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = 
     producerConfig.bootstrapServers = [bootstrapServer]
     producerConfig.brokerAddressFamily = .v4
 
-    let (producer, acks) = try KafkaProducer.makeProducerWithEvents(config: producerConfig, logger: logger)
+    let (producer, acks) = try KafkaProducer.makeProducer(config: producerConfig)
 
     let serviceGroupConfiguration = ServiceGroupConfiguration(
         services: [producer],

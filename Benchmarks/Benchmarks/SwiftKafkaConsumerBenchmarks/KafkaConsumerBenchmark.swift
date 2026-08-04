@@ -178,7 +178,7 @@ let benchmarks: @Sendable () -> Void = {
                 var totalBytes: UInt64 = 0
 
                 for try await record in consumer.messages {
-                    try consumer.scheduleCommit(record)
+                    Task { try? await consumer.commit(record) }
 
                     ctr += 1
                     totalBytes += UInt64(record.value.readableBytes)

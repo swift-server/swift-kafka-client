@@ -48,7 +48,11 @@ The `sendAndAwait(_:)` method produces a message and asynchronously awaits broke
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let producer = try KafkaProducer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (producer, _) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -78,10 +82,11 @@ For high-throughput pipelines that need to maximize send rate, use the fire-and-
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-    config: config,
-    logger: logger
-)
+let logger = Logger(label: "kafka-example")
+
+let (producer, events) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -121,7 +126,11 @@ var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -150,7 +159,11 @@ config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 config.enableAutoOffsetStore = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -181,7 +194,11 @@ config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 config.enableAutoCommit = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -204,7 +221,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 To commit all previously stored offsets at once:
 
 ```swift
-try await consumer.commit()
+try await consumer.commitStoredOffsets()
 ```
 
 #### Dynamic subscription management
@@ -280,7 +297,7 @@ config.saslPassword = "password"
 The events sequence surfaces errors from librdkafka with typed error codes:
 
 ```swift
-let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: logger)
+let (consumer, events) = try KafkaConsumer.makeConsumer(config: config)
 
 for await event in events {
     switch event {

@@ -3,3 +3,19 @@ API breakage: enumelement KafkaConsumerEvent.error has been added as a new enum 
 API breakage: enumelement KafkaProducerEvent.error has been added as a new enum case
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesRecieved has been removed
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesBytesRecieved has been removed
+API breakage: constructor KafkaConsumer.init(configuration:logger:) has been removed
+API breakage: func KafkaConsumer.makeConsumerWithEvents(configuration:logger:) has been removed
+API breakage: func KafkaConsumer.commitSync(_:) has been removed
+API breakage: func KafkaConsumer.commit() has been renamed to func commitStoredOffsets()
+API breakage: constructor KafkaProducer.init(configuration:logger:) has been removed
+API breakage: func KafkaProducer.makeProducerWithEvents(configuration:logger:) has been removed
+API breakage: func RDKafkaClient.makeClientForTopics(config:logger:) has been renamed to func makeClientForTopics(config:)
+API breakage: func RDKafkaClient.makeClientForTopics(config:logger:) has been removed
+API breakage: constructor KafkaConsumer.init(config:logger:) has been removed
+API breakage: func KafkaConsumer.scheduleCommit(_:) has been removed
+API breakage: func KafkaConsumer.scheduleCommit() has been removed
+API breakage: func KafkaConsumer.makeConsumerWithEvents(config:logger:) has been renamed to func makeConsumer(config:)
+API breakage: func KafkaConsumer.triggerGracefulShutdown() has been removed
+API breakage: constructor KafkaProducer.init(config:logger:) has been removed
+API breakage: func KafkaProducer.makeProducerWithEvents(config:logger:) has been renamed to func makeProducer(config:)
+API breakage: func KafkaProducer.triggerGracefulShutdown() has been removed
