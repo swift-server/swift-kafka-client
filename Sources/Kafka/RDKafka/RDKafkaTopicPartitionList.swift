@@ -101,6 +101,7 @@ public final class RDKafkaTopicPartitionList {
 }
 
 extension RDKafkaTopicPartitionList: Sendable {}
+
 extension RDKafkaTopicPartitionList: Hashable {
     public func hash(into hasher: inout Hasher) {
         for idx in 0..<self.count {

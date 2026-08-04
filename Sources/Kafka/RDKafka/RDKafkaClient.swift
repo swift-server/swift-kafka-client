@@ -32,11 +32,12 @@ public final class RDKafkaClient: Sendable {
 
     /// Handle for the C library's Kafka instance.
     private let kafkaHandle: OpaquePointer
-    /// A logger.
-    private let logger: Logger
 
     /// `librdkafka`'s `rd_kafka_queue_t` that events are received on.
     private let queue: OpaquePointer
+
+    /// A logger.
+    private let logger: Logger
 
     private let rebalanceCallBackStorage: RebalanceCallbackStorage?
 
@@ -50,14 +51,14 @@ public final class RDKafkaClient: Sendable {
     private init(
         type: ClientType,
         kafkaHandle: OpaquePointer,
+        eventQueue: OpaquePointer,
         logger: Logger,
         rebalanceCallBackStorage: RebalanceCallbackStorage? = nil
     ) {
         self.kafkaHandle = kafkaHandle
+        self.queue = eventQueue
         self.logger = logger
-        self.queue = rd_kafka_queue_get_main(self.kafkaHandle)
         self.rebalanceCallBackStorage = rebalanceCallBackStorage
-
         rd_kafka_set_log_queue(self.kafkaHandle, self.queue)
     }
 
@@ -82,7 +83,8 @@ public final class RDKafkaClient: Sendable {
         configDictionary: [String: String],
         events: [RDKafkaEvent],
         logger: Logger,
-        rebalanceCallBackStorage: RebalanceCallbackStorage? = nil
+        rebalanceCallBackStorage: RebalanceCallbackStorage? = nil,
+        singleQueue: Bool = false
     ) throws -> RDKafkaClient {
         let rdConfig = try RDKafkaConfig.createFrom(configDictionary: configDictionary)
         // Manually override some of the configuration options
@@ -138,7 +140,21 @@ public final class RDKafkaClient: Sendable {
             throw KafkaError.client(reason: errorString)
         }
 
-        return RDKafkaClient(type: type, kafkaHandle: handle, logger: logger, rebalanceCallBackStorage: rebalanceCallBackStorage)
+        let queue: OpaquePointer
+        if singleQueue {
+            rd_kafka_poll_set_consumer(handle);
+            queue = rd_kafka_queue_get_consumer(handle);
+        } else {
+            queue = rd_kafka_queue_get_main(handle)
+        }
+
+        return RDKafkaClient(
+            type: type,
+            kafkaHandle: handle,
+            eventQueue: queue,
+            logger: logger,
+            rebalanceCallBackStorage: rebalanceCallBackStorage
+        )
     }
 
     /// Produce a message to the Kafka cluster.
@@ -355,10 +371,12 @@ public final class RDKafkaClient: Sendable {
 
     /// Swift wrapper for events from `librdkafka`'s event queue.
     enum KafkaEvent {
+        case fetch(OpaquePointer)
         case deliveryReport(results: [KafkaDeliveryReport])
         case statistics(RDKafkaStatistics)
         case rebalance(RebalanceAction)
         case error(KafkaError)
+        case partitionEOF(TopicPartition)
     }
 
     /// Poll the event `rd_kafka_queue_t` for new events.
@@ -372,14 +390,21 @@ public final class RDKafkaClient: Sendable {
 
         for _ in 0..<maxEvents {
             let event = rd_kafka_queue_poll(self.queue, 0)
-            defer { rd_kafka_event_destroy(event) }
 
             let rdEventType = rd_kafka_event_type(event)
             guard let eventType = RDKafkaEvent(rawValue: rdEventType) else {
                 fatalError("Unsupported event type: \(rdEventType)")
             }
 
+            defer {
+                if (eventType != .fetch) {
+                    rd_kafka_event_destroy(event)
+                }
+            }
+
             switch eventType {
+            case .fetch:
+                events.append(.fetch(event!))
             case .deliveryReport:
                 let forwardEvent = self.handleDeliveryReportEvent(event)
                 events.append(forwardEvent)
@@ -422,8 +447,6 @@ public final class RDKafkaClient: Sendable {
             case .none:
                 // Finished reading events, return early
                 return shouldSleep
-            default:
-                break // Ignored Event
             }
         }
 
@@ -432,15 +455,34 @@ public final class RDKafkaClient: Sendable {
 
     private func handleError(_ event: OpaquePointer?) -> KafkaEvent {
         let err = rd_kafka_event_error(event)
+
+        // End-of-partition is reported as an error event (with `enable.partition.eof`),
+        // but it is an informational signal rather than a failure. Surface it as a
+        // dedicated `.partitionEOF` event carrying the topic/partition/offset that reached
+        // its end (the consumer may be subscribed to more than one topic).
+        if err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
+            let eofPointer = rd_kafka_event_topic_partition(event)
+            defer { rd_kafka_topic_partition_destroy(eofPointer) }
+            let topicPartition: TopicPartition =
+                if let eof = eofPointer?.pointee {
+                    TopicPartition(
+                        eof.topic.map { String(cString: $0) } ?? "",
+                        KafkaPartition(rawValue: Int(eof.partition)),
+                        KafkaOffset(rawValue: Int(eof.offset))
+                    )
+                } else {
+                    TopicPartition("", .unassigned, KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_INVALID)))
+                }
+            return .partitionEOF(topicPartition)
+        }
+
         let errorString = if let error = rd_kafka_err2str(rd_kafka_event_error(event)) {
             String(cString: error)
         } else  {
             "\(err)"
         }
         let fatal = rd_kafka_event_error_is_fatal(event) != 0
-
         return .error(KafkaError.rdKafkaError(wrapping: err, errorMessage: errorString, isFatal: fatal))
-
     }
 
     /// Handle event of type `RDKafkaEvent.deliveryReport`.
@@ -584,6 +626,7 @@ public final class RDKafkaClient: Sendable {
         // which calls rd_kafka_message_destroy in its deinit.
         return try KafkaConsumerMessage(messagePointer: messagePointer)
     }
+
     /// Atomic  incremental assignment of partitions to consume.
     /// - Parameter topicPartitionList: Pointer to a list of topics + partition pairs.
     func incrementalAssign(topicPartitionList: RDKafkaTopicPartitionList) async throws {

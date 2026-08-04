@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+import Crdkafka
+
 public struct KafkaTopicList {
     let list: RDKafkaTopicPartitionList
 
@@ -46,11 +48,11 @@ extension TopicPartition: Hashable {}
 extension KafkaTopicList : Sendable {}
 extension KafkaTopicList : Hashable {}
 
-//extension KafkaTopicList : CustomDebugStringConvertible {
-//    public var debugDescription: String {
-//        list.debugDescription
-//    }
-//}
+extension KafkaTopicList: CustomStringConvertible {
+    public var description: String {
+        self.list.description
+    }
+}
 
 extension KafkaTopicList : Sequence {
     public struct TopicPartitionIterator : IteratorProtocol {
@@ -89,20 +91,44 @@ public enum KafkaRebalanceProtocol: Sendable, Hashable {
     }
 }
 
-
 public enum RebalanceAction : Sendable, Hashable {
     case assign(KafkaRebalanceProtocol, KafkaTopicList)
     case revoke(KafkaRebalanceProtocol, KafkaTopicList)
     case error(KafkaRebalanceProtocol, KafkaTopicList, KafkaError)
 }
 
+public struct KafkaFetch: @unchecked Sendable {
+    var event: OpaquePointer?
+
+    init(_ event: OpaquePointer) {
+        self.event = event
+    }
+
+    public mutating func withMessages(
+        _ body: (borrowing KafkaConsumerStream.Message) throws -> Void
+    ) rethrows {
+        defer {
+            rd_kafka_event_destroy(event)
+            self.event = nil
+        }
+        while let message = rd_kafka_event_message_next(event) {
+            try body(.init(messagePointer: message))
+        }
+    }
+}
+
 /// An enumeration representing events that can be received through the ``KafkaConsumerEvents`` asynchronous sequence.
-public enum KafkaConsumerEvent: Sendable, Hashable {
+public enum KafkaConsumerEvent: Sendable {
+    case fetch(KafkaFetch)
+
     /// Rebalance from librdkafka
     case rebalance(RebalanceAction)
 
     /// Error from librdkafka
     case error(KafkaError)
+
+    /// End of a partition has been reached (see `enable.partition.eof`).
+    case partitionEOF(TopicPartition)
 
     /// Consumer health status.
     case healthStatus(KafkaConsumerHealthStatus)
@@ -112,12 +138,16 @@ public enum KafkaConsumerEvent: Sendable, Hashable {
 
     internal init(_ event: RDKafkaClient.KafkaEvent) {
         switch event {
+        case .fetch:
+            fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         case .statistics(let statistics):
             self = .healthStatus(statistics.consumerHealthStatus)
         case .rebalance(let action):
             self = .rebalance(action)
         case .error(let error):
             self = .error(error)
+        case .partitionEOF(let topicPartition):
+            self = .partitionEOF(topicPartition)
         case .deliveryReport:
             fatalError("Cannot cast \(event) to KafkaConsumerEvent")
         }

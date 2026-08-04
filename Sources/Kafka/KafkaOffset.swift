@@ -39,10 +39,9 @@ public struct KafkaOffset: RawRepresentable {
     }
 }
 
-// MARK: KafkaOffset + Hashable
-
 extension KafkaOffset: Hashable {}
-
-// MARK: KafkaOffset + Sendable
-
 extension KafkaOffset: Sendable {}
+
+extension KafkaOffset: CustomStringConvertible {
+    public var description: String { String(self.rawValue) }
+}

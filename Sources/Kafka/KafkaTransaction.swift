@@ -20,7 +20,12 @@ public final class KafkaTransaction {
     }
 
     deinit {
-        self.logger.debug("Destructing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
+        self.logger.debug(
+            """
+            Destructing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), \
+            offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)
+            """
+        )
     }
 
     public func send(
@@ -37,6 +42,21 @@ public final class KafkaTransaction {
         }
     }
 
+    /// Commit the given `offsets` to the transaction on behalf of a
+    /// ``KafkaConsumerStream`` (as opposed to the classic ``KafkaConsumer``).
+    public func send(
+        offsets: KafkaTopicList,
+        forConsumer consumer: KafkaConsumerStream,
+        timeout: Duration = .kafkaUntilEndOfTransactionTimeout,
+        attempts: UInt64 = .max
+    ) async throws {
+        try await consumer.client.withKafkaHandlePointer {
+            offsetNum += offsets.list.count
+            offsetSend += 1
+            try await self.client.send(attempts: attempts, offsets: offsets.list, forConsumerKafkaHandle: $0, timeout: timeout)
+        }
+    }
+
     @discardableResult
     public func send<Key, Value>(_ message: KafkaProducerMessage<Key, Value>) throws -> KafkaProducerMessageID {
         sendTries += 1
@@ -45,21 +65,34 @@ public final class KafkaTransaction {
         msgNum += 1
         return id
     }
-    
-    
+
     public func flush(timeout: Duration) async {
-        self.logger.debug("Flushing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
+        self.logger.debug(
+            """
+            Flushing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), \
+            offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)
+            """
+        )
         await self.producer.flush(timeout: timeout)
     }
 
-
     func commit() async throws {
-        self.logger.debug("Committing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
+        self.logger.debug(
+            """
+            Committing transaction msgNum: \(msgNum), offsetSend: \(offsetSend), \
+            offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)
+            """
+        )
         try await self.client.commitTransaction(attempts: .max, timeout: .kafkaUntilEndOfTransactionTimeout)
     }
 
     func abort() async throws {
-        self.logger.debug("Aborting transaction msgNum: \(msgNum), offsetSend: \(offsetSend), offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)")
+        self.logger.debug(
+            """
+            Aborting transaction msgNum: \(msgNum), offsetSend: \(offsetSend), \
+            offsetNum: \(offsetNum), totalBytes: \(totalBytes), sendTries: \(sendTries)
+            """
+        )
         try await self.client.abortTransaction(attempts: .max, timeout: .kafkaUntilEndOfTransactionTimeout)
     }
 }

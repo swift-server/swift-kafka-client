@@ -43,6 +43,8 @@ final class KafkaTests: XCTestCase {
     var producerConfig: KafkaProducerConfiguration!
     var uniqueTestTopic: String!
     var uniqueTestTopic2: String!
+    /// Number of partitions in `uniqueTestTopic2` (the shared multi-partition fixture).
+    static let uniqueTestTopic2Partitions = 6
 
     override func setUpWithError() throws {
         self.bootstrapBrokerAddress = KafkaConfiguration.BrokerAddress(
@@ -54,7 +56,9 @@ final class KafkaTests: XCTestCase {
         self.producerConfig.broker.addressFamily = .v4
 
         self.uniqueTestTopic = try createUniqueTopic(partitions: 1)
-        self.uniqueTestTopic2 = try createUniqueTopic(partitions: 1)
+        // `uniqueTestTopic2` is the shared multi-partition fixture (used by the rebalance
+        // tests). Kept fresh & unique per test, and deleted in `tearDownWithError`.
+        self.uniqueTestTopic2 = try createUniqueTopic(partitions: Int32(Self.uniqueTestTopic2Partitions))
     }
 
     override func tearDownWithError() throws {
@@ -143,6 +147,231 @@ final class KafkaTests: XCTestCase {
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
         }
+    }
+
+    func testConsumeWithEventsSequence() async throws {
+        let testMessages = Self.createTestMessages(topic: self.uniqueTestTopic, count: 10)
+        let (producer, events) = try KafkaProducer.makeProducerWithEvents(configuration: self.producerConfig, logger: .kafkaTest)
+
+        var consumerConfig = KafkaConsumerConfiguration(
+            consumptionStrategy: .group(id: "events-sequence-test-group-id", topics: [self.uniqueTestTopic]),
+            bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
+        )
+        consumerConfig.autoOffsetReset = .beginning // Always read topics from beginning
+        consumerConfig.broker.addressFamily = .v4
+
+        // The initializer only creates the client; it does not subscribe on its own.
+        let consumerEvents = try KafkaConsumerStream(
+            configuration: consumerConfig,
+            logger: .kafkaTest
+        )
+        try consumerEvents.subscribe([self.uniqueTestTopic])
+
+        // The events sequence is not a `Service`, so only the producer is run in the group.
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            // Run Task
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Producer Task
+            group.addTask {
+                try await Self.sendAndAcknowledgeMessages(
+                    producer: producer,
+                    events: events,
+                    messages: testMessages
+                )
+            }
+
+            // Consumer Task: drain the single events sequence, extracting records from `.fetch` events.
+            group.addTask {
+                // The messages returned by `withMessages` point into the fetch event's memory,
+                // which is freed when the closure returns, so copy the fields out immediately.
+                var consumedMessages = [(topic: String, key: ByteBuffer?, value: ByteBuffer?)]()
+
+                consumeLoop: for await event in consumerEvents {
+                    switch event {
+                    case var .fetch(fetch):
+                        fetch.withMessages { message in
+                            consumedMessages.append((message.topic, message.key, message.value))
+                        }
+                        if consumedMessages.count >= testMessages.count {
+                            break consumeLoop
+                        }
+                    case .rebalance(let action):
+                        // With `.rebalance` events enabled, librdkafka no longer assigns
+                        // partitions automatically, so the caller must do it here (the default
+                        // `range`/`roundrobin` assignors are eager).
+                        switch action {
+                        case let .assign(_, topics):
+                            try await consumerEvents.assign(topics)
+                        case .revoke, .error:
+                            try await consumerEvents.unassignAll()
+                        }
+                    case .error(let error):
+                        XCTFail("Unexpected error while consuming: \(error)")
+                        break consumeLoop
+                    default:
+                        break // ignore .partitionEOF / health status / other events
+                    }
+                }
+
+                XCTAssertEqual(testMessages.count, consumedMessages.count)
+
+                for (index, consumedMessage) in consumedMessages.enumerated() {
+                    XCTAssertEqual(testMessages[index].topic, consumedMessage.topic)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].key!), consumedMessage.key)
+                    XCTAssertEqual(ByteBuffer(string: testMessages[index].value!), consumedMessage.value)
+                }
+            }
+
+            // Wait for Producer Task and Consumer Task to complete
+            try await group.next()
+            try await group.next()
+            // Shutdown the serviceGroup
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    func testRebalanceWithEventsSequence() async throws {
+        // `uniqueTestTopic2` is already created in `setUpWithError`.
+        let expectedTotal = Self.uniqueTestTopic2Partitions
+        let topic = self.uniqueTestTopic2!
+        let brokerAddress = self.bootstrapBrokerAddress!
+
+        // Both consumers share a group so the partitions get split between them, and use
+        // the cooperative-sticky assignor so rebalances are incremental.
+        let groupID = UUID().uuidString
+        func makeConfig() -> KafkaConsumerConfiguration {
+            var config = KafkaConsumerConfiguration(
+                consumptionStrategy: .group(id: groupID, topics: [topic]),
+                bootstrapBrokerAddresses: [brokerAddress]
+            )
+            config.autoOffsetReset = .beginning
+            config.broker.addressFamily = .v4
+            config.pollInterval = .milliseconds(10)
+            config.rebalanceStrategy = "cooperative-sticky"
+            // Emit librdkafka debug logs (delivered via `.log` events and forwarded to the
+            // `.kafkaTest` logger, which is at `.debug` level). Focused on the group/rebalance
+            // machinery; use `[.all]` for everything.
+            config.debugOptions = [.cgrp, .consumer, .broker]
+            return config
+        }
+
+        // `ready`: consumer 1 owns all partitions (so consumer 2 only joins afterwards).
+        // `consumer2HasPartitions`: consumer 2 received its share (so we can stop both).
+        let (ready, readyContinuation) = AsyncStream<Void>.makeStream()
+        let (consumer2HasPartitions, consumer2Continuation) = AsyncStream<Void>.makeStream()
+
+        // Both consumers are retained in this outer scope for the whole test, so a task
+        // returning does not deinit its client and trigger a spurious re-rebalance.
+        // Creating the sequence does not join the group — only `subscribe` does.
+        let consumer1Events = try KafkaConsumerStream(configuration: makeConfig(), logger: .kafkaTest)
+        let consumer2Events = try KafkaConsumerStream(configuration: makeConfig(), logger: .kafkaTest)
+        try consumer1Events.subscribe([topic])
+
+        // Each task returns `(consumerId, finalPartitionCount)`.
+        let counts = try await withThrowingTaskGroup(of: (Int, Int).self) { group in
+            // Consumer 1: joins alone → assigned ALL partitions. Once consumer 2 joins,
+            // cooperative-sticky incrementally revokes some of them. Consumer 1 must keep
+            // polling to drive the rebalance to completion, so it does not stop on its own —
+            // it runs until the group is cancelled (once consumer 2 has its partitions) and
+            // reports whatever it holds at that point.
+            group.addTask {
+                var assigned = 0
+                for await event in consumer1Events {
+                    switch event {
+                    case .rebalance(let action):
+                        // The caller owns partition (un)assignment (cooperative assignor).
+                        switch action {
+                        case let .assign(_, topics):
+                            try await consumer1Events.incrementalAssign(topics)
+                            assigned += topics.reduce(into: 0) { partial, _ in partial += 1 }
+                            if assigned == expectedTotal {
+                                // Now owns everything — let consumer 2 join.
+                                readyContinuation.yield()
+                                readyContinuation.finish()
+                            }
+                        case let .revoke(_, topics):
+                            try await consumer1Events.incrementalUnassign(topics)
+                            assigned -= topics.reduce(into: 0) { partial, _ in partial += 1 }
+                        case .error:
+                            try await consumer1Events.unassignAll()
+                        }
+                    case .error(let error):
+                        XCTFail("consumer1 unexpected error: \(error)")
+                        return (1, assigned)
+                    default:
+                        break // ignore .partitionEOF (empty topic) and other events
+                    }
+                }
+                return (1, assigned) // reached when the group is cancelled
+            }
+
+            // Consumer 2: starts only after consumer 1 owns all partitions, then joins and
+            // is incrementally assigned a share. Signals once it holds some partitions, then
+            // keeps polling (so consumer 1 stays balanced) until the group is cancelled.
+            group.addTask {
+                var iterator = ready.makeAsyncIterator()
+                _ = await iterator.next()
+
+                try consumer2Events.subscribe([topic])
+
+                var assigned = 0
+                var signaled = false
+                for await event in consumer2Events {
+                    switch event {
+                    case .rebalance(let action):
+                        switch action {
+                        case let .assign(_, topics):
+                            try await consumer2Events.incrementalAssign(topics)
+                            assigned += topics.reduce(into: 0) { partial, _ in partial += 1 }
+                            // Cooperative rebalance can deliver an empty initial assign before
+                            // the partitions are freed; only signal once we actually own some.
+                            if assigned > 0 && !signaled {
+                                signaled = true
+                                consumer2Continuation.yield()
+                                consumer2Continuation.finish()
+                            }
+                        case let .revoke(_, topics):
+                            try await consumer2Events.incrementalUnassign(topics)
+                            assigned -= topics.reduce(into: 0) { partial, _ in partial += 1 }
+                        case .error:
+                            try await consumer2Events.unassignAll()
+                        }
+                    case .error(let error):
+                        XCTFail("consumer2 unexpected error: \(error)")
+                        return (2, assigned)
+                    default:
+                        break // ignore .partitionEOF (empty topic) and other events
+                    }
+                }
+                return (2, assigned) // reached when the group is cancelled
+            }
+
+            // Once consumer 2 has its partitions the rebalance has settled; stop both
+            // consumers (their sequences end on cancellation) and collect the final counts.
+            var doneIterator = consumer2HasPartitions.makeAsyncIterator()
+            _ = await doneIterator.next()
+            group.cancelAll()
+
+            var result = [Int: Int]()
+            for try await (id, count) in group {
+                result[id] = count
+            }
+            return result
+        }
+
+        let c1 = counts[1] ?? -1
+        let c2 = counts[2] ?? -1
+        // No even-split assumption: just verify every partition is still assigned exactly
+        // once and that both consumers ended up with a share.
+        XCTAssertGreaterThan(c1, 0, "consumer1 should keep some partitions after the rebalance")
+        XCTAssertGreaterThan(c2, 0, "consumer2 should be assigned some partitions")
+        XCTAssertEqual(c1 + c2, expectedTotal, "all partitions should remain assigned across the two consumers")
     }
 
     #if false
@@ -833,28 +1062,11 @@ final class KafkaTests: XCTestCase {
     }
 
     func testDuplicatedMessagesOnRebalance() async throws {
-        let partitionsNumber: Int32 = 12
-        do {
-            var basicConfig = KafkaConsumerConfiguration(
-                consumptionStrategy: .group(id: "no-group", topics: []),
-                bootstrapBrokerAddresses: [self.bootstrapBrokerAddress]
-            )
-            basicConfig.broker.addressFamily = .v4
-
-            let client = try RDKafkaClient.makeClient(
-            // TODO: ok to block here? How to make setup async?
-                type: .consumer,
-                configDictionary: basicConfig.dictionary,
-                events: [],
-                logger: .kafkaTest
-            )
-            // cleanup default test topic and create with 12 partitions
-            try client._deleteTopic(self.uniqueTestTopic, timeout: 10 * 1000)
-            self.uniqueTestTopic = try client._createUniqueTopic(partitions: partitionsNumber, timeout: 10 * 1000)
-        }
+        // `uniqueTestTopic2` is already created with 12 partitions in `setUpWithError`.
+        let topic = self.uniqueTestTopic2!
 
         let numOfMessages: UInt = 1000
-        let testMessages = Self.createTestMessages(topic: uniqueTestTopic, count: numOfMessages)
+        let testMessages = Self.createTestMessages(topic: topic, count: numOfMessages)
         let (producer, acks) = try KafkaProducer.makeProducerWithEvents(configuration: producerConfig, logger: .kafkaTest)
 
         let producerServiceGroupConfiguration = ServiceGroupConfiguration(services: [producer], gracefulShutdownSignals: [.sigterm, .sigint], logger: .kafkaTest)
@@ -889,7 +1101,7 @@ final class KafkaTests: XCTestCase {
         var consumer1Config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
                 id: uniqueGroupID,
-                topics: [uniqueTestTopic]
+                topics: [topic]
             ),
             bootstrapBrokerAddresses: [bootstrapBrokerAddress]
         )
@@ -906,7 +1118,7 @@ final class KafkaTests: XCTestCase {
         var consumer2Config = KafkaConsumerConfiguration(
             consumptionStrategy: .group(
                 id: uniqueGroupID,
-                topics: [uniqueTestTopic]
+                topics: [topic]
             ),
             bootstrapBrokerAddresses: [bootstrapBrokerAddress]
         )

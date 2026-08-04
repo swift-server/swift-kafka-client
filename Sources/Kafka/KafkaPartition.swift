@@ -37,10 +37,9 @@ public struct KafkaPartition: RawRepresentable {
     public static let unassigned = KafkaPartition(rawValue: Int(RD_KAFKA_PARTITION_UA))
 }
 
-// MARK: KafkaPartition + Hashable
-
 extension KafkaPartition: Hashable {}
-
-// MARK: KafkaPartition + Sendable
-
 extension KafkaPartition: Sendable {}
+
+extension KafkaPartition: CustomStringConvertible {
+    public var description: String { String(self.rawValue) }
+}
