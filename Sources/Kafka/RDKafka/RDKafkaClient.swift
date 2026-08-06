@@ -117,11 +117,11 @@ public final class RDKafkaClient: Sendable {
 
     /// Produce a message to the Kafka cluster.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` to send to the KafkaCluster.
+    /// - Parameter message: The ``KafkaProducer/Message`` to send to the KafkaCluster.
     /// - Parameter newMessageID: ID assigned to the `message`.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages.
     func produce<Key, Value>(
-        message: KafkaProducerMessage<Key, Value>,
+        message: KafkaProducer.Message<Key, Value>,
         newMessageID: UInt,
         topicHandles: RDKafkaTopicHandles
     ) throws {
@@ -224,12 +224,12 @@ public final class RDKafkaClient: Sendable {
         )
     }
 
-    /// Scoped accessor that enables safe access to a ``KafkaProducerMessage``'s key and value raw buffers.
+    /// Scoped accessor that enables safe access to a ``KafkaProducer/Message``'s key and value raw buffers.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure that uses the pointer.
     @discardableResult
     private static func withMessageKeyAndValueBuffer<T, Key, Value>(
-        for message: KafkaProducerMessage<Key, Value>,
+        for message: KafkaProducer.Message<Key, Value>,
         _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T  // (keyBuffer, valueBuffer)
     ) rethrows -> T {
         try message.value.withUnsafeBytes { valueBuffer in
@@ -299,7 +299,7 @@ public final class RDKafkaClient: Sendable {
     /// Typed event returned by ``producerEventPoll(maxEvents:)``.
     /// Contains only events relevant to a Kafka producer.
     enum ProducerPollEvent {
-        case deliveryReport(results: [KafkaDeliveryReport])
+        case deliveryReport(results: [KafkaProducer.DeliveryReport])
         case statistics(RDKafkaStatistics)
         case error(KafkaError)
     }
@@ -423,13 +423,13 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
     /// - Returns: Delivery report results parsed from the event.
-    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> [KafkaDeliveryReport] {
+    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> [KafkaProducer.DeliveryReport] {
         let deliveryReportCount = rd_kafka_event_message_count(event)
-        var deliveryReportResults = [KafkaDeliveryReport]()
+        var deliveryReportResults = [KafkaProducer.DeliveryReport]()
         deliveryReportResults.reserveCapacity(deliveryReportCount)
 
         while let messagePointer = rd_kafka_event_message_next(event) {
-            guard let messageStatus = KafkaDeliveryReport(messagePointer: messagePointer) else {
+            guard let messageStatus = KafkaProducer.DeliveryReport(messagePointer: messagePointer) else {
                 continue
             }
             deliveryReportResults.append(messageStatus)
@@ -549,9 +549,9 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Important: This method should only be invoked from ``KafkaConsumer``.
     ///
-    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Returns: A ``KafkaConsumer/Message`` or `nil` if there are no new messages.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    func consumerPoll(for pollTimeoutMs: Int32 = 0) throws -> KafkaConsumerMessage? {
+    func consumerPoll(for pollTimeoutMs: Int32 = 0) throws -> KafkaConsumer.Message? {
         guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle.pointer, pollTimeoutMs) else {
             // No error, there might be no more messages
             return nil
@@ -567,7 +567,7 @@ public final class RDKafkaClient: Sendable {
             return nil
         }
 
-        let message = try KafkaConsumerMessage(messagePointer: messagePointer)
+        let message = try KafkaConsumer.Message(messagePointer: messagePointer)
         return message
     }
 
@@ -708,7 +708,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed.
-    func storeOffset(_ message: KafkaConsumerMessage) throws {
+    func storeOffset(_ message: KafkaConsumer.Message) throws {
         // rd_kafka_offsets_store expects the offset of the *next* message to consume,
         // which is the current message's offset + 1.
         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
@@ -765,7 +765,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if the commit failed.
-    func commit(_ message: KafkaConsumerMessage) async throws {
+    func commit(_ message: KafkaConsumer.Message) async throws {
         let promise = CommitPromise()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -1073,7 +1073,7 @@ public final class RDKafkaClient: Sendable {
             }
 
             guard let headerKeyPointer else {
-                fatalError("Found null pointer when reading KafkaConsumerMessage header key")
+                fatalError("Found null pointer when reading consumer message header key")
             }
             let headerKey = String(cString: headerKeyPointer)
 

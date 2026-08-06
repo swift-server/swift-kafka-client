@@ -64,7 +64,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
         let report = try await producer.sendAndAwait(message)
         switch report.status {
         case .acknowledged(let ack):
@@ -98,7 +98,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
         try producer.send(message)
 
         for await event in events {
@@ -128,7 +128,7 @@ config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 
 let logger = Logger(label: "kafka-example")
 
-let (consumer, _) = try withLogger(logger) { _ in
+let (consumer, messages, _) = try withLogger(logger) { _ in
     try KafkaConsumer.makeConsumer(config: config)
 }
 
@@ -142,7 +142,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
+        for try await message in messages {
             print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
         }
     }
@@ -161,7 +161,7 @@ config.enableAutoOffsetStore = false
 
 let logger = Logger(label: "kafka-example")
 
-let (consumer, _) = try withLogger(logger) { _ in
+let (consumer, messages, _) = try withLogger(logger) { _ in
     try KafkaConsumer.makeConsumer(config: config)
 }
 
@@ -175,7 +175,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
+        for try await message in messages {
             // Process message...
             try consumer.storeOffset(message)
             // The background auto-commit timer commits the offset automatically.
@@ -196,7 +196,7 @@ config.enableAutoCommit = false
 
 let logger = Logger(label: "kafka-example")
 
-let (consumer, _) = try withLogger(logger) { _ in
+let (consumer, messages, _) = try withLogger(logger) { _ in
     try KafkaConsumer.makeConsumer(config: config)
 }
 
@@ -210,7 +210,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
+        for try await message in messages {
             // Process message...
             try await consumer.commit(message)
         }
@@ -233,7 +233,7 @@ Change topics at runtime:
 try consumer.subscribe(topics: ["topic-a", "topic-b"])
 
 // Query current subscription
-let topics = try consumer.subscribedTopics()
+let topics = try consumer.subscribedTopics
 
 // Unsubscribe from all topics
 try consumer.unsubscribe()
@@ -297,7 +297,7 @@ config.saslPassword = "password"
 The events sequence surfaces errors from librdkafka with typed error codes:
 
 ```swift
-let (consumer, events) = try KafkaConsumer.makeConsumer(config: config)
+let (consumer, _, events) = try KafkaConsumer.makeConsumer(config: config)
 
 for await event in events {
     switch event {

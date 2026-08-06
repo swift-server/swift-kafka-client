@@ -19,3 +19,27 @@ API breakage: func KafkaConsumer.triggerGracefulShutdown() has been removed
 API breakage: constructor KafkaProducer.init(config:logger:) has been removed
 API breakage: func KafkaProducer.makeProducerWithEvents(config:logger:) has been renamed to func makeProducer(config:)
 API breakage: func KafkaProducer.triggerGracefulShutdown() has been removed
+API breakage: func _createTestMessages(topic:headers:count:) has return type change from [Kafka.KafkaProducerMessage<Swift.String, Swift.String>] to [Kafka.KafkaProducer.Message<Swift.String, Swift.String>]
+API breakage: func _sendAndAcknowledgeMessages(producer:events:messages:skipConsistencyCheck:) has parameter 1 type change from Kafka.KafkaProducerEvents to Kafka.KafkaProducer.Events
+API breakage: func _sendAndAcknowledgeMessages(producer:events:messages:skipConsistencyCheck:) has parameter 2 type change from [Kafka.KafkaProducerMessage<Swift.String, Swift.String>] to [Kafka.KafkaProducer.Message<Swift.String, Swift.String>]
+API breakage: func KafkaConsumer.storeOffset(_:) has parameter 0 type change from Kafka.KafkaConsumerMessage to Kafka.KafkaConsumer.Message
+API breakage: func KafkaConsumer.commit(_:) has parameter 0 type change from Kafka.KafkaConsumerMessage to Kafka.KafkaConsumer.Message
+API breakage: func KafkaConsumer.makeConsumerWithEvents(config:logger:) has return type change from (Kafka.KafkaConsumer, Kafka.KafkaConsumerEvents) to (consumer: Kafka.KafkaConsumer, messages: Kafka.KafkaConsumer.Messages, events: Kafka.KafkaConsumer.Events)
+API breakage: func KafkaProducer.send(_:) has return type change from Kafka.KafkaProducerMessageID to Kafka.KafkaProducer.MessageID
+API breakage: func KafkaProducer.send(_:) has parameter 0 type change from Kafka.KafkaProducerMessage<Key, Value> to Kafka.KafkaProducer.Message<Key, Value>
+API breakage: func KafkaProducer.sendAndAwait(_:) has return type change from Kafka.KafkaDeliveryReport to Kafka.KafkaProducer.DeliveryReport
+API breakage: func KafkaProducer.sendAndAwait(_:) has parameter 0 type change from Kafka.KafkaProducerMessage<Key, Value> to Kafka.KafkaProducer.Message<Key, Value>
+API breakage: func KafkaProducer.makeProducerWithEvents(config:logger:) has return type change from (Kafka.KafkaProducer, Kafka.KafkaProducerEvents) to (producer: Kafka.KafkaProducer, events: Kafka.KafkaProducer.Events)
+API breakage: struct KafkaAcknowledgedMessage has been removed
+API breakage: struct KafkaConsumerEvents has been removed
+API breakage: struct KafkaConsumerMessages has been removed
+API breakage: var KafkaConsumer.messages has been removed
+API breakage: func KafkaConsumer.subscribedTopics() has been removed
+API breakage: enum KafkaConsumerEvent has been removed
+API breakage: struct KafkaConsumerMessage has been removed
+API breakage: struct KafkaConsumerRebalance has been removed
+API breakage: struct KafkaDeliveryReport has been removed
+API breakage: struct KafkaProducerEvents has been removed
+API breakage: enum KafkaProducerEvent has been removed
+API breakage: struct KafkaProducerMessage has been removed
+API breakage: struct KafkaProducerMessageID has been removed

@@ -41,36 +41,6 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
-// MARK: - KafkaProducerEvents
-
-/// An asynchronous sequence of producer events emitted by Kafka.
-///
-/// The sequence yields ``KafkaProducerEvent`` values such as delivery reports and errors.
-public struct KafkaProducerEvents: Sendable, AsyncSequence {
-    /// The type of event the sequence yields.
-    public typealias Element = KafkaProducerEvent
-    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
-    let wrappedSequence: WrappedSequence
-
-    /// An asynchronous iterator over producer events emitted by Kafka.
-    ///
-    /// The iterator yields ``KafkaProducerEvent`` values such as delivery reports and errors.
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        var wrappedIterator: WrappedSequence.AsyncIterator
-
-        /// Returns the next producer event, or `nil` if the sequence has finished.
-        public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
-        }
-    }
-
-    /// Returns an asynchronous iterator over the producer event sequence.
-    public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
-    }
-}
-
 // MARK: - KafkaProducer
 
 /// Sends messages to the Kafka cluster.
@@ -79,7 +49,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 ///   (based on topic-level configuration properties set on `KafkaProducerConfig`).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
-        KafkaProducerEvent,
+        Event,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaProducerCloseOnTerminate
     >
@@ -135,11 +105,11 @@ public final class KafkaProducer: Service, Sendable {
     /// - Parameters:
     ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     /// - Returns: A named tuple containing the created ``KafkaProducer`` and its
-    ///   ``KafkaProducerEvents`` `AsyncSequence`.
+    ///   ``KafkaProducer/Events`` `AsyncSequence`.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     public static func makeProducer(
         config: KafkaProducerConfig
-    ) throws -> (producer: KafkaProducer, events: KafkaProducerEvents) {
+    ) throws -> (producer: KafkaProducer, events: Events) {
         let logger = Logger.current
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
@@ -168,7 +138,7 @@ public final class KafkaProducer: Service, Sendable {
         // If this order is not met and `RDKafkaClient.makeClient()` fails,
         // it leads to a call to `stateMachine.stopConsuming()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: KafkaProducerEvent.self,
+            elementType: Event.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             finishOnDeinit: true,
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
@@ -181,7 +151,7 @@ public final class KafkaProducer: Service, Sendable {
             )
         }
 
-        let eventsSequence = KafkaProducerEvents(wrappedSequence: sourceAndSequence.sequence)
+        let eventsSequence = Events(wrappedSequence: sourceAndSequence.sequence)
         return (producer: producer, events: eventsSequence)
     }
 
@@ -279,9 +249,9 @@ public final class KafkaProducer: Service, Sendable {
     ///   these are returned so the caller can emit them on the events sequence.
     ///
     /// Each delivery lands on exactly one destination. Callers using both `sendAndAwait(_:)`
-    /// and iterating `KafkaProducerEvents` never see the same report twice.
-    private func dispatchDeliveryReports(_ reports: [KafkaDeliveryReport]) -> [KafkaDeliveryReport] {
-        var reportsForEvents: [KafkaDeliveryReport] = []
+    /// and iterating `KafkaProducer.Events` never see the same report twice.
+    private func dispatchDeliveryReports(_ reports: [DeliveryReport]) -> [DeliveryReport] {
+        var reportsForEvents: [DeliveryReport] = []
         reportsForEvents.reserveCapacity(reports.count)
         for report in reports {
             switch report.status {
@@ -297,7 +267,7 @@ public final class KafkaProducer: Service, Sendable {
                 )
             }
 
-            let continuation: CheckedContinuation<KafkaDeliveryReport, Error>? =
+            let continuation: CheckedContinuation<DeliveryReport, Error>? =
                 self.stateMachine.withLockedValue {
                     $0.removeContinuation(for: report.id.rawValue)
                 }
@@ -333,12 +303,12 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// For acknowledged delivery, use ``sendAndAwait(_:)``.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` to send.
-    /// - Returns: Unique ``KafkaProducerMessageID`` matching the ``KafkaDeliveryReport/id`` property
-    /// of the corresponding ``KafkaDeliveryReport``.
+    /// - Parameter message: The ``KafkaProducer/Message`` to send.
+    /// - Returns: Unique ``KafkaProducer/MessageID`` matching the ``KafkaProducer/DeliveryReport/id`` property
+    /// of the corresponding ``KafkaProducer/DeliveryReport``.
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
-    public func send<Key, Value>(_ message: KafkaProducerMessage<Key, Value>) throws -> KafkaProducerMessageID {
+    public func send<Key, Value>(_ message: Message<Key, Value>) throws -> MessageID {
         let action = try self.stateMachine.withLockedValue { try $0.send() }
         switch action {
         case .send(let client, let newMessageID, let topicHandles):
@@ -356,22 +326,22 @@ public final class KafkaProducer: Service, Sendable {
                 )
                 throw error
             }
-            return KafkaProducerMessageID(rawValue: newMessageID)
+            return MessageID(rawValue: newMessageID)
         }
     }
 
     /// Sends a message to the Kafka cluster and awaits the delivery report.
     ///
     /// Unlike ``send(_:)``, this method suspends until the broker acknowledges (or rejects)
-    /// the message. The returned ``KafkaDeliveryReport`` contains the acknowledgment status,
+    /// the message. The returned ``KafkaProducer/DeliveryReport`` contains the acknowledgment status,
     /// partition, offset, and other metadata.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` to send.
-    /// - Returns: A ``KafkaDeliveryReport`` with the delivery status.
+    /// - Parameter message: The ``KafkaProducer/Message`` to send.
+    /// - Returns: A ``KafkaProducer/DeliveryReport`` with the delivery status.
     /// - Throws: A ``KafkaError`` if the message could not be enqueued or was rejected by the broker.
     public func sendAndAwait<Key, Value>(
-        _ message: KafkaProducerMessage<Key, Value>
-    ) async throws -> KafkaDeliveryReport {
+        _ message: Message<Key, Value>
+    ) async throws -> DeliveryReport {
         // Get the message ID and produce BEFORE entering the continuation,
         // so we have the ID available for the cancellation handler.
         let action = try self.stateMachine.withLockedValue { try $0.send() }
@@ -394,7 +364,7 @@ public final class KafkaProducer: Service, Sendable {
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
-                (continuation: CheckedContinuation<KafkaDeliveryReport, Error>) in
+                (continuation: CheckedContinuation<DeliveryReport, Error>) in
                 // Transition from .initialized to .pending BEFORE producing.
                 // The delivery report could arrive before produce() returns.
                 let result = self.stateMachine.withLockedValue {
@@ -434,6 +404,40 @@ public final class KafkaProducer: Service, Sendable {
     }
 }
 
+// MARK: - KafkaProducer + Events sequence
+
+extension KafkaProducer {
+    /// An asynchronous sequence of producer events emitted by Kafka.
+    ///
+    /// The sequence yields ``KafkaProducer/Event`` values such as delivery reports and errors.
+    public struct Events: Sendable, AsyncSequence {
+        /// The type of event the sequence yields.
+        public typealias Element = Event
+        typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+        typealias WrappedSequence = NIOAsyncSequenceProducer<
+            Element, BackPressureStrategy, KafkaProducerCloseOnTerminate
+        >
+        let wrappedSequence: WrappedSequence
+
+        /// An asynchronous iterator over producer events emitted by Kafka.
+        ///
+        /// The iterator yields ``KafkaProducer/Event`` values such as delivery reports and errors.
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            var wrappedIterator: WrappedSequence.AsyncIterator
+
+            /// Returns the next producer event, or `nil` if the sequence has finished.
+            public mutating func next() async -> Element? {
+                await self.wrappedIterator.next()
+            }
+        }
+
+        /// Returns an asynchronous iterator over the producer event sequence.
+        public func makeAsyncIterator() -> AsyncIterator {
+            AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+        }
+    }
+}
+
 // MARK: - KafkaProducer + StateMachine
 
 extension KafkaProducer {
@@ -451,7 +455,7 @@ extension KafkaProducer {
         /// - `.cancelled`: `onCancel` fired before registration — reject on register
         enum ContinuationState {
             case initialized
-            case pending(CheckedContinuation<KafkaDeliveryReport, Error>)
+            case pending(CheckedContinuation<DeliveryReport, Error>)
             case cancelled
         }
 
@@ -691,7 +695,7 @@ extension KafkaProducer {
         /// Transitions the slot from `.initialized` to `.pending(continuation)`.
         /// Returns `.alreadyCancelled` if `onCancel` already set the slot to `.cancelled`.
         mutating func registerContinuation(
-            _ continuation: CheckedContinuation<KafkaDeliveryReport, Error>,
+            _ continuation: CheckedContinuation<DeliveryReport, Error>,
             for messageID: UInt
         ) -> RegisterContinuationResult {
             guard let existing = self.pendingContinuations[messageID] else {
@@ -720,7 +724,7 @@ extension KafkaProducer {
         /// as `.cancelled` so `registerContinuation` can reject it later.
         mutating func cancelContinuation(
             for messageID: UInt
-        ) -> CheckedContinuation<KafkaDeliveryReport, Error>? {
+        ) -> CheckedContinuation<DeliveryReport, Error>? {
             guard let existing = self.pendingContinuations.removeValue(forKey: messageID) else {
                 // Missing: the event loop already removed it via removeContinuation.
                 return nil
@@ -748,7 +752,7 @@ extension KafkaProducer {
         @discardableResult
         mutating func removeContinuation(
             for messageID: UInt
-        ) -> CheckedContinuation<KafkaDeliveryReport, Error>? {
+        ) -> CheckedContinuation<DeliveryReport, Error>? {
             guard let existing = self.pendingContinuations.removeValue(forKey: messageID) else {
                 return nil
             }

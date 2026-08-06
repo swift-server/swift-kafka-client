@@ -20,7 +20,7 @@ import ServiceLifecycle
 
 // MARK: - KafkaConsumerEventsDelegate
 
-/// `NIOAsyncSequenceProducerDelegate` for ``KafkaConsumerEvents``.
+/// `NIOAsyncSequenceProducerDelegate` for ``KafkaConsumer/Events``.
 internal struct KafkaConsumerEventsDelegate: Sendable {
     let stateMachine: NIOLockedValueBox<KafkaConsumer.StateMachine>
 }
@@ -35,126 +35,12 @@ extension KafkaConsumerEventsDelegate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
-// MARK: - KafkaConsumerEvents
-
-/// An asynchronous sequence of consumer events emitted by Kafka.
-///
-/// The sequence yields ``KafkaConsumerEvent`` values such as rebalance notifications and errors.
-public struct KafkaConsumerEvents: Sendable, AsyncSequence {
-    /// The type of event the sequence yields.
-    public typealias Element = KafkaConsumerEvent
-    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
-    let wrappedSequence: WrappedSequence
-
-    /// An asynchronous iterator over consumer events emitted by Kafka.
-    ///
-    /// The iterator yields ``KafkaConsumerEvent`` values such as rebalance notifications and errors.
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        var wrappedIterator: WrappedSequence.AsyncIterator
-
-        /// Returns the next consumer event, or `nil` if the sequence has finished.
-        public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
-        }
-    }
-
-    /// Returns an asynchronous iterator over the consumer event sequence.
-    public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
-    }
-}
-
-// MARK: - KafkaConsumerMessages
-
-/// An asynchronous sequence of messages received from the Kafka cluster.
-///
-/// The sequence yields ``KafkaConsumerMessage`` values.
-public struct KafkaConsumerMessages: Sendable, AsyncSequence {
-    typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
-
-    let stateMachine: LockedMachine
-    let pollInterval: Duration
-
-    /// The type of message the sequence yields.
-    public typealias Element = KafkaConsumerMessage
-
-    /// An asynchronous iterator over messages received from the Kafka cluster.
-    ///
-    /// The iterator yields ``KafkaConsumerMessage`` values.
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        private let stateMachineHolder: MachineHolder
-        let pollInterval: Duration
-        private let queue: DispatchQueueTaskExecutor
-
-        private final class MachineHolder: Sendable {  // only for deinit
-            let stateMachine: LockedMachine
-
-            init(stateMachine: LockedMachine) {
-                self.stateMachine = stateMachine
-            }
-
-            deinit {
-                self.stateMachine.withLockedValue { $0.finishMessageConsumption() }
-            }
-        }
-
-        init(stateMachine: LockedMachine, pollInterval: Duration) {
-            self.stateMachineHolder = .init(stateMachine: stateMachine)
-            self.pollInterval = pollInterval
-            self.queue = DispatchQueueTaskExecutor(
-                DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer")
-            )
-        }
-
-        /// Returns the next consumer message, or `nil` when the consumer has shut down or the task is canceled.
-        ///
-        /// - Throws: A ``KafkaError`` if polling for the next message fails.
-        public func next() async throws -> Element? {
-            while !Task.isCancelled {
-                let action = self.stateMachineHolder.stateMachine.withLockedValue { $0.nextConsumerPollLoopAction() }
-
-                switch action {
-                case .poll(let client):
-                    // Attempt to fetch a message synchronously. Bail
-                    // immediately if no message is waiting for us.
-                    if let message = try client.consumerPoll() {
-                        return message
-                    }
-
-                    // Wait on a separate thread for the next message.
-                    // The call below will block for `pollInterval`.
-                    if let message = try await withTaskExecutorPreference(
-                        queue,
-                        operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
-                    ) {
-                        return message
-                    }
-                case .suspendPollLoop:
-                    try await Task.sleep(for: self.pollInterval)  // not started yet
-                case .terminatePollLoop:
-                    return nil
-                }
-            }
-            return nil
-        }
-    }
-
-    /// Returns an asynchronous iterator over the consumer message sequence.
-    public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(
-            stateMachine: self.stateMachine,
-            pollInterval: self.pollInterval
-        )
-    }
-}
-
 // MARK: - KafkaConsumer
 
 /// Consumes messages from a Kafka cluster.
 public final class KafkaConsumer: Sendable, Service {
     typealias ConsumerEventsProducer = NIOAsyncSequenceProducer<
-        KafkaConsumerEvent,
+        Event,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaConsumerEventsDelegate
     >
@@ -175,9 +61,6 @@ public final class KafkaConsumer: Sendable, Service {
     /// C callback holds an unretained pointer to it.
     /// - Important: Must be declared AFTER `stateMachine` — see ordering note above.
     private let rebalanceContext: RebalanceContext
-
-    /// An asynchronous sequence of messages from the Kafka cluster.
-    public let messages: KafkaConsumerMessages
 
     // Private initializer, use factory method or convenience init to create KafkaConsumer
     /// Creates a new ``KafkaConsumer``.
@@ -213,11 +96,6 @@ public final class KafkaConsumer: Sendable, Service {
         self.eventsSource = eventsSource
         self.rebalanceContext = rebalanceContext
 
-        self.messages = KafkaConsumerMessages(
-            stateMachine: self.stateMachine,
-            pollInterval: config.pollInterval
-        )
-
         self.stateMachine.withLockedValue {
             $0.initialize(
                 client: client,
@@ -233,7 +111,7 @@ public final class KafkaConsumer: Sendable, Service {
         )
     }
 
-    /// Creates a consumer and its paired events sequence.
+    /// Creates a consumer and its paired message and events sequences.
     ///
     /// Every consumer receives an events sequence for rebalance and error observation.
     /// Iterate the sequence to react to partition assignment changes and non-fatal
@@ -245,11 +123,11 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
     /// - Returns: A named tuple containing the created ``KafkaConsumer`` and its
-    ///   ``KafkaConsumerEvents`` `AsyncSequence`.
+    ///   ``KafkaConsumer/Messages`` and ``KafkaConsumer/Events`` `AsyncSequence`s.
     /// - Throws: A ``KafkaError`` if the initialization failed.
     public static func makeConsumer(
         config: KafkaConsumerConfig
-    ) throws -> (consumer: KafkaConsumer, events: KafkaConsumerEvents) {
+    ) throws -> (consumer: KafkaConsumer, messages: Messages, events: Events) {
         let logger = Logger.current
         var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance, .error]
         let isAutoCommitEnabled = config.enableAutoCommit ?? true
@@ -278,7 +156,7 @@ public final class KafkaConsumer: Sendable, Service {
         // If this order is not met and `RDKafkaClient.makeClient()` fails,
         // it leads to a call to `stateMachine.messageSequenceTerminated()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: KafkaConsumerEvent.self,
+            elementType: Event.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             finishOnDeinit: true,
             delegate: KafkaConsumerEventsDelegate(stateMachine: stateMachine)
@@ -293,8 +171,12 @@ public final class KafkaConsumer: Sendable, Service {
             eventsSource: sourceAndSequence.source
         )
 
-        let eventsSequence = KafkaConsumerEvents(wrappedSequence: sourceAndSequence.sequence)
-        return (consumer: consumer, events: eventsSequence)
+        let messagesSequence = Messages(
+            stateMachine: stateMachine,
+            pollInterval: config.pollInterval
+        )
+        let eventsSequence = Events(wrappedSequence: sourceAndSequence.sequence)
+        return (consumer: consumer, messages: messagesSequence, events: eventsSequence)
     }
 
     // MARK: - Subscription Management
@@ -351,24 +233,25 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
-    /// Returns the current topic subscription.
+    /// The current topic subscription.
     ///
-    /// - Returns: An array of topic names or patterns the consumer is currently subscribed to.
     /// - Throws: A ``KafkaError`` if the consumer is closed or the query failed.
-    public func subscribedTopics() throws -> [String] {
-        let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
-        switch action {
-        case .client(let client):
-            return try client.subscription()
-        case .throwClosedError:
-            throw KafkaError.connectionClosed(reason: "Consumer is closed")
+    public var subscribedTopics: [String] {
+        get throws {
+            let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
+            switch action {
+            case .client(let client):
+                return try client.subscription()
+            case .throwClosedError:
+                throw KafkaError.connectionClosed(reason: "Consumer is closed")
+            }
         }
     }
 
     /// Pauses consumption for the partitions you provide.
     ///
     /// Paused partitions remain in the consumer group and continue heartbeating
-    /// but don't return messages from ``messages``.
+    /// but don't return messages on the messages sequence.
     ///
     /// - Parameter topicPartitions: The partitions to pause.
     /// - Throws: A ``KafkaError`` if the consumer is closed or pausing failed.
@@ -540,7 +423,7 @@ public final class KafkaConsumer: Sendable, Service {
 
         let rebalanceEvents = self.rebalanceContext.drainEvents()
         for event in rebalanceEvents {
-            let kind: KafkaConsumerRebalance.Kind
+            let kind: Rebalance.Kind
             switch event.kind {
             case .assign:
                 kind = .assign
@@ -550,7 +433,7 @@ public final class KafkaConsumer: Sendable, Service {
                 kind = .error(description)
             }
 
-            let rebalance = KafkaConsumerRebalance(
+            let rebalance = Rebalance(
                 kind: kind,
                 partitions: event.partitions.map {
                     KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
@@ -595,7 +478,7 @@ public final class KafkaConsumer: Sendable, Service {
 
         let rebalanceEvents = self.rebalanceContext.drainEvents()
         for event in rebalanceEvents {
-            let kind: KafkaConsumerRebalance.Kind
+            let kind: Rebalance.Kind
             switch event.kind {
             case .assign:
                 kind = .assign
@@ -605,7 +488,7 @@ public final class KafkaConsumer: Sendable, Service {
                 kind = .error(description)
             }
 
-            let rebalance = KafkaConsumerRebalance(
+            let rebalance = Rebalance(
                 kind: kind,
                 partitions: event.partitions.map {
                     KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
@@ -640,7 +523,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed or the consumer is closed.
-    public func storeOffset(_ message: KafkaConsumerMessage) throws {
+    public func storeOffset(_ message: Message) throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
@@ -669,7 +552,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - message: Last received message to mark as read.
     /// - Throws: A ``KafkaError`` if committing failed.
-    public func commit(_ message: KafkaConsumerMessage) async throws {
+    public func commit(_ message: Message) async throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
@@ -805,7 +688,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Gracefully shuts down a Kafka consumer client.
     ///
-    /// - Note: Invoking this method isn't always needed; the ``KafkaConsumer`` already shuts down when consumption of ``KafkaConsumerMessages`` ends.
+    /// - Note: Invoking this method isn't always needed; the ``KafkaConsumer`` already shuts down when consumption of ``KafkaConsumer/Messages`` ends.
     func triggerGracefulShutdown() {
         self.logger.debug("Kafka consumer shutting down")
         let action = self.stateMachine.withLockedValue { $0.finish() }
@@ -830,6 +713,122 @@ public final class KafkaConsumer: Sendable, Service {
             logger.info(
                 "Closing KafkaConsumer failed",
                 error: error
+            )
+        }
+    }
+}
+
+// MARK: - KafkaConsumer + Events/Messages sequences
+
+extension KafkaConsumer {
+    /// An asynchronous sequence of consumer events emitted by Kafka.
+    ///
+    /// The sequence yields ``KafkaConsumer/Event`` values such as rebalance notifications and errors.
+    public struct Events: Sendable, AsyncSequence {
+        /// The type of event the sequence yields.
+        public typealias Element = Event
+        typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+        typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaConsumerEventsDelegate>
+        let wrappedSequence: WrappedSequence
+
+        /// An asynchronous iterator over consumer events emitted by Kafka.
+        ///
+        /// The iterator yields ``KafkaConsumer/Event`` values such as rebalance notifications and errors.
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            var wrappedIterator: WrappedSequence.AsyncIterator
+
+            /// Returns the next consumer event, or `nil` if the sequence has finished.
+            public mutating func next() async -> Element? {
+                await self.wrappedIterator.next()
+            }
+        }
+
+        /// Returns an asynchronous iterator over the consumer event sequence.
+        public func makeAsyncIterator() -> AsyncIterator {
+            AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+        }
+    }
+
+    /// An asynchronous sequence of messages received from the Kafka cluster.
+    ///
+    /// The sequence yields ``KafkaConsumer/Message`` values.
+    public struct Messages: Sendable, AsyncSequence {
+        typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
+
+        let stateMachine: LockedMachine
+        let pollInterval: Duration
+
+        /// The type of message the sequence yields.
+        public typealias Element = Message
+
+        /// An asynchronous iterator over messages received from the Kafka cluster.
+        ///
+        /// The iterator yields ``KafkaConsumer/Message`` values.
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            private let stateMachineHolder: MachineHolder
+            let pollInterval: Duration
+            private let queue: DispatchQueueTaskExecutor
+
+            private final class MachineHolder: Sendable {  // only for deinit
+                let stateMachine: LockedMachine
+
+                init(stateMachine: LockedMachine) {
+                    self.stateMachine = stateMachine
+                }
+
+                deinit {
+                    self.stateMachine.withLockedValue { $0.finishMessageConsumption() }
+                }
+            }
+
+            init(stateMachine: LockedMachine, pollInterval: Duration) {
+                self.stateMachineHolder = .init(stateMachine: stateMachine)
+                self.pollInterval = pollInterval
+                self.queue = DispatchQueueTaskExecutor(
+                    DispatchQueue(label: "com.swift-server.swift-kafka.message-consumer")
+                )
+            }
+
+            /// Returns the next consumer message, or `nil` when the consumer has shut down or the task is canceled.
+            ///
+            /// - Throws: A ``KafkaError`` if polling for the next message fails.
+            public func next() async throws -> Element? {
+                while !Task.isCancelled {
+                    let action = self.stateMachineHolder.stateMachine.withLockedValue {
+                        $0.nextConsumerPollLoopAction()
+                    }
+
+                    switch action {
+                    case .poll(let client):
+                        // Attempt to fetch a message synchronously. Bail
+                        // immediately if no message is waiting for us.
+                        if let message = try client.consumerPoll() {
+                            return message
+                        }
+
+                        // Wait on a separate thread for the next message.
+                        // The call below will block for `pollInterval`.
+                        if let message = try await withTaskExecutorPreference(
+                            queue,
+                            operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
+                        ) {
+                            return message
+                        }
+                    case .suspendPollLoop:
+                        try await Task.sleep(for: self.pollInterval)  // not started yet
+                    case .terminatePollLoop:
+                        return nil
+                    }
+                }
+                return nil
+            }
+        }
+
+        /// Returns an asynchronous iterator over the consumer message sequence.
+        public func makeAsyncIterator() -> AsyncIterator {
+            AsyncIterator(
+                stateMachine: self.stateMachine,
+                pollInterval: self.pollInterval
             )
         }
     }
@@ -957,7 +956,7 @@ extension KafkaConsumer {
 
         /// Action to be taken when wanting to poll for a new message.
         enum ConsumerPollLoopAction {
-            /// Poll for a new ``KafkaConsumerMessage``.
+            /// Poll for a new ``KafkaConsumer/Message``.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
             case poll(client: RDKafkaClient)
@@ -1102,7 +1101,7 @@ extension KafkaConsumer {
             }
         }
 
-        /// The ``KafkaConsumerMessages`` asynchronous sequence was terminated.
+        /// The ``KafkaConsumer/Messages`` asynchronous sequence was terminated.
         mutating func finishMessageConsumption() {
             switch self.state {
             case .uninitialized:
