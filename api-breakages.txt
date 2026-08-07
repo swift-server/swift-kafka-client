@@ -43,3 +43,16 @@ API breakage: struct KafkaProducerEvents has been removed
 API breakage: enum KafkaProducerEvent has been removed
 API breakage: struct KafkaProducerMessage has been removed
 API breakage: struct KafkaProducerMessageID has been removed
+API breakage: func KafkaConsumer.subscribe(topics:) has parameter 0 type change from [Swift.String] to [Kafka.KafkaTopic]
+API breakage: func KafkaConsumerConfiguration.ConsumptionStrategy.partition(_:groupID:topic:offset:) has parameter 2 type change from Swift.String to Kafka.KafkaTopic
+API breakage: func KafkaConsumerConfiguration.ConsumptionStrategy.group(id:topics:) has parameter 1 type change from [Swift.String] to [Kafka.KafkaTopic]
+API breakage: var KafkaTopicPartition.topic has declared type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaTopicPartition.topic.Get() has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaTopicPartition.topic.Set() has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: constructor KafkaTopicPartition.init(topic:partition:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: var KafkaTopicPartitionOffset.topic has declared type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaTopicPartitionOffset.topic.Get() has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: constructor KafkaTopicPartitionOffset.init(topic:partition:offset:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: func _createTestMessages(topic:headers:count:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: func RDKafkaClient._createUniqueTopic(partitions:) has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: func RDKafkaClient._deleteTopic(_:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic

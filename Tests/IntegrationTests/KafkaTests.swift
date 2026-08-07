@@ -32,7 +32,7 @@ import Foundation
 private let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
 private let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
 
-func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async throws -> Void) async throws {
+func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) async throws -> Void) async throws {
     var basicConfig = KafkaConsumerConfig()
     basicConfig.groupId = UUID().uuidString
     basicConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
@@ -2200,7 +2200,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     // MARK: - Helpers
 
-    func produceMessages(topic: String, count: UInt) async throws -> [KafkaProducer.Message<String, String>] {
+    func produceMessages(topic: KafkaTopic, count: UInt) async throws -> [KafkaProducer.Message<String, String>] {
         let testMessages = Self.createTestMessages(topic: topic, count: count)
         try await self.produceMessages(messages: testMessages)
         return testMessages
@@ -2241,7 +2241,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     }
 
     private static func createTestMessages(
-        topic: String,
+        topic: KafkaTopic,
         headers: [KafkaHeader] = [],
         count: UInt
     ) -> [KafkaProducer.Message<String, String>] {
@@ -2270,7 +2270,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
         consumerConfig.brokerAddressFamily = .v4
 
-        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -2303,7 +2303,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
         consumerConfig.brokerAddressFamily = .v4
 
-        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -2333,7 +2333,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
         consumerConfig.brokerAddressFamily = .v4
 
-        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -2367,7 +2367,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
             consumerConfig.brokerAddressFamily = .v4
 
-            let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
+            let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: consumerConfig)
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
                 services: [consumer],
@@ -2453,7 +2453,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     // Subscribe dynamically to both topics
                     try consumer.subscribe(topics: [testTopic1, testTopic2])
 
-                    var receivedTopics: Set<String> = []
+                    var receivedTopics: Set<KafkaTopic> = []
                     for try await message in consumerMsgs {
                         receivedTopics.insert(message.topic)
                         if receivedTopics.count >= 2 {

@@ -30,7 +30,7 @@ public enum _TestMessagesError: Error {
 /// Builds an array of test producer messages with unique keys for the topic you provide.
 @_spi(Internal)
 public func _createTestMessages(
-    topic: String,
+    topic: KafkaTopic,
     headers: [KafkaHeader] = [],
     count: UInt
 ) -> [KafkaProducer.Message<String, String>] {

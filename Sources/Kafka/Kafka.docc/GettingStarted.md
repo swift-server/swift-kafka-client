@@ -115,7 +115,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     group.addTask {
         for try await message in messages {
-            print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
+            print("Received: \(message.topic.rawValue)/\(message.partition) at offset \(message.offset)")
         }
     }
 }

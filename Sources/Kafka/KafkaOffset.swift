@@ -15,9 +15,12 @@
 import Crdkafka
 
 /// A message offset within a Kafka partition queue.
-public struct KafkaOffset: RawRepresentable {
+public struct KafkaOffset: RawRepresentable, CustomStringConvertible, Hashable, Sendable {
     /// The raw integer value of the offset.
     public var rawValue: Int
+
+    /// A textual representation of the offset.
+    public var description: String { String(self.rawValue) }
 
     /// Creates a Kafka offset from its raw integer value.
     public init(rawValue: Int) {
@@ -41,11 +44,3 @@ public struct KafkaOffset: RawRepresentable {
         KafkaOffset(rawValue: Int(RD_KAFKA_OFFSET_TAIL_BASE) - count)
     }
 }
-
-// MARK: KafkaOffset + Hashable
-
-extension KafkaOffset: Hashable {}
-
-// MARK: KafkaOffset + Sendable
-
-extension KafkaOffset: Sendable {}

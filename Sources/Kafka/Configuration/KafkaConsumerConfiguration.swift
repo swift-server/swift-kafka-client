@@ -15,7 +15,7 @@
 import struct Foundation.UUID
 
 /// Configuration values that control a Kafka consumer instance.
-public struct KafkaConsumerConfiguration {
+public struct KafkaConsumerConfiguration: Sendable {
     // MARK: - Kafka-specific Config properties
 
     /// The time between two consecutive polls.
@@ -28,8 +28,8 @@ public struct KafkaConsumerConfiguration {
     /// The Kafka message consumption strategy.
     public struct ConsumptionStrategy: Sendable, Hashable {
         enum _ConsumptionStrategy: Sendable, Hashable {
-            case partition(groupID: String?, topic: String, partition: KafkaPartition, offset: KafkaOffset)
-            case group(groupID: String, topics: [String])
+            case partition(groupID: String?, topic: KafkaTopic, partition: KafkaPartition, offset: KafkaOffset)
+            case group(groupID: String, topics: [KafkaTopic])
         }
 
         let _internal: _ConsumptionStrategy
@@ -49,7 +49,7 @@ public struct KafkaConsumerConfiguration {
         public static func partition(
             _ partition: KafkaPartition,
             groupID: String? = nil,
-            topic: String,
+            topic: KafkaTopic,
             offset: KafkaOffset = .end
         ) -> ConsumptionStrategy {
             .init(consumptionStrategy: .partition(groupID: groupID, topic: topic, partition: partition, offset: offset))
@@ -61,7 +61,7 @@ public struct KafkaConsumerConfiguration {
         /// - Parameters:
         ///     - groupID: The ID of the consumer group to join.
         ///     - topics: An array of topic names to consume from.
-        public static func group(id groupID: String, topics: [String]) -> ConsumptionStrategy {
+        public static func group(id groupID: String, topics: [KafkaTopic]) -> ConsumptionStrategy {
             .init(consumptionStrategy: .group(groupID: groupID, topics: topics))
         }
     }
@@ -374,6 +374,3 @@ extension KafkaConsumerConfiguration {
     }
 }
 
-// MARK: - KafkaConsumerConfiguration + Sendable
-
-extension KafkaConsumerConfiguration: Sendable {}

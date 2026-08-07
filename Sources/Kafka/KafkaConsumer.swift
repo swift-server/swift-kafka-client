@@ -190,13 +190,16 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Parameter topics: An array of topic names to subscribe to.
     /// - Throws: A ``KafkaError`` if the consumer is closed or subscribing failed.
-    public func subscribe(topics: [String]) throws {
+    public func subscribe(topics: [KafkaTopic]) throws {
         guard !topics.isEmpty else {
             try self.unsubscribe()
             return
         }
 
-        self.logger.debug("Subscribing to topics", metadata: [KafkaLoggingKeys.topics: "\(topics)"])
+        self.logger.debug(
+            "Subscribing to topics",
+            metadata: [KafkaLoggingKeys.topics: "\(topics.map(\.rawValue))"]
+        )
 
         let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
         switch action {
@@ -236,12 +239,12 @@ public final class KafkaConsumer: Sendable, Service {
     /// The current topic subscription.
     ///
     /// - Throws: A ``KafkaError`` if the consumer is closed or the query failed.
-    public var subscribedTopics: [String] {
+    public var subscribedTopics: [KafkaTopic] {
         get throws {
             let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
             switch action {
             case .client(let client):
-                return try client.subscription()
+                return try client.subscription().map { KafkaTopic(rawValue: $0) }
             case .throwClosedError:
                 throw KafkaError.connectionClosed(reason: "Consumer is closed")
             }
@@ -289,7 +292,7 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Internal startup subscription that transitions the state machine from `.initializing` to `.running`.
     /// Called once during `_run()` to set up the initial subscription from `consumptionStrategy`.
-    private func initialSubscribe(topics: [String]) throws {
+    private func initialSubscribe(topics: [KafkaTopic]) throws {
         let action = self.stateMachine.withLockedValue { $0.transitionToRunning() }
         switch action {
         case .setUpConnection(let client):
@@ -313,7 +316,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// Defaults to the end of the Kafka partition queue (waits for the next produced message).
     /// - Throws: A ``KafkaError`` if the consumer could not be assigned to the topic + partition pair.
     private func assign(
-        topic: String,
+        topic: KafkaTopic,
         partition: KafkaPartition,
         offset: KafkaOffset
     ) throws {
@@ -436,7 +439,10 @@ public final class KafkaConsumer: Sendable, Service {
             let rebalance = Rebalance(
                 kind: kind,
                 partitions: event.partitions.map {
-                    KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
+                    KafkaTopicPartition(
+                        topic: KafkaTopic(rawValue: $0.topic),
+                        partition: KafkaPartition(rawValue: $0.partition)
+                    )
                 }
             )
             if let source = self.eventsSource {
@@ -491,7 +497,10 @@ public final class KafkaConsumer: Sendable, Service {
             let rebalance = Rebalance(
                 kind: kind,
                 partitions: event.partitions.map {
-                    KafkaTopicPartition(topic: $0.topic, partition: KafkaPartition(rawValue: $0.partition))
+                    KafkaTopicPartition(
+                        topic: KafkaTopic(rawValue: $0.topic),
+                        partition: KafkaPartition(rawValue: $0.partition)
+                    )
                 }
             )
             if let source = self.eventsSource {

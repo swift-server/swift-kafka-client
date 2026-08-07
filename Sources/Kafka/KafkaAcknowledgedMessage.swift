@@ -17,9 +17,9 @@ import NIOCore
 
 extension KafkaProducer {
     /// A message acknowledged by the Kafka cluster.
-    public struct AcknowledgedMessage {
+    public struct AcknowledgedMessage: Hashable, Sendable {
         /// The topic the producer sent the message to.
-        public var topic: String
+        public var topic: KafkaTopic
         /// The partition the producer sent the message to.
         public var partition: KafkaPartition
         /// The key of the message.
@@ -47,7 +47,7 @@ extension KafkaProducer {
                 fatalError("Received topic name that is non-valid UTF-8")
             }
 
-            self.topic = topic
+            self.topic = KafkaTopic(rawValue: topic)
 
             self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
             self.headers = try RDKafkaClient.getHeaders(for: messagePointer)
@@ -65,11 +65,3 @@ extension KafkaProducer {
         }
     }
 }
-
-// MARK: KafkaProducer.AcknowledgedMessage + Hashable
-
-extension KafkaProducer.AcknowledgedMessage: Hashable {}
-
-// MARK: KafkaProducer.AcknowledgedMessage + Sendable
-
-extension KafkaProducer.AcknowledgedMessage: Sendable {}

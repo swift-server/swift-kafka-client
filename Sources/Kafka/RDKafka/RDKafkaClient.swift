@@ -932,7 +932,9 @@ public final class RDKafkaClient: Sendable {
                 element.offset == Int64(RD_KAFKA_OFFSET_INVALID)
                 ? nil
                 : KafkaOffset(rawValue: Int(element.offset))
-            results.append(KafkaTopicPartitionOffset(topic: topic, partition: partition, offset: offset))
+            results.append(
+                KafkaTopicPartitionOffset(topic: KafkaTopic(rawValue: topic), partition: partition, offset: offset)
+            )
         }
 
         return results
@@ -975,7 +977,9 @@ public final class RDKafkaClient: Sendable {
         let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitionOffsets.count))
         for tpo in topicPartitionOffsets {
             guard let offset = tpo.offset else {
-                throw KafkaError.config(reason: "Seek requires a non-nil offset for \(tpo.topic):\(tpo.partition)")
+                throw KafkaError.config(
+                    reason: "Seek requires a non-nil offset for \(tpo.topic):\(tpo.partition)"
+                )
             }
             tpl.setOffset(
                 topic: tpo.topic,

@@ -17,7 +17,7 @@ extension KafkaProducer {
     ///
     /// Use a ``KafkaProducer/MessageID`` to correlate an incoming ``KafkaProducer/DeliveryReport`` with the
     /// corresponding ``KafkaProducer/send(_:)`` call that produced it.
-    public struct MessageID {
+    public struct MessageID: Hashable, Sendable {
         internal var rawValue: UInt
 
         internal init(rawValue: UInt) {
@@ -35,10 +35,6 @@ extension KafkaProducer.MessageID: CustomStringConvertible {
     }
 }
 
-// MARK: - KafkaProducer.MessageID + Hashable
-
-extension KafkaProducer.MessageID: Hashable {}
-
 // MARK: - KafkaProducer.MessageID + Comparable
 
 extension KafkaProducer.MessageID: Comparable {
@@ -47,7 +43,3 @@ extension KafkaProducer.MessageID: Comparable {
         lhs.rawValue < rhs.rawValue
     }
 }
-
-// MARK: - KafkaProducer.MessageID + Sendable
-
-extension KafkaProducer.MessageID: Sendable {}

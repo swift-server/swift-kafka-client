@@ -48,7 +48,7 @@ import Foundation
                 try await serviceGroup.run()
             }
 
-            let expectedTopic = "test-topic"
+            let expectedTopic: KafkaTopic = "test-topic"
             let headers = [KafkaHeader(key: "some", value: ByteBuffer.init(string: "test"))]
             let message = KafkaProducer.Message(
                 topic: expectedTopic,
@@ -108,7 +108,7 @@ import Foundation
                 try await serviceGroup.run()
             }
 
-            let expectedTopic = "test-topic"
+            let expectedTopic: KafkaTopic = "test-topic"
             let message = KafkaProducer.Message(
                 topic: expectedTopic,
                 value: ByteBuffer()
