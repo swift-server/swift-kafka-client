@@ -16,6 +16,7 @@ extension KafkaConsumer {
     /// An event reported by a Kafka consumer, such as a rebalance notification or an error.
     ///
     /// Delivered through ``KafkaConsumer/Events``.
+    @nonexhaustive
     public enum Event: Sendable, Hashable {
         /// A consumer group rebalance occurred.
         ///
@@ -27,8 +28,5 @@ extension KafkaConsumer {
 
         /// An error reported by the Kafka client (for example, broker disconnection or authentication failure).
         case error(KafkaError)
-
-        /// - Important: Always provide a `default` case when switching over this `enum`.
-        case DO_NOT_SWITCH_OVER_THIS_EXHAUSITVELY
     }
 }
