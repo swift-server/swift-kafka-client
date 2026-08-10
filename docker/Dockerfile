@@ -1,4 +1,4 @@
-ARG swift_version=6.1
+ARG swift_version=6.2
 ARG ubuntu_version=jammy
 FROM swift:${swift_version}-${ubuntu_version}
 
