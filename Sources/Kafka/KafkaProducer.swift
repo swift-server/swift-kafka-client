@@ -155,6 +155,41 @@ public final class KafkaProducer: Service, Sendable {
         return (producer: producer, events: eventsSequence)
     }
 
+    /// Creates a producer, runs it for the duration of the closure, and shuts it down on return.
+    ///
+    /// Spawns the producer's ``run()`` loop in a child task and triggers a graceful shutdown
+    /// when `body` returns or throws — flushing outstanding messages, with no `ServiceGroup`
+    /// required. Use this for scoped, short-lived producers (tests, scripts, one-off jobs).
+    /// For long-running services, use ``makeProducer(config:)`` and manage the lifecycle
+    /// with a `ServiceGroup`.
+    ///
+    /// - Parameters:
+    ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    ///     - body: A closure that receives the producer and its events sequence.
+    /// - Returns: The value returned by `body`.
+    /// - Throws: A ``KafkaError`` if initializing the producer failed, or any error thrown by `body`.
+    public static func withProducer<Result>(
+        config: KafkaProducerConfig,
+        _ body: (KafkaProducer, Events) async throws -> Result
+    ) async throws -> Result {
+        let (producer, events) = try makeProducer(config: config)
+        return try await withThrowingTaskGroup(of: Void.self) { group -> Result in
+            group.addTask {
+                try await producer.run()
+            }
+            do {
+                let value = try await body(producer, events)
+                producer.triggerGracefulShutdown()
+                try? await group.waitForAll()
+                return value
+            } catch {
+                producer.triggerGracefulShutdown()
+                try? await group.waitForAll()
+                throw error
+            }
+        }
+    }
+
     /// Starts the producer.
     ///
     /// - Important: Call this method to drive the producer. It runs until either the calling task is canceled or gracefully shut down.

@@ -2198,6 +2198,54 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
         }
     }
 
+    // MARK: - Scoped withConsumer / withProducer
+
+    @Test func withConsumerConsumesMessagesThenShutsDown() async throws {
+        try await withTestTopic { testTopic in
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            // withConsumer runs the consumer for the duration of the closure and
+            // gracefully shuts it down when the closure returns.
+            let consumed = try await KafkaConsumer.withConsumer(config: consumerConfig) { _, messages, _ in
+                var received = [KafkaConsumer.Message]()
+                for try await message in messages {
+                    received.append(message)
+                    if received.count >= testMessages.count {
+                        break
+                    }
+                }
+                return received
+            }
+
+            #expect(consumed.count == testMessages.count)
+            for (index, message) in consumed.enumerated() {
+                #expect(testMessages[index].topic == message.topic)
+                #expect(ByteBuffer(string: testMessages[index].value) == message.value)
+            }
+        }
+    }
+
+    @Test func withProducerSendsMessageThenShutsDown() async throws {
+        try await withTestTopic { testTopic in
+            let report = try await KafkaProducer.withProducer(config: self.producerConfig) { producer, _ in
+                let message = KafkaProducer.Message(topic: testTopic, value: "hello withProducer")
+                return try await producer.sendAndAwait(message)
+            }
+
+            guard case .acknowledged(let acknowledged) = report.status else {
+                Issue.record("Expected message to be acknowledged, got \(report.status)")
+                return
+            }
+            #expect(acknowledged.topic == testTopic)
+        }
+    }
+
     // MARK: - Helpers
 
     func produceMessages(topic: KafkaTopic, count: UInt) async throws -> [KafkaProducer.Message<String, String>] {

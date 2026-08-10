@@ -179,6 +179,40 @@ public final class KafkaConsumer: Sendable, Service {
         return (consumer: consumer, messages: messagesSequence, events: eventsSequence)
     }
 
+    /// Creates a consumer, runs it for the duration of the closure, and shuts it down on return.
+    ///
+    /// Spawns the consumer's ``run()`` loop in a child task and triggers a graceful shutdown
+    /// when `body` returns or throws — no `ServiceGroup` required. Use this for scoped,
+    /// short-lived consumers (tests, scripts, one-off jobs). For long-running services,
+    /// use ``makeConsumer(config:)`` and manage the lifecycle with a `ServiceGroup`.
+    ///
+    /// - Parameters:
+    ///     - config: The ``KafkaConsumerConfig`` for configuring the ``KafkaConsumer``.
+    ///     - body: A closure that receives the consumer and its message and events sequences.
+    /// - Returns: The value returned by `body`.
+    /// - Throws: A ``KafkaError`` if the initialization failed, or any error thrown by `body`.
+    public static func withConsumer<Result>(
+        config: KafkaConsumerConfig,
+        _ body: (KafkaConsumer, Messages, Events) async throws -> Result
+    ) async throws -> Result {
+        let (consumer, messages, events) = try makeConsumer(config: config)
+        return try await withThrowingTaskGroup(of: Void.self) { group -> Result in
+            group.addTask {
+                try await consumer.run()
+            }
+            do {
+                let value = try await body(consumer, messages, events)
+                consumer.triggerGracefulShutdown()
+                try? await group.waitForAll()
+                return value
+            } catch {
+                consumer.triggerGracefulShutdown()
+                try? await group.waitForAll()
+                throw error
+            }
+        }
+    }
+
     // MARK: - Subscription Management
 
     /// Subscribes to the list of topics you provide.
