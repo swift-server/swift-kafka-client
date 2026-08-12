@@ -1,6 +1,7 @@
 .DS_Store
 /.build
 /Benchmarks/.build
+/Benchmarks/.benchmarkBaselines
 /Packages
 /*.xcodeproj
 xcuserdata/
@@ -9,3 +10,4 @@ DerivedData/
 Package.resolved
 .*.sw?
 .swiftpm
+.idea/
