@@ -6,14 +6,6 @@ permissions:
 on:
   workflow_call:
     inputs:
-      linux_6_1_enabled:
-        type: boolean
-        description: "Boolean to enable the Linux 6.1 Swift version matrix job. Defaults to true."
-        default: true
-      linux_6_1_arguments_override:
-        type: string
-        description: "The arguments passed to swift test in the Linux 6.1 Swift version matrix job."
-        default: ""
       linux_6_2_enabled:
         type: boolean
         description: "Boolean to enable the Linux 6.2 Swift version matrix job. Defaults to true."
@@ -56,9 +48,6 @@ jobs:
       matrix:
         # We are specifying only the major and minor of the docker images to automatically pick up the latest patch release
         swift:
-          - image: "swift:6.1-jammy"
-            swift_version: "6.1"
-            enabled: ${{ inputs.linux_6_1_enabled }}
           - image: "swift:6.2-jammy"
             swift_version: "6.2"
             enabled: ${{ inputs.linux_6_2_enabled }}
@@ -87,7 +76,6 @@ jobs:
         env:
           SWIFT_VERSION: ${{ matrix.swift.swift_version }}
           COMMAND: "swift test"
-          COMMAND_OVERRIDE_6_1: "swift test ${{ inputs.linux_6_1_arguments_override }}"
           COMMAND_OVERRIDE_6_2: "swift test ${{ inputs.linux_6_2_arguments_override }}"
           COMMAND_OVERRIDE_6_3: "swift test ${{ inputs.linux_6_3_arguments_override }}"
           COMMAND_OVERRIDE_NIGHTLY_NEXT: "swift test ${{ inputs.linux_nightly_next_arguments_override }}"
