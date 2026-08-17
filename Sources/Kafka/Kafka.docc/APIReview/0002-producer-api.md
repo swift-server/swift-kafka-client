@@ -43,16 +43,14 @@ public final class KafkaProducer: Service, Sendable {
     /// Creates a producer, runs it for the duration of the closure, and shuts it down on return.
     ///
     /// Spawns the producer's `run()` loop internally and cancels it when `body` returns or
-    /// throws — no `ServiceGroup` required. Intended for scoped, short-lived use (tests,
-    /// scripts, one-off jobs). For long-running services, use `makeProducer(config:)`
-    /// with a `ServiceGroup`.
+    /// throws.
     ///
     /// - Parameters:
     ///   - config: The ``KafkaProducerConfig`` for configuring the producer.
     ///   - body: A closure that receives the producer and its events sequence.
     /// - Returns: The value returned by `body`.
     /// - Throws: A ``KafkaError`` if initialization failed, or any error thrown by `body`.
-    public static func withProducer<Result>(
+    public static func withProducer<Result: ~Copyable>(
         config: KafkaProducerConfig,
         _ body: (KafkaProducer, Events) async throws -> Result
     ) async throws -> Result

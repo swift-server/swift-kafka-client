@@ -44,16 +44,14 @@ public final class KafkaConsumer: Sendable, Service {
     /// Creates a consumer, runs it for the duration of the closure, and shuts it down on return.
     ///
     /// Spawns the consumer's `run()` loop internally and cancels it when `body` returns or
-    /// throws — no `ServiceGroup` required. Intended for scoped, short-lived use (tests,
-    /// scripts, one-off jobs). For long-running services, use `makeConsumer(config:)`
-    /// with a `ServiceGroup`.
+    /// throws.
     ///
     /// - Parameters:
     ///   - config: The ``KafkaConsumerConfig`` for configuring the consumer.
     ///   - body: A closure that receives the consumer and its message and events sequences.
     /// - Returns: The value returned by `body`.
     /// - Throws: A ``KafkaError`` if initialization failed, or any error thrown by `body`.
-    public static func withConsumer<Result>(
+    public static func withConsumer<Result: ~Copyable>(
         config: KafkaConsumerConfig,
         _ body: (KafkaConsumer, Messages, Events) async throws -> Result
     ) async throws -> Result
@@ -215,9 +213,9 @@ extension KafkaConsumer {
         /// This message's offset within its partition.
         public var offset: KafkaOffset { get }
         /// The message key, if any.
-        public var key: ByteBuffer? { get }
+        public var key: [UInt8]? { get }
         /// The message value.
-        public var value: ByteBuffer { get }
+        public var value: [UInt8] { get }
         /// The message headers.
         public var headers: [KafkaHeader] { get }
         /// The timestamp of the message in milliseconds since epoch, or `nil` if not available.
@@ -260,7 +258,10 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
     public let rawValue: Int32
 
     /// Creates a timestamp type from its raw librdkafka value.
-    public init(rawValue: Int32)
+    ///
+    /// Internal: the library constructs these from librdkafka. Callers only read
+    /// `rawValue` or compare against the static constants below.
+    init(rawValue: Int32)
 
     /// Timestamp not available.
     public static let notAvailable: KafkaTimestampType
@@ -284,10 +285,10 @@ public struct KafkaHeader: Sendable, Hashable {
     /// The key associated with the header.
     public var key: String
     /// The value associated with the header.
-    public var value: ByteBuffer?
+    public var value: [UInt8]?
 
     /// Creates a new Kafka header with the key and optional value you provide.
-    public init(key: String, value: ByteBuffer? = nil)
+    public init(key: String, value: [UInt8]? = nil)
 }
 
 /// The identifier of a partition within a topic.
