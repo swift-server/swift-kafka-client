@@ -21,7 +21,10 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
     public let rawValue: Int32
 
     /// Creates a timestamp type from its raw librdkafka value.
-    public init(rawValue: Int32) {
+    ///
+    /// Internal: the library constructs these from librdkafka. Callers only read
+    /// `rawValue` or compare against the static constants below.
+    init(rawValue: Int32) {
         self.rawValue = rawValue
     }
 
@@ -59,9 +62,9 @@ extension KafkaConsumer {
         /// The headers of the message.
         public var headers: [KafkaHeader]
         /// The key of the message.
-        public var key: ByteBuffer?
+        public var key: [UInt8]?
         /// The body of the message.
-        public var value: ByteBuffer
+        public var value: [UInt8]
         /// The offset of the message in its partition.
         public var offset: KafkaOffset
         /// The timestamp of the message in milliseconds since epoch, or `nil` if not available.
@@ -106,12 +109,12 @@ extension KafkaConsumer {
                     start: keyPointer,
                     count: rdKafkaMessage.key_len
                 )
-                self.key = .init(bytes: keyBufferPointer)
+                self.key = [UInt8](keyBufferPointer)
             } else {
                 self.key = nil
             }
 
-            self.value = ByteBuffer(bytes: valueBufferPointer)
+            self.value = [UInt8](valueBufferPointer)
 
             self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
 
@@ -123,4 +126,3 @@ extension KafkaConsumer {
         }
     }
 }
-

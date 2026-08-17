@@ -99,8 +99,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(ByteBuffer(string: testMessages[index].key!) == consumedMessage.key)
-                        #expect(ByteBuffer(string: testMessages[index].value) == consumedMessage.value)
+                        #expect(Array(testMessages[index].key!.utf8) == consumedMessage.key)
+                        #expect(Array(testMessages[index].value.utf8) == consumedMessage.value)
                     }
                 }
 
@@ -157,8 +157,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(ByteBuffer(string: testMessages[index].key!) == consumedMessage.key)
-                        #expect(ByteBuffer(string: testMessages[index].value) == consumedMessage.value)
+                        #expect(Array(testMessages[index].key!.utf8) == consumedMessage.key)
+                        #expect(Array(testMessages[index].value.utf8) == consumedMessage.value)
                     }
                 }
 
@@ -275,7 +275,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
             let testMessages = Self.createTestMessages(
                 topic: testTopic,
                 headers: [
-                    KafkaHeader(key: "some.header", value: ByteBuffer(string: "some-header-value")),
+                    KafkaHeader(key: "some.header", value: Array("some-header-value".utf8)),
                     KafkaHeader(key: "some.null.header", value: nil),
                 ],
                 count: 10
@@ -371,8 +371,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 let consumedMessage = try await consumerIterator.next()
                 #expect(testMessages.first!.topic == consumedMessage!.topic)
-                #expect(ByteBuffer(string: testMessages.first!.key!) == consumedMessage!.key)
-                #expect(ByteBuffer(string: testMessages.first!.value) == consumedMessage!.value)
+                #expect(Array(testMessages.first!.key!.utf8) == consumedMessage!.key)
+                #expect(Array(testMessages.first!.value.utf8) == consumedMessage!.value)
 
                 // Trigger a graceful shutdown
                 await serviceGroup.triggerGracefulShutdown()
@@ -440,8 +440,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(ByteBuffer(string: testMessages[index].key!) == consumedMessage.key)
-                        #expect(ByteBuffer(string: testMessages[index].value) == consumedMessage.value)
+                        #expect(Array(testMessages[index].key!.utf8) == consumedMessage.key)
+                        #expect(Array(testMessages[index].value.utf8) == consumedMessage.value)
                     }
                 }
 
@@ -500,11 +500,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[firstConsumerOffset + index].topic == consumedMessage.topic)
                         #expect(
-                            ByteBuffer(string: testMessages[firstConsumerOffset + index].key!)
+                            Array(testMessages[firstConsumerOffset + index].key!.utf8)
                                 == consumedMessage.key
                         )
                         #expect(
-                            ByteBuffer(string: testMessages[firstConsumerOffset + index].value)
+                            Array(testMessages[firstConsumerOffset + index].value.utf8)
                                 == consumedMessage.value
                         )
                     }
@@ -807,11 +807,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[firstConsumerCount + index].topic == consumedMessage.topic)
                         #expect(
-                            ByteBuffer(string: testMessages[firstConsumerCount + index].key!)
+                            Array(testMessages[firstConsumerCount + index].key!.utf8)
                                 == consumedMessage.key
                         )
                         #expect(
-                            ByteBuffer(string: testMessages[firstConsumerCount + index].value)
+                            Array(testMessages[firstConsumerCount + index].value.utf8)
                                 == consumedMessage.value
                         )
                     }
@@ -2226,7 +2226,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
             #expect(consumed.count == testMessages.count)
             for (index, message) in consumed.enumerated() {
                 #expect(testMessages[index].topic == message.topic)
-                #expect(ByteBuffer(string: testMessages[index].value) == message.value)
+                #expect(Array(testMessages[index].value.utf8) == message.value)
             }
         }
     }

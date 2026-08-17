@@ -56,3 +56,8 @@ API breakage: constructor KafkaTopicPartitionOffset.init(topic:partition:offset:
 API breakage: func _createTestMessages(topic:headers:count:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
 API breakage: func RDKafkaClient._createUniqueTopic(partitions:) has return type change from Swift.String to Kafka.KafkaTopic
 API breakage: func RDKafkaClient._deleteTopic(_:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: var KafkaHeader.value has declared type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: accessor KafkaHeader.value.Get() has return type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: accessor KafkaHeader.value.Set() has parameter 0 type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: constructor KafkaHeader.init(key:value:) has parameter 1 type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: constructor KafkaTimestampType.init(rawValue:) has been removed
