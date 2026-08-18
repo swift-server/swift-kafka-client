@@ -373,4 +373,3 @@ extension KafkaConsumerConfiguration {
         return config
     }
 }
-

@@ -255,7 +255,6 @@ public struct KafkaTopicConfiguration: Sendable {
     public init() {}
 }
 
-
 // MARK: - KafkaTopicConfiguration + Dictionary
 
 extension KafkaTopicConfiguration {
