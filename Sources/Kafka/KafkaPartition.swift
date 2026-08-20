@@ -15,7 +15,7 @@
 import Crdkafka
 
 /// The identifier of a Kafka partition.
-public struct KafkaPartition: RawRepresentable {
+public struct KafkaPartition: RawRepresentable, CustomStringConvertible, Hashable, Sendable {
     /// The raw integer identifier of the partition.
     public var rawValue: Int {
         didSet {
@@ -25,6 +25,9 @@ public struct KafkaPartition: RawRepresentable {
             )
         }
     }
+
+    /// A textual representation of the partition identifier.
+    public var description: String { String(self.rawValue) }
 
     /// Creates a partition identifier from its raw integer value.
     ///
@@ -42,11 +45,3 @@ public struct KafkaPartition: RawRepresentable {
     /// When you set this value, the partition is assigned automatically using the topic's partitioner function.
     public static let unassigned = KafkaPartition(rawValue: Int(RD_KAFKA_PARTITION_UA))
 }
-
-// MARK: KafkaPartition + Hashable
-
-extension KafkaPartition: Hashable {}
-
-// MARK: KafkaPartition + Sendable
-
-extension KafkaPartition: Sendable {}

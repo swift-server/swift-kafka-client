@@ -275,7 +275,7 @@ public final class RDKafkaClient: Sendable {
         // can ultimately access all kafkaHeader underlying key/value bytes safely.
         return try kafkaHeader.key.withCString { keyCString in
             if let headerValue = kafkaHeader.value {
-                return try headerValue.withUnsafeReadableBytes { valueBuffer in
+                return try headerValue.withUnsafeBytes { valueBuffer in
                     let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, valueBuffer)
                     cHeaders.append(cHeader)
                     return try self._withKafkaCHeadersRecursive(
@@ -1123,13 +1123,13 @@ public final class RDKafkaClient: Sendable {
             }
             let headerKey = String(cString: headerKeyPointer)
 
-            var headerValue: ByteBuffer?
+            var headerValue: [UInt8]?
             if let headerValuePointer, headerValueSize > 0 {
                 let headerValueBufferPointer = UnsafeRawBufferPointer(
                     start: headerValuePointer,
                     count: headerValueSize
                 )
-                headerValue = ByteBuffer(bytes: headerValueBufferPointer)
+                headerValue = [UInt8](headerValueBufferPointer)
             }
 
             let newHeader = KafkaHeader(key: headerKey, value: headerValue)

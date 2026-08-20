@@ -280,7 +280,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             let testMessages = Self.createTestMessages(
                 topic: testTopic,
                 headers: [
-                    KafkaHeader(key: "some.header", value: ByteBuffer(string: "some-header-value")),
+                    KafkaHeader(key: "some.header", value: Array("some-header-value".utf8)),
                     KafkaHeader(key: "some.null.header", value: nil),
                 ],
                 count: 10

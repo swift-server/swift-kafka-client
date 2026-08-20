@@ -94,7 +94,7 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("ProducerMessage_build_8_headers") { benchmark in
         let value = [UInt8](repeating: 0xAB, count: 64)
         let headerKeys = (0..<8).map { "header-\($0)" }
-        let headerValue = ByteBuffer(string: "header-value")
+        let headerValue = Array("header-value".utf8)
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             var headers: [KafkaHeader] = []

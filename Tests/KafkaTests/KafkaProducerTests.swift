@@ -50,7 +50,7 @@ import Foundation
             }
 
             let expectedTopic = "test-topic"
-            let headers = [KafkaHeader(key: "some", value: ByteBuffer.init(string: "test"))]
+            let headers = [KafkaHeader(key: "some", value: Array("test".utf8))]
             let message = KafkaProducerMessage(
                 topic: expectedTopic,
                 headers: headers,
