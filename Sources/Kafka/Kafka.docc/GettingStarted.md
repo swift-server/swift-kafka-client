@@ -57,7 +57,9 @@ let logger = Logger(label: "kafka-example")
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let producer = try KafkaProducer(config: config, logger: logger)
+let (producer, _) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -69,7 +71,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(
+        let message = KafkaProducer.Message(
             topic: "topic-name",
             value: "Hello, World!"
         )
@@ -86,9 +88,11 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 ### Read messages from a topic
 
-To consume messages, create a ``KafkaConsumer`` with a group consumption strategy, run it inside a `ServiceGroup`, and iterate ``KafkaConsumer/messages``:
+To consume messages, create a ``KafkaConsumer`` with a group consumption strategy, run it inside a `ServiceGroup`, and iterate its ``KafkaConsumer/Messages`` sequence:
 
 ```swift
+let logger = Logger(label: "kafka-example")
+
 var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(
@@ -96,7 +100,9 @@ config.consumptionStrategy = .group(
     topics: ["topic-name"]
 )
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, messages, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -108,8 +114,8 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
-            print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
+        for try await message in messages {
+            print("Received: \(message.topic.rawValue)/\(message.partition) at offset \(message.offset)")
         }
     }
 }

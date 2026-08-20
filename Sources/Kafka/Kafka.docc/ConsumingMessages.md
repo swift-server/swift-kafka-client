@@ -4,7 +4,7 @@ Receive records from Kafka topics as an asynchronous sequence, control offset co
 
 ## Overview
 
-A ``KafkaConsumer`` joins a consumer group and exposes records through a ``KafkaConsumerMessages`` asynchronous sequence. Iterate the sequence with `for try await`, and the consumer integrates naturally with structured concurrency, task cancellation, and graceful shutdown through `ServiceGroup`.
+A ``KafkaConsumer`` joins a consumer group and exposes records through a ``KafkaConsumer/Messages`` asynchronous sequence. Iterate the sequence with `for try await`, and the consumer integrates naturally with structured concurrency, task cancellation, and graceful shutdown through `ServiceGroup`.
 
 By default, the consumer stores and commits offsets automatically as iteration proceeds. For at-least-once delivery, disable automatic offset storage and store offsets after processing each record. For full control, also turn off the periodic auto-commit and commit explicitly.
 
@@ -25,10 +25,14 @@ For security options, see <doc:SecuringConnections>.
 
 ### Iterate the message sequence
 
-Run the consumer inside a `ServiceGroup` and read records from ``KafkaConsumer/messages``:
+Run the consumer inside a `ServiceGroup` and read records from its ``KafkaConsumer/Messages`` sequence:
 
 ```swift
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, messages, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -40,14 +44,14 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
-            print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
+        for try await message in messages {
+            print("Received: \(message.topic.rawValue)/\(message.partition) at offset \(message.offset)")
         }
     }
 }
 ```
 
-Each ``KafkaConsumerMessage`` carries the topic, partition, offset, key, value, headers, and timestamp.
+Each ``KafkaConsumer/Message`` carries the topic, partition, offset, key, value, headers, and timestamp.
 
 ### Achieve at-least-once delivery
 
@@ -62,11 +66,11 @@ config.consumptionStrategy = .group(
 )
 config.enableAutoOffsetStore = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, messages, _) = try KafkaConsumer.makeConsumer(config: config)
 
 // ... run inside a ServiceGroup as in the previous example.
 
-for try await message in consumer.messages {
+for try await message in messages {
     // Process the record.
     try consumer.storeOffset(message)
 }
@@ -87,20 +91,20 @@ config.consumptionStrategy = .group(
 )
 config.enableAutoCommit = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, messages, _) = try KafkaConsumer.makeConsumer(config: config)
 
 // ... run inside a ServiceGroup as above.
 
-for try await message in consumer.messages {
+for try await message in messages {
     // Process the record.
     try await consumer.commit(message)
 }
 ```
 
-To commit every previously stored offset in one call, use ``KafkaConsumer/commit()``:
+To commit every previously stored offset in one call, use ``KafkaConsumer/commitStoredOffsets()``:
 
 ```swift
-try await consumer.commit()
+try await consumer.commitStoredOffsets()
 ```
 
 ### Manage subscriptions dynamically
@@ -112,7 +116,7 @@ Topic subscriptions change at runtime — call ``KafkaConsumer/subscribe(topics:
 try consumer.subscribe(topics: ["topic-a", "topic-b"])
 
 // Query the current subscription.
-let topics = try consumer.subscribedTopics()
+let topics = try consumer.subscribedTopics
 
 // Unsubscribe from all topics.
 try consumer.unsubscribe()
@@ -136,14 +140,16 @@ While a partition is paused, the consumer stops fetching records for it but cont
 
 ### Observe rebalances
 
-When the membership of a consumer group changes — a consumer joins, leaves, or fails — Kafka redistributes the group's partitions across the remaining members. This is a *rebalance*. ``KafkaConsumer`` performs the assign and unassign automatically and surfaces a ``KafkaConsumerRebalance`` notification through the ``KafkaConsumerEvents`` sequence, so you can react — for example, by committing offsets for partitions that are moving away.
+When the membership of a consumer group changes — a consumer joins, leaves, or fails — Kafka redistributes the group's partitions across the remaining members. This is a *rebalance*. ``KafkaConsumer`` performs the assign and unassign automatically and surfaces a ``KafkaConsumer/Rebalance`` notification through the ``KafkaConsumer/Events`` sequence, so you can react — for example, by committing offsets for partitions that are moving away.
 
-The following example creates the consumer with ``KafkaConsumer/makeConsumerWithEvents(config:logger:)`` and iterates the event sequence alongside the messages:
+The following example creates the consumer with ``KafkaConsumer/makeConsumer(config:)`` and iterates the event sequence alongside the messages:
 
 ```swift
 config.partitionAssignmentStrategy = "cooperative-sticky"
 
-let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: logger)
+let (consumer, messages, events) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -156,7 +162,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
     // Consume records.
     group.addTask {
-        for try await message in consumer.messages {
+        for try await message in messages {
             // Process the record, then store or commit its offset.
         }
     }
@@ -186,7 +192,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 }
 ```
 
-Each ``KafkaConsumerRebalance`` reports its ``KafkaConsumerRebalance/kind`` — ``KafkaConsumerRebalance/Kind/assign``, ``KafkaConsumerRebalance/Kind/revoke``, or ``KafkaConsumerRebalance/Kind/error(_:)`` — and the ``KafkaConsumerRebalance/partitions`` involved. Commit offsets on revoke so another consumer resumes from the right position.
+Each ``KafkaConsumer/Rebalance`` reports its ``KafkaConsumer/Rebalance/kind`` — ``KafkaConsumer/Rebalance/Kind/assign``, ``KafkaConsumer/Rebalance/Kind/revoke``, or ``KafkaConsumer/Rebalance/Kind/error(_:)`` — and the ``KafkaConsumer/Rebalance/partitions`` involved. Commit offsets on revoke so another consumer resumes from the right position.
 
 Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStrategy``: `cooperative-sticky` for incremental cooperative rebalancing, or `range` and `roundrobin` for eager rebalancing. ``KafkaConsumer`` adapts to the negotiated protocol, so your handling code is identical either way. Cooperative and eager strategies must not be mixed within a group.
 
@@ -196,21 +202,20 @@ Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStra
 
 ### Reading records
 
-- ``KafkaConsumer/messages``
-- ``KafkaConsumerMessages``
-- ``KafkaConsumerMessage``
+- ``KafkaConsumer/Messages``
+- ``KafkaConsumer/Message``
 
 ### Managing subscriptions
 
 - ``KafkaConsumer/subscribe(topics:)``
 - ``KafkaConsumer/unsubscribe()``
-- ``KafkaConsumer/subscribedTopics()``
+- ``KafkaConsumer/subscribedTopics``
 
 ### Controlling offsets
 
 - ``KafkaConsumer/storeOffset(_:)``
 - ``KafkaConsumer/commit(_:)``
-- ``KafkaConsumer/commit()``
+- ``KafkaConsumer/commitStoredOffsets()``
 
 ### Pausing partitions
 
@@ -219,7 +224,7 @@ Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStra
 
 ### Observing rebalances and events
 
-- ``KafkaConsumer/makeConsumerWithEvents(config:logger:)``
-- ``KafkaConsumerRebalance``
-- ``KafkaConsumerEvent``
-- ``KafkaConsumerEvents``
+- ``KafkaConsumer/makeConsumer(config:)``
+- ``KafkaConsumer/Rebalance``
+- ``KafkaConsumer/Event``
+- ``KafkaConsumer/Events``

@@ -41,36 +41,6 @@ extension KafkaProducerCloseOnTerminate: NIOAsyncSequenceProducerDelegate {
     }
 }
 
-// MARK: - KafkaProducerEvents
-
-/// An asynchronous sequence of producer events emitted by Kafka.
-///
-/// The sequence yields ``KafkaProducerEvent`` values such as delivery reports and errors.
-public struct KafkaProducerEvents: Sendable, AsyncSequence {
-    /// The type of event the sequence yields.
-    public typealias Element = KafkaProducerEvent
-    typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
-    typealias WrappedSequence = NIOAsyncSequenceProducer<Element, BackPressureStrategy, KafkaProducerCloseOnTerminate>
-    let wrappedSequence: WrappedSequence
-
-    /// An asynchronous iterator over producer events emitted by Kafka.
-    ///
-    /// The iterator yields ``KafkaProducerEvent`` values such as delivery reports and errors.
-    public struct AsyncIterator: AsyncIteratorProtocol {
-        var wrappedIterator: WrappedSequence.AsyncIterator
-
-        /// Returns the next producer event, or `nil` if the sequence has finished.
-        public mutating func next() async -> Element? {
-            await self.wrappedIterator.next()
-        }
-    }
-
-    /// Returns an asynchronous iterator over the producer event sequence.
-    public func makeAsyncIterator() -> AsyncIterator {
-        AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
-    }
-}
-
 // MARK: - KafkaProducer
 
 /// Sends messages to the Kafka cluster.
@@ -79,7 +49,7 @@ public struct KafkaProducerEvents: Sendable, AsyncSequence {
 ///   (based on topic-level configuration properties set on `KafkaProducerConfig`).
 public final class KafkaProducer: Service, Sendable {
     typealias Producer = NIOAsyncSequenceProducer<
-        KafkaProducerEvent,
+        Event,
         NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure,
         KafkaProducerCloseOnTerminate
     >
@@ -122,67 +92,25 @@ public final class KafkaProducer: Service, Sendable {
         )
     }
 
-    /// Creates a new producer.
+    /// Creates a producer and its paired events sequence.
     ///
-    /// This creates a producer without listening for events.
-    /// To also receive events, use ``makeProducerWithEvents(config:logger:)``.
+    /// Every producer receives an events sequence for delivery reports from
+    /// ``send(_:)`` and for error observation. Callers who only use
+    /// ``sendAndAwait(_:)`` may discard the returned `events` value.
     ///
-    /// - Parameters:
-    ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
-    ///     - logger: A logger.
-    /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public convenience init(
-        config: KafkaProducerConfig,
-        logger: Logger
-    ) throws {
-        let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
-
-        var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
-
-        if config.metrics.enabled {
-            subscribedEvents.append(.statistics)
-        }
-
-        let client = try RDKafkaClient.makeClient(
-            type: .producer,
-            configDictionary: config.config,
-            events: subscribedEvents,
-            logger: logger
-        )
-
-        stateMachine.withLockedValue {
-            $0.initialize(
-                client: client,
-                source: nil
-            )
-        }
-
-        self.init(
-            stateMachine: stateMachine,
-            config: config,
-            logger: logger
-        )
-    }
-
-    /// Creates a new producer paired with an asynchronous event sequence.
-    ///
-    /// The returned tuple pairs a ``KafkaProducer`` with its ``KafkaProducerEvents`` sequence.
-    ///
-    /// Use the asynchronous sequence to consume events.
-    ///
-    /// - Important: When the asynchronous sequence is deinitialized, the producer shuts down and stops accepting new messages.
-    ///   Additionally, consume the asynchronous sequence; otherwise the events buffer in memory indefinitely.
+    /// - Important: `send(_:)` and ``sendAndAwait(_:)`` keep working regardless of whether
+    ///   `events` is iterated or discarded. If you do iterate it, keep iterating; otherwise
+    ///   events buffer in memory indefinitely.
     ///
     /// - Parameters:
     ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
-    ///     - logger: A logger.
-    /// - Returns: A tuple containing the created ``KafkaProducer`` and the ``KafkaProducerEvents``
-    /// `AsyncSequence` used for receiving message events.
+    /// - Returns: A named tuple containing the created ``KafkaProducer`` and its
+    ///   ``KafkaProducer/Events`` `AsyncSequence`.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
-    public static func makeProducerWithEvents(
-        config: KafkaProducerConfig,
-        logger: Logger
-    ) throws -> (KafkaProducer, KafkaProducerEvents) {
+    public static func makeProducer(
+        config: KafkaProducerConfig
+    ) throws -> (producer: KafkaProducer, events: Events) {
+        let logger = Logger.current
         let stateMachine = NIOLockedValueBox(StateMachine(logger: logger))
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
@@ -210,7 +138,7 @@ public final class KafkaProducer: Service, Sendable {
         // If this order is not met and `RDKafkaClient.makeClient()` fails,
         // it leads to a call to `stateMachine.stopConsuming()` while it's still in the `.uninitialized` state.
         let sourceAndSequence = NIOAsyncSequenceProducer.makeSequence(
-            elementType: KafkaProducerEvent.self,
+            elementType: Event.self,
             backPressureStrategy: NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure(),
             finishOnDeinit: true,
             delegate: KafkaProducerCloseOnTerminate(stateMachine: stateMachine)
@@ -223,43 +151,44 @@ public final class KafkaProducer: Service, Sendable {
             )
         }
 
-        let eventsSequence = KafkaProducerEvents(wrappedSequence: sourceAndSequence.sequence)
-        return (producer, eventsSequence)
+        let eventsSequence = Events(wrappedSequence: sourceAndSequence.sequence)
+        return (producer: producer, events: eventsSequence)
     }
 
-    /// Creates a new producer from a deprecated configuration value.
+    /// Creates a producer, runs it for the duration of the closure, and shuts it down on return.
     ///
-    /// This initializer is deprecated. Use ``init(config:logger:)`` instead.
-    @available(*, deprecated, message: "Use init(config:logger:) instead")
-    public convenience init(
-        configuration: KafkaProducerConfiguration,
-        logger: Logger
-    ) throws {
-        try self.init(
-            config: configuration.asKafkaProducerConfig,
-            logger: logger
-        )
-    }
-
-    /// Creates a new producer and an event sequence from a deprecated configuration value.
+    /// Spawns the producer's ``run()`` loop internally and cancels it when `body` returns or
+    /// throws.
     ///
-    /// This method is deprecated. Use ``makeProducerWithEvents(config:logger:)`` instead.
-    @available(*, deprecated, message: "Use makeProducerWithEvents(config:logger:) instead")
-    public static func makeProducerWithEvents(
-        configuration: KafkaProducerConfiguration,
-        logger: Logger
-    ) throws -> (KafkaProducer, KafkaProducerEvents) {
-        try Self.makeProducerWithEvents(
-            config: configuration.asKafkaProducerConfig,
-            logger: logger
-        )
+    /// - Parameters:
+    ///     - config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
+    ///     - body: A closure that receives the producer and its events sequence.
+    /// - Returns: The value returned by `body`.
+    /// - Throws: A ``KafkaError`` if initializing the producer failed, or any error thrown by `body`.
+    public static func withProducer<Result: ~Copyable>(
+        config: KafkaProducerConfig,
+        _ body: (KafkaProducer, Events) async throws -> Result
+    ) async throws -> Result {
+        let (producer, events) = try makeProducer(config: config)
+        async let running: Void = producer.run()
+        do {
+            let value = try await body(producer, events)
+            producer.triggerGracefulShutdown()
+            _ = try? await running
+            return value
+        } catch {
+            producer.triggerGracefulShutdown()
+            _ = try? await running
+            throw error
+        }
     }
 
     /// Starts the producer.
     ///
     /// - Important: Call this method to drive the producer. It runs until either the calling task is canceled or gracefully shut down.
     ///
-    /// Stop the producer with ``triggerGracefulShutdown()``.
+    /// Stop the producer by canceling the enclosing task, or by running it inside a
+    /// `ServiceGroup` and triggering that group's graceful shutdown.
     public func run() async throws {
         try await withGracefulShutdownHandler {
             try await self._run()
@@ -279,7 +208,7 @@ public final class KafkaProducer: Service, Sendable {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
-                        self.resumeContinuations(for: reports)
+                        _ = self.dispatchDeliveryReports(reports)
                     case .error(let kafkaError):
                         self.logger.info(
                             "Kafka client error",
@@ -295,8 +224,10 @@ public final class KafkaProducer: Service, Sendable {
                     case .statistics(let statistics):
                         self.config.metrics.update(with: statistics)
                     case .deliveryReport(let reports):
-                        self.resumeContinuations(for: reports)
-                        _ = source?.yield(.deliveryReports(reports))
+                        let reportsForEvents = self.dispatchDeliveryReports(reports)
+                        if !reportsForEvents.isEmpty {
+                            _ = source?.yield(.deliveryReports(reportsForEvents))
+                        }
                     case .error(let kafkaError):
                         _ = source?.yield(.error(kafkaError))
                         self.logger.info(
@@ -338,13 +269,18 @@ public final class KafkaProducer: Service, Sendable {
         }
     }
 
-    /// Match delivery reports against pending `sendAndAwait` continuations.
+    /// Route each delivery report to exactly one channel.
     ///
-    /// For each report, if a continuation is registered for that message ID, resume it.
-    /// Returns all reports; the producer yields them to the events sequence regardless
-    /// of whether it resumed a continuation. This ensures the events sequence is a complete
-    /// log of all delivery reports, even for messages sent via `sendAndAwait`.
-    private func resumeContinuations(for reports: [KafkaDeliveryReport]) {
+    /// - Reports whose message ID has a pending `sendAndAwait(_:)` continuation are resolved
+    ///   on that continuation only. The report is not re-emitted on the events sequence.
+    /// - Reports whose message ID has no pending continuation came from `send(_:)`;
+    ///   these are returned so the caller can emit them on the events sequence.
+    ///
+    /// Each delivery lands on exactly one destination. Callers using both `sendAndAwait(_:)`
+    /// and iterating `KafkaProducer.Events` never see the same report twice.
+    private func dispatchDeliveryReports(_ reports: [DeliveryReport]) -> [DeliveryReport] {
+        var reportsForEvents: [DeliveryReport] = []
+        reportsForEvents.reserveCapacity(reports.count)
         for report in reports {
             switch report.status {
             case .acknowledged:
@@ -359,7 +295,7 @@ public final class KafkaProducer: Service, Sendable {
                 )
             }
 
-            let continuation: CheckedContinuation<KafkaDeliveryReport, Error>? =
+            let continuation: CheckedContinuation<DeliveryReport, Error>? =
                 self.stateMachine.withLockedValue {
                     $0.removeContinuation(for: report.id.rawValue)
                 }
@@ -370,8 +306,11 @@ public final class KafkaProducer: Service, Sendable {
                 case .failure(let error):
                     continuation.resume(throwing: error)
                 }
+            } else {
+                reportsForEvents.append(report)
             }
         }
+        return reportsForEvents
     }
 
     /// Shuts the producer down gracefully.
@@ -379,7 +318,7 @@ public final class KafkaProducer: Service, Sendable {
     /// Flushes any buffered messages and waits until the producer receives a callback for each one. After flushing, this method shuts down the connection to Kafka and cleans up any remaining state.
     ///
     /// Pairs with ``run()``.
-    public func triggerGracefulShutdown() {
+    func triggerGracefulShutdown() {
         self.logger.debug("Kafka producer shutting down")
         self.stateMachine.withLockedValue { $0.finish() }
     }
@@ -392,12 +331,12 @@ public final class KafkaProducer: Service, Sendable {
     ///
     /// For acknowledged delivery, use ``sendAndAwait(_:)``.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` to send.
-    /// - Returns: Unique ``KafkaProducerMessageID`` matching the ``KafkaDeliveryReport/id`` property
-    /// of the corresponding ``KafkaDeliveryReport``.
+    /// - Parameter message: The ``KafkaProducer/Message`` to send.
+    /// - Returns: Unique ``KafkaProducer/MessageID`` matching the ``KafkaProducer/DeliveryReport/id`` property
+    /// of the corresponding ``KafkaProducer/DeliveryReport``.
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
-    public func send<Key, Value>(_ message: KafkaProducerMessage<Key, Value>) throws -> KafkaProducerMessageID {
+    public func send<Key, Value>(_ message: Message<Key, Value>) throws -> MessageID {
         let action = try self.stateMachine.withLockedValue { try $0.send() }
         switch action {
         case .send(let client, let newMessageID, let topicHandles):
@@ -415,22 +354,22 @@ public final class KafkaProducer: Service, Sendable {
                 )
                 throw error
             }
-            return KafkaProducerMessageID(rawValue: newMessageID)
+            return MessageID(rawValue: newMessageID)
         }
     }
 
     /// Sends a message to the Kafka cluster and awaits the delivery report.
     ///
     /// Unlike ``send(_:)``, this method suspends until the broker acknowledges (or rejects)
-    /// the message. The returned ``KafkaDeliveryReport`` contains the acknowledgment status,
+    /// the message. The returned ``KafkaProducer/DeliveryReport`` contains the acknowledgment status,
     /// partition, offset, and other metadata.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` to send.
-    /// - Returns: A ``KafkaDeliveryReport`` with the delivery status.
+    /// - Parameter message: The ``KafkaProducer/Message`` to send.
+    /// - Returns: A ``KafkaProducer/DeliveryReport`` with the delivery status.
     /// - Throws: A ``KafkaError`` if the message could not be enqueued or was rejected by the broker.
     public func sendAndAwait<Key, Value>(
-        _ message: KafkaProducerMessage<Key, Value>
-    ) async throws -> KafkaDeliveryReport {
+        _ message: Message<Key, Value>
+    ) async throws -> DeliveryReport {
         // Get the message ID and produce BEFORE entering the continuation,
         // so we have the ID available for the cancellation handler.
         let action = try self.stateMachine.withLockedValue { try $0.send() }
@@ -453,7 +392,7 @@ public final class KafkaProducer: Service, Sendable {
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
-                (continuation: CheckedContinuation<KafkaDeliveryReport, Error>) in
+                (continuation: CheckedContinuation<DeliveryReport, Error>) in
                 // Transition from .initialized to .pending BEFORE producing.
                 // The delivery report could arrive before produce() returns.
                 let result = self.stateMachine.withLockedValue {
@@ -493,6 +432,40 @@ public final class KafkaProducer: Service, Sendable {
     }
 }
 
+// MARK: - KafkaProducer + Events sequence
+
+extension KafkaProducer {
+    /// An asynchronous sequence of producer events emitted by Kafka.
+    ///
+    /// The sequence yields ``KafkaProducer/Event`` values such as delivery reports and errors.
+    public struct Events: Sendable, AsyncSequence {
+        /// The type of event the sequence yields.
+        public typealias Element = Event
+        typealias BackPressureStrategy = NIOAsyncSequenceProducerBackPressureStrategies.NoBackPressure
+        typealias WrappedSequence = NIOAsyncSequenceProducer<
+            Element, BackPressureStrategy, KafkaProducerCloseOnTerminate
+        >
+        let wrappedSequence: WrappedSequence
+
+        /// An asynchronous iterator over producer events emitted by Kafka.
+        ///
+        /// The iterator yields ``KafkaProducer/Event`` values such as delivery reports and errors.
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            var wrappedIterator: WrappedSequence.AsyncIterator
+
+            /// Returns the next producer event, or `nil` if the sequence has finished.
+            public mutating func next() async -> Element? {
+                await self.wrappedIterator.next()
+            }
+        }
+
+        /// Returns an asynchronous iterator over the producer event sequence.
+        public func makeAsyncIterator() -> AsyncIterator {
+            AsyncIterator(wrappedIterator: self.wrappedSequence.makeAsyncIterator())
+        }
+    }
+}
+
 // MARK: - KafkaProducer + StateMachine
 
 extension KafkaProducer {
@@ -510,7 +483,7 @@ extension KafkaProducer {
         /// - `.cancelled`: `onCancel` fired before registration — reject on register
         enum ContinuationState {
             case initialized
-            case pending(CheckedContinuation<KafkaDeliveryReport, Error>)
+            case pending(CheckedContinuation<DeliveryReport, Error>)
             case cancelled
         }
 
@@ -542,10 +515,16 @@ extension KafkaProducer {
                 topicHandles: RDKafkaTopicHandles
             )
             /// The producer is still running but the events asynchronous sequence terminated.
-            /// The producer drops all incoming events.
+            /// The producer drops all incoming events but continues to accept and send messages.
             ///
             /// - Parameter client: Client used for handling the connection to the Kafka cluster.
-            case eventConsumptionFinished(client: RDKafkaClient)
+            /// - Parameter messageIDCounter: Used to incrementally assign unique IDs to messages.
+            /// - Parameter topicHandles: Class containing all topic names with their respective `rd_kafka_topic_t` pointer.
+            case eventConsumptionFinished(
+                client: RDKafkaClient,
+                messageIDCounter: UInt,
+                topicHandles: RDKafkaTopicHandles
+            )
             /// ``KafkaProducer/triggerGracefulShutdown()`` was invoked so we are flushing
             /// any messages that wait to be sent and serve any remaining queued callbacks.
             ///
@@ -612,7 +591,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
                 return .pollAndYield(client: client, source: source)
-            case .eventConsumptionFinished(let client):
+            case .eventConsumptionFinished(let client, _, _):
                 return .pollWithoutYield(client: client)
             case .finishing(let client, let source):
                 return .flushFinishSourceAndTerminatePollLoop(client: client, source: source)
@@ -653,9 +632,20 @@ extension KafkaProducer {
                     newMessageID: newMessageID,
                     topicHandles: topicHandles
                 )
-            case .eventConsumptionFinished:
-                throw KafkaError.connectionClosed(
-                    reason: "Sequence consuming events was abruptly terminated, producer closed"
+            case .eventConsumptionFinished(let client, let messageIDCounter, let topicHandles):
+                // Events observation ended, but sending is independent of observation —
+                // matches every other Kafka client (Rust, Python, Go, Java), none of which
+                // tie the ability to send to whether delivery outcomes are being observed.
+                let newMessageID = messageIDCounter + 1
+                self.state = .eventConsumptionFinished(
+                    client: client,
+                    messageIDCounter: newMessageID,
+                    topicHandles: topicHandles
+                )
+                return .send(
+                    client: client,
+                    newMessageID: newMessageID,
+                    topicHandles: topicHandles
                 )
             case .finishing:
                 throw KafkaError.connectionClosed(reason: "Producer in the process of finishing")
@@ -680,8 +670,12 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .eventConsumptionFinished:
                 fatalError("messageSequenceTerminated() must not be invoked more than once")
-            case .started(let client, _, let source, _):
-                self.state = .eventConsumptionFinished(client: client)
+            case .started(let client, let messageIDCounter, let source, let topicHandles):
+                self.state = .eventConsumptionFinished(
+                    client: client,
+                    messageIDCounter: messageIDCounter,
+                    topicHandles: topicHandles
+                )
                 return .finishSource(source: source)
             case .finishing(let client, let source):
                 // Setting source to nil to prevent incoming events from buffering in `source`
@@ -702,7 +696,7 @@ extension KafkaProducer {
                 fatalError("\(#function) invoked while still in state \(self.state)")
             case .started(let client, _, let source, _):
                 self.state = .finishing(client: client, source: source)
-            case .eventConsumptionFinished(let client):
+            case .eventConsumptionFinished(let client, _, _):
                 self.state = .finishing(client: client, source: nil)
             case .finishing, .finished:
                 break
@@ -729,13 +723,13 @@ extension KafkaProducer {
         /// Transitions the slot from `.initialized` to `.pending(continuation)`.
         /// Returns `.alreadyCancelled` if `onCancel` already set the slot to `.cancelled`.
         mutating func registerContinuation(
-            _ continuation: CheckedContinuation<KafkaDeliveryReport, Error>,
+            _ continuation: CheckedContinuation<DeliveryReport, Error>,
             for messageID: UInt
         ) -> RegisterContinuationResult {
             guard let existing = self.pendingContinuations[messageID] else {
-                fatalError(
-                    "registerContinuation called without prior initializeContinuation for messageID \(messageID)"
-                )
+                // If the slot is missing, it was likely removed by failPendingContinuations()
+                // during producer shutdown. Treat this as a cancellation/closure.
+                return .alreadyCancelled
             }
             switch existing {
             case .cancelled:
@@ -758,7 +752,7 @@ extension KafkaProducer {
         /// as `.cancelled` so `registerContinuation` can reject it later.
         mutating func cancelContinuation(
             for messageID: UInt
-        ) -> CheckedContinuation<KafkaDeliveryReport, Error>? {
+        ) -> CheckedContinuation<DeliveryReport, Error>? {
             guard let existing = self.pendingContinuations.removeValue(forKey: messageID) else {
                 // Missing: the event loop already removed it via removeContinuation.
                 return nil
@@ -786,7 +780,7 @@ extension KafkaProducer {
         @discardableResult
         mutating func removeContinuation(
             for messageID: UInt
-        ) -> CheckedContinuation<KafkaDeliveryReport, Error>? {
+        ) -> CheckedContinuation<DeliveryReport, Error>? {
             guard let existing = self.pendingContinuations.removeValue(forKey: messageID) else {
                 return nil
             }

@@ -22,21 +22,21 @@ Kafka integrates with [swift-log](https://github.com/apple/swift-log) for struct
 ### Producing messages
 
 - ``KafkaProducer``
-- ``KafkaProducerMessage``
-- ``KafkaDeliveryReport``
-- ``KafkaAcknowledgedMessage``
-- ``KafkaProducerMessageID``
-- ``KafkaProducerEvents``
-- ``KafkaProducerEvent``
+- ``KafkaProducer/Message``
+- ``KafkaProducer/DeliveryReport``
+- ``KafkaProducer/AcknowledgedMessage``
+- ``KafkaProducer/MessageID``
+- ``KafkaProducer/Events``
+- ``KafkaProducer/Event``
 
 ### Consuming messages
 
 - ``KafkaConsumer``
-- ``KafkaConsumerMessages``
-- ``KafkaConsumerMessage``
-- ``KafkaConsumerEvents``
-- ``KafkaConsumerEvent``
-- ``KafkaConsumerRebalance``
+- ``KafkaConsumer/Messages``
+- ``KafkaConsumer/Message``
+- ``KafkaConsumer/Events``
+- ``KafkaConsumer/Event``
+- ``KafkaConsumer/Rebalance``
 - ``KafkaTimestampType``
 
 ### Configuring clients
@@ -51,6 +51,7 @@ Kafka integrates with [swift-log](https://github.com/apple/swift-log) for struct
 
 ### Identifying topics, partitions, and offsets
 
+- ``KafkaTopic``
 - ``KafkaTopicPartition``
 - ``KafkaTopicPartitionOffset``
 - ``KafkaPartition``

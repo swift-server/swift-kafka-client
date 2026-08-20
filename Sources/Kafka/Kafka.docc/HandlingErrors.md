@@ -6,15 +6,15 @@ Find where Kafka errors surface and classify them to decide whether to retry, re
 
 Both the producer and the consumer report failures as ``KafkaError`` values. A ``KafkaError`` carries a ``KafkaError/code`` describing the kind of failure and, when the error originates from librdkafka, a ``KafkaError/rdKafkaCode`` with the specific underlying code. The ``KafkaError/isFatal`` and ``KafkaError/isRetriable`` flags tell you how to respond.
 
-## Find where errors surface
+### Find where errors surface
 
 A ``KafkaError`` reaches your code in three ways:
 
 - **Thrown** from throwing calls such as ``KafkaProducer/send(_:)``, ``KafkaProducer/sendAndAwait(_:)``, ``KafkaConsumer/subscribe(topics:)``, and ``KafkaConsumer/commit(_:)``.
-- **On an event sequence**, as ``KafkaConsumerEvent/error(_:)`` or ``KafkaProducerEvent/error(_:)`` — for example, a broker disconnection or an authentication failure.
-- **In a delivery report**, when a ``KafkaDeliveryReport``'s status is `failure` because a message could not be delivered.
+- **On an event sequence**, as ``KafkaConsumer/Event/error(_:)`` or ``KafkaProducer/Event/error(_:)`` — for example, a broker disconnection or an authentication failure.
+- **In a delivery report**, when a ``KafkaProducer/DeliveryReport``'s status is `failure` because a message could not be delivered.
 
-## Classify an error
+### Classify an error
 
 Use ``KafkaError/isFatal`` and ``KafkaError/isRetriable`` to decide how to respond, and inspect ``KafkaError/rdKafkaCode`` for finer-grained handling:
 
@@ -57,6 +57,6 @@ func handle(_ error: KafkaError, logger: Logger) {
 
 ### Error events
 
-- ``KafkaConsumerEvent``
-- ``KafkaProducerEvent``
-- ``KafkaDeliveryReport``
+- ``KafkaConsumer/Event``
+- ``KafkaProducer/Event``
+- ``KafkaProducer/DeliveryReport``

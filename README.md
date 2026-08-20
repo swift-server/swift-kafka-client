@@ -48,7 +48,11 @@ The `sendAndAwait(_:)` method produces a message and asynchronously awaits broke
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let producer = try KafkaProducer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (producer, _) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -60,7 +64,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
         let report = try await producer.sendAndAwait(message)
         switch report.status {
         case .acknowledged(let ack):
@@ -78,10 +82,11 @@ For high-throughput pipelines that need to maximize send rate, use the fire-and-
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-    config: config,
-    logger: logger
-)
+let logger = Logger(label: "kafka-example")
+
+let (producer, events) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -93,7 +98,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
         try producer.send(message)
 
         for await event in events {
@@ -121,7 +126,11 @@ var config = KafkaConsumerConfig()
 config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, messages, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -133,8 +142,8 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
-            print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
+        for try await message in messages {
+            print("Received: \(message.topic.rawValue)/\(message.partition) at offset \(message.offset)")
         }
     }
 }
@@ -150,7 +159,11 @@ config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 config.enableAutoOffsetStore = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, messages, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -162,7 +175,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
+        for try await message in messages {
             // Process message...
             try consumer.storeOffset(message)
             // The background auto-commit timer commits the offset automatically.
@@ -181,7 +194,11 @@ config.bootstrapServers = ["localhost:9092"]
 config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
 config.enableAutoCommit = false
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (consumer, messages, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -193,7 +210,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
+        for try await message in messages {
             // Process message...
             try await consumer.commit(message)
         }
@@ -204,7 +221,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 To commit all previously stored offsets at once:
 
 ```swift
-try await consumer.commit()
+try await consumer.commitStoredOffsets()
 ```
 
 #### Dynamic subscription management
@@ -216,7 +233,7 @@ Change topics at runtime:
 try consumer.subscribe(topics: ["topic-a", "topic-b"])
 
 // Query current subscription
-let topics = try consumer.subscribedTopics()
+let topics = try consumer.subscribedTopics
 
 // Unsubscribe from all topics
 try consumer.unsubscribe()
@@ -280,7 +297,7 @@ config.saslPassword = "password"
 The events sequence surfaces errors from librdkafka with typed error codes:
 
 ```swift
-let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: logger)
+let (consumer, _, events) = try KafkaConsumer.makeConsumer(config: config)
 
 for await event in events {
     switch event {

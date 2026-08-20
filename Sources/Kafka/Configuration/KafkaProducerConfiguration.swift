@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 /// Configuration values that control a Kafka producer instance.
-public struct KafkaProducerConfiguration {
+public struct KafkaProducerConfiguration: Sendable {
     // MARK: - Kafka-specific Config properties
 
     /// Topic configuration applied to topics that the broker auto-creates.
@@ -272,10 +272,6 @@ extension KafkaProducerConfiguration {
         return resultDict
     }
 }
-
-// MARK: - KafkaProducerConfiguration + Sendable
-
-extension KafkaProducerConfiguration: Sendable {}
 
 // MARK: - KafkaProducerConfiguration + KafkaProducerConfig Conversion
 
