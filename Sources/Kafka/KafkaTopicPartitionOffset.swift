@@ -29,7 +29,7 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
     /// The name of the Kafka topic.
     ///
     /// A convenience accessor for the underlying ``KafkaTopicPartition/topic``.
-    public var topic: String { self.topicPartition.topic }
+    public var topic: KafkaTopic { self.topicPartition.topic }
 
     /// The partition within the topic.
     ///
@@ -42,7 +42,7 @@ public struct KafkaTopicPartitionOffset: Sendable, Hashable {
     ///   - topic: The name of the Kafka topic.
     ///   - partition: The partition within the topic.
     ///   - offset: The offset for this topic-partition.
-    public init(topic: String, partition: KafkaPartition, offset: KafkaOffset?) {
+    public init(topic: KafkaTopic, partition: KafkaPartition, offset: KafkaOffset?) {
         self.topicPartition = KafkaTopicPartition(topic: topic, partition: partition)
         self.offset = offset
     }

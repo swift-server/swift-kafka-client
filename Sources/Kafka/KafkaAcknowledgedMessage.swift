@@ -18,7 +18,7 @@ import NIOCore
 /// A message acknowledged by the Kafka cluster.
 public struct KafkaAcknowledgedMessage {
     /// The topic the producer sent the message to.
-    public var topic: String
+    public var topic: KafkaTopic
     /// The partition the producer sent the message to.
     public var partition: KafkaPartition
     /// The key of the message.
@@ -46,7 +46,7 @@ public struct KafkaAcknowledgedMessage {
             fatalError("Received topic name that is non-valid UTF-8")
         }
 
-        self.topic = topic
+        self.topic = KafkaTopic(rawValue: topic)
 
         self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
         self.headers = try RDKafkaClient.getHeaders(for: messagePointer)

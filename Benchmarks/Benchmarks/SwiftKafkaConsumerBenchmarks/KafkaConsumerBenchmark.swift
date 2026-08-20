@@ -32,7 +32,7 @@ let benchmarks: @Sendable () -> Void = {
         return
     }
 
-    var uniqueTestTopic: String!
+    var uniqueTestTopic: KafkaTopic!
     let messageCount: UInt = 1000
 
     Benchmark.defaultConfiguration = .init(
@@ -245,7 +245,7 @@ let benchmarks: @Sendable () -> Void = {
         }
         rd_kafka_topic_partition_list_add(
             subscriptionList,
-            uniqueTestTopic,
+            uniqueTestTopic.rawValue,
             RD_KAFKA_PARTITION_UA
         )
         rd_kafka_subscribe(kafkaHandle, subscriptionList)
@@ -316,7 +316,7 @@ let benchmarks: @Sendable () -> Void = {
         }
         rd_kafka_topic_partition_list_add(
             subscriptionList,
-            uniqueTestTopic,
+            uniqueTestTopic.rawValue,
             RD_KAFKA_PARTITION_UA
         )
         rd_kafka_subscribe(kafkaHandle, subscriptionList)
