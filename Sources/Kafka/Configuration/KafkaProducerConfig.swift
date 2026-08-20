@@ -1041,7 +1041,7 @@ public struct KafkaProducerConfig: Sendable {
     /// - Warning: Properties set here override typed properties above.
     /// Intended for testing (e.g. `test.mock.num.brokers`) or advanced configurations
     /// not explicitly supported by this library.
-    internal var additionalConfig: [String: String] = [:]
+    @_spi(Internal) public var additionalConfig: [String: String] = [:]
 
     public init() {}
 

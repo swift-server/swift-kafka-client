@@ -20,9 +20,18 @@ import Logging
 import ServiceLifecycle
 
 import struct Foundation.Date
+import class Foundation.ProcessInfo
 import struct Foundation.UUID
 
 let benchmarks: @Sendable () -> Void = {
+    // These benchmarks talk to a real Kafka broker (localhost:9092), so they are
+    // opt-in: unless `KAFKA_LIVE_BENCHMARKS` is set they register nothing. This
+    // keeps them out of the benchmark CI (which has no broker) while remaining
+    // runnable locally/nightly against a live broker.
+    guard ProcessInfo.processInfo.environment["KAFKA_LIVE_BENCHMARKS"] != nil else {
+        return
+    }
+
     var uniqueTestTopic: String!
     let messageCount: UInt = 1000
 

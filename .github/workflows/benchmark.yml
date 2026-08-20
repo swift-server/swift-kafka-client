@@ -1,0 +1,54 @@
+name: Benchmarks
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**.swift"
+      - "**.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # PR gate: the deterministic, broker-free micro-benchmarks, checked against the
+  # committed per-Swift-version absolute thresholds in Benchmarks/Thresholds/. The
+  # noisy mock-cluster produce benchmark is not gated here; it lives in
+  # benchmark-mock.yml on a manual trigger and never runs on pull requests.
+  construct-benchmark-matrix:
+    name: Construct Benchmarks matrix
+    runs-on: ubuntu-latest
+    outputs:
+      benchmark-matrix: "${{ steps.generate-matrix.outputs.benchmark-matrix }}"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: generate-matrix
+        run: echo "benchmark-matrix=$(curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/generate_matrix.sh | bash)" >> "$GITHUB_OUTPUT"
+        env:
+          # Reuse NIO's benchmark threshold-check script. libsasl2-dev/libssl-dev
+          # are needed to build librdkafka; libjemalloc-dev is needed for the
+          # package-benchmark malloc metrics; jq/curl are needed by the scripts.
+          MATRIX_LINUX_COMMAND: "curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/check_benchmark_thresholds.sh | BENCHMARK_PACKAGE_PATH=Benchmarks bash -s -- --disable-sandbox"
+          MATRIX_LINUX_SETUP_COMMAND: "swift --version && apt-get update -y -q && apt-get install -y -q curl jq libjemalloc-dev libsasl2-dev libssl-dev && git config --global --add safe.directory /$(basename ${{ github.workspace }})"
+          # nightly-main is excluded (Swift development trunk, too volatile for
+          # stable baselines) and 6.1 is excluded (no longer supported). The gate
+          # covers 6.2, 6.3, and nightly-next.
+          MATRIX_LINUX_NIGHTLY_MAIN_ENABLED: false
+          MATRIX_LINUX_6_1_ENABLED: false
+
+  benchmarks:
+    name: Benchmarks
+    needs: construct-benchmark-matrix
+    uses: apple/swift-nio/.github/workflows/swift_test_matrix.yml@main
+    with:
+      name: "Benchmarks"
+      matrix_string: "${{ needs.construct-benchmark-matrix.outputs.benchmark-matrix }}"

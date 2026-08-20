@@ -12,6 +12,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+@_spi(Internal) import Kafka
+
 @testable import Kafka
 
 /// Extensions for configuring librdkafka's built-in mock cluster.

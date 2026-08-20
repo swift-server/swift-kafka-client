@@ -1,0 +1,37 @@
+name: Mock-cluster benchmark
+
+permissions:
+  contents: read
+
+# Manual only: the librdkafka mock-cluster produce benchmark. It's a full
+# in-process broker (its own threads, timing-dependent batching), too noisy for
+# threshold gating, so it lives here on a manual trigger to inspect the produce
+# path on demand — it never runs on pull requests. Enabled via
+# KAFKA_MOCK_BENCHMARK; no thresholds are checked.
+on:
+  workflow_dispatch:
+
+jobs:
+  mock-benchmark:
+    name: Mock-cluster produce benchmark
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2-noble
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: true
+      - name: Install dependencies
+        run: |
+          apt-get -q update
+          apt-get -y install libjemalloc-dev libsasl2-dev libssl-dev
+      - name: Mark the workspace as safe
+        run: git config --global --add safe.directory ${GITHUB_WORKSPACE}
+      - name: Run the mock-cluster produce benchmark
+        env:
+          KAFKA_MOCK_BENCHMARK: "1"
+        run: |
+          cd Benchmarks
+          swift package --disable-sandbox benchmark --target SwiftKafkaMockBenchmarks
