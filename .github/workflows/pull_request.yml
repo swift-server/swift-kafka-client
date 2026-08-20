@@ -20,7 +20,6 @@ jobs:
     name: Unit tests
     uses: ./.github/workflows/unit_tests.yml
     with:
-      linux_6_1_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error"
       linux_6_2_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error"
       linux_6_3_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error"
       linux_nightly_next_arguments_override: "-Xswiftc -warnings-as-errors --explicit-target-dependency-import-check error"
@@ -41,6 +40,13 @@ jobs:
         env:
           MATRIX_LINUX_COMMAND: "curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/check-cxx-interop-compatibility.sh | bash"
           MATRIX_LINUX_SETUP_COMMAND: "apt-get update -y -q && apt-get install -y -q curl jq libsasl2-dev libssl-dev"
+          # Pin the matrix floor to the major.minor toolchain. Package.swift
+          # declares swift-tools-version:6.2.3, which generate_matrix.sh would
+          # otherwise auto-detect and use to drop the "6.2" image — its coarse
+          # label (6.2.0) is below 6.2.3, even though swift:6.2-noble is 6.2.4 and
+          # satisfies the requirement. A 6.2 floor keeps the 6.2 job and still
+          # excludes 6.1.
+          MATRIX_MIN_SWIFT_VERSION: "6.2"
 
   cxx-interop:
     name: Cxx interop
