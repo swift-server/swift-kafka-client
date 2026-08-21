@@ -15,7 +15,7 @@
 /// A topic and partition pair identifying a specific Kafka partition.
 public struct KafkaTopicPartition: Sendable, Hashable {
     /// The name of the Kafka topic.
-    public var topic: String
+    public var topic: KafkaTopic
 
     /// The partition within the topic.
     public var partition: KafkaPartition
@@ -25,7 +25,7 @@ public struct KafkaTopicPartition: Sendable, Hashable {
     /// - Parameters:
     ///   - topic: The name of the Kafka topic.
     ///   - partition: The partition within the topic.
-    public init(topic: String, partition: KafkaPartition) {
+    public init(topic: KafkaTopic, partition: KafkaPartition) {
         self.topic = topic
         self.partition = partition
     }

@@ -57,7 +57,9 @@ let logger = Logger(label: "kafka-example")
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let producer = try KafkaProducer(config: config, logger: logger)
+let (producer, _) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -69,7 +71,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(
+        let message = KafkaProducer.Message(
             topic: "topic-name",
             value: "Hello, World!"
         )

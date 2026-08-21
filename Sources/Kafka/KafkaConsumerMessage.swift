@@ -52,7 +52,7 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
 /// A message received from the Kafka cluster.
 public struct KafkaConsumerMessage {
     /// The topic the consumer received the message from.
-    public var topic: String
+    public var topic: KafkaTopic
     /// The partition the consumer received the message from.
     public var partition: KafkaPartition
     /// The headers of the message.
@@ -94,7 +94,7 @@ public struct KafkaConsumerMessage {
             fatalError("Received topic name that is non-valid UTF-8")
         }
 
-        self.topic = topic
+        self.topic = KafkaTopic(rawValue: topic)
 
         self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
 

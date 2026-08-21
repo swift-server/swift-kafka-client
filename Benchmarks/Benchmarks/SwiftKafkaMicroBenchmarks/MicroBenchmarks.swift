@@ -50,11 +50,11 @@ let benchmarks: @Sendable () -> Void = {
         ]
     )
 
-    let topic = "benchmark-topic"
+    let topic: KafkaTopic = "benchmark-topic"
 
     // MARK: - Producer message construction (P1–P3)
     //
-    // `KafkaProducerMessage` is generic over `KafkaContiguousBytes`, so the same
+    // `KafkaProducer.Message` is generic over `KafkaContiguousBytes`, so the same
     // construction is measured for each supported payload representation. Each
     // has a different `withUnsafeBytes` cost downstream, but here we isolate the
     // message-value allocation itself.
@@ -64,7 +64,7 @@ let benchmarks: @Sendable () -> Void = {
         let value = [UInt8](repeating: 0xAB, count: 256)
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
-            blackHole(KafkaProducerMessage(topic: topic, key: key, value: value))
+            blackHole(KafkaProducer.Message(topic: topic, key: key, value: value))
         }
         benchmark.stopMeasurement()
     }
@@ -74,7 +74,7 @@ let benchmarks: @Sendable () -> Void = {
         let value = ByteBuffer(repeating: 0xAB, count: 256)
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
-            blackHole(KafkaProducerMessage(topic: topic, key: key, value: value))
+            blackHole(KafkaProducer.Message(topic: topic, key: key, value: value))
         }
         benchmark.stopMeasurement()
     }
@@ -84,7 +84,7 @@ let benchmarks: @Sendable () -> Void = {
         let value = String(repeating: "a", count: 256)
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
-            blackHole(KafkaProducerMessage(topic: topic, key: key, value: value))
+            blackHole(KafkaProducer.Message(topic: topic, key: key, value: value))
         }
         benchmark.stopMeasurement()
     }
@@ -94,7 +94,7 @@ let benchmarks: @Sendable () -> Void = {
     Benchmark("ProducerMessage_build_8_headers") { benchmark in
         let value = [UInt8](repeating: 0xAB, count: 64)
         let headerKeys = (0..<8).map { "header-\($0)" }
-        let headerValue = ByteBuffer(string: "header-value")
+        let headerValue = Array("header-value".utf8)
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             var headers: [KafkaHeader] = []
@@ -102,7 +102,7 @@ let benchmarks: @Sendable () -> Void = {
             for headerKey in headerKeys {
                 headers.append(KafkaHeader(key: headerKey, value: headerValue))
             }
-            blackHole(KafkaProducerMessage(topic: topic, headers: headers, value: value))
+            blackHole(KafkaProducer.Message(topic: topic, headers: headers, value: value))
         }
         benchmark.stopMeasurement()
     }

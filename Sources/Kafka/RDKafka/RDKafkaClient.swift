@@ -117,11 +117,11 @@ public final class RDKafkaClient: Sendable {
 
     /// Produce a message to the Kafka cluster.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` to send to the KafkaCluster.
+    /// - Parameter message: The ``KafkaProducer/Message`` to send to the KafkaCluster.
     /// - Parameter newMessageID: ID assigned to the `message`.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages.
     func produce<Key, Value>(
-        message: KafkaProducerMessage<Key, Value>,
+        message: KafkaProducer.Message<Key, Value>,
         newMessageID: UInt,
         topicHandles: RDKafkaTopicHandles
     ) throws {
@@ -224,12 +224,12 @@ public final class RDKafkaClient: Sendable {
         )
     }
 
-    /// Scoped accessor that enables safe access to a ``KafkaProducerMessage``'s key and value raw buffers.
+    /// Scoped accessor that enables safe access to a ``KafkaProducer/Message``'s key and value raw buffers.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure that uses the pointer.
     @discardableResult
     private static func withMessageKeyAndValueBuffer<T, Key, Value>(
-        for message: KafkaProducerMessage<Key, Value>,
+        for message: KafkaProducer.Message<Key, Value>,
         _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T  // (keyBuffer, valueBuffer)
     ) rethrows -> T {
         try message.value.withUnsafeBytes { valueBuffer in
@@ -275,7 +275,7 @@ public final class RDKafkaClient: Sendable {
         // can ultimately access all kafkaHeader underlying key/value bytes safely.
         return try kafkaHeader.key.withCString { keyCString in
             if let headerValue = kafkaHeader.value {
-                return try headerValue.withUnsafeReadableBytes { valueBuffer in
+                return try headerValue.withUnsafeBytes { valueBuffer in
                     let cHeader: (UnsafePointer<CChar>, UnsafeRawBufferPointer?) = (keyCString, valueBuffer)
                     cHeaders.append(cHeader)
                     return try self._withKafkaCHeadersRecursive(
@@ -299,7 +299,7 @@ public final class RDKafkaClient: Sendable {
     /// Typed event returned by ``producerEventPoll(maxEvents:)``.
     /// Contains only events relevant to a Kafka producer.
     enum ProducerPollEvent {
-        case deliveryReport(results: [KafkaDeliveryReport])
+        case deliveryReport(results: [KafkaProducer.DeliveryReport])
         case statistics(RDKafkaStatistics)
         case error(KafkaError)
     }
@@ -423,13 +423,13 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
     /// - Returns: Delivery report results parsed from the event.
-    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> [KafkaDeliveryReport] {
+    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> [KafkaProducer.DeliveryReport] {
         let deliveryReportCount = rd_kafka_event_message_count(event)
-        var deliveryReportResults = [KafkaDeliveryReport]()
+        var deliveryReportResults = [KafkaProducer.DeliveryReport]()
         deliveryReportResults.reserveCapacity(deliveryReportCount)
 
         while let messagePointer = rd_kafka_event_message_next(event) {
-            guard let messageStatus = KafkaDeliveryReport(messagePointer: messagePointer) else {
+            guard let messageStatus = KafkaProducer.DeliveryReport(messagePointer: messagePointer) else {
                 continue
             }
             deliveryReportResults.append(messageStatus)
@@ -978,7 +978,9 @@ public final class RDKafkaClient: Sendable {
                 element.offset == Int64(RD_KAFKA_OFFSET_INVALID)
                 ? nil
                 : KafkaOffset(rawValue: Int(element.offset))
-            results.append(KafkaTopicPartitionOffset(topic: topic, partition: partition, offset: offset))
+            results.append(
+                KafkaTopicPartitionOffset(topic: KafkaTopic(rawValue: topic), partition: partition, offset: offset)
+            )
         }
 
         return results
@@ -1123,13 +1125,13 @@ public final class RDKafkaClient: Sendable {
             }
             let headerKey = String(cString: headerKeyPointer)
 
-            var headerValue: ByteBuffer?
+            var headerValue: [UInt8]?
             if let headerValuePointer, headerValueSize > 0 {
                 let headerValueBufferPointer = UnsafeRawBufferPointer(
                     start: headerValuePointer,
                     count: headerValueSize
                 )
-                headerValue = ByteBuffer(bytes: headerValueBufferPointer)
+                headerValue = [UInt8](headerValueBufferPointer)
             }
 
             let newHeader = KafkaHeader(key: headerKey, value: headerValue)

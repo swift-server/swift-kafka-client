@@ -40,27 +40,28 @@ func benchLog(_ log: @autoclosure () -> Logger.Message) {
     #endif
 }
 
-func createTopic(partitions: Int32) async throws -> String {
+func createTopic(partitions: Int32) async throws -> KafkaTopic {
     var basicConfig = KafkaConsumerConfig()
     basicConfig.consumptionStrategy = .group(id: "no-group", topics: [])
     basicConfig.bootstrapServers = [bootstrapServer]
     basicConfig.brokerAddressFamily = .v4
 
-    let client = try RDKafkaClient.makeClientForTopics(config: basicConfig, logger: .perfLogger)
+    let client = try RDKafkaClient.makeClientForTopics(config: basicConfig)
     return try await client._createUniqueTopic(partitions: partitions)
 }
 
-func deleteTopic(_ topic: String) async throws {
+func deleteTopic(_ topic: KafkaTopic) async throws {
     var basicConfig = KafkaConsumerConfig()
     basicConfig.consumptionStrategy = .group(id: "no-group", topics: [])
     basicConfig.bootstrapServers = [bootstrapServer]
     basicConfig.brokerAddressFamily = .v4
 
-    let client = try RDKafkaClient.makeClientForTopics(config: basicConfig, logger: .perfLogger)
+    let client = try RDKafkaClient.makeClientForTopics(config: basicConfig)
     try await client._deleteTopic(topic)
 }
 
-func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = .perfLogger) async throws -> String {
+func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = .perfLogger) async throws -> KafkaTopic
+{
     let uniqueTestTopic = try await createTopic(partitions: partitions)
 
     benchLog("Created topic \(uniqueTestTopic)")
@@ -73,7 +74,7 @@ func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = 
     producerConfig.bootstrapServers = [bootstrapServer]
     producerConfig.brokerAddressFamily = .v4
 
-    let (producer, acks) = try KafkaProducer.makeProducerWithEvents(config: producerConfig, logger: logger)
+    let (producer, acks) = try KafkaProducer.makeProducer(config: producerConfig)
 
     let serviceGroupConfiguration = ServiceGroupConfiguration(
         services: [producer],

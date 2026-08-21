@@ -32,15 +32,14 @@ import Foundation
 private let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
 private let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
 
-func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async throws -> Void) async throws {
+func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) async throws -> Void) async throws {
     var basicConfig = KafkaConsumerConfig()
     basicConfig.groupId = UUID().uuidString
     basicConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
     basicConfig.brokerAddressFamily = .v4
 
     let client = try RDKafkaClient.makeClientForTopics(
-        config: basicConfig,
-        logger: .kafkaTest
+        config: basicConfig
     )
     let testTopic = try await client._createUniqueTopic(partitions: partitions)
 
@@ -280,7 +279,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             let testMessages = Self.createTestMessages(
                 topic: testTopic,
                 headers: [
-                    KafkaHeader(key: "some.header", value: ByteBuffer(string: "some-header-value")),
+                    KafkaHeader(key: "some.header", value: Array("some-header-value".utf8)),
                     KafkaHeader(key: "some.null.header", value: nil),
                 ],
                 count: 10
@@ -651,9 +650,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func concurrentSendsDoNotLoseMessages() async throws {
         try await withTestTopic(partitions: 4) { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -692,7 +690,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 try await withThrowingTaskGroup(of: Void.self) { sendGroup in
                     for i in 0..<messageCount {
                         sendGroup.addTask {
-                            let message = KafkaProducerMessage(
+                            let message = KafkaProducer.Message(
                                 topic: testTopic,
                                 key: "key-\(i)",
                                 value: "value-\(i)"
@@ -1996,9 +1994,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndAwaitReturnsDeliveryReport() async throws {
         try await withTestTopic { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2017,7 +2014,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     for await _ in events {}
                 }
 
-                let message = KafkaProducerMessage(
+                let message = KafkaProducer.Message(
                     topic: testTopic,
                     key: "test-key",
                     value: "test-value"
@@ -2042,9 +2039,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndAwaitMultipleMessages() async throws {
         try await withTestTopic { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2064,7 +2060,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
                 // Send 5 messages via sendAndAwait and verify each gets acknowledged
                 for i in 0..<5 {
-                    let message = KafkaProducerMessage(
+                    let message = KafkaProducer.Message(
                         topic: testTopic,
                         key: "key-\(i)",
                         value: "value-\(i)"
@@ -2083,9 +2079,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     @Test func sendAndAwaitWorksWithoutEventsSequence() async throws {
         try await withTestTopic { testTopic in
             // Producer created WITHOUT events — sendAndAwait should still work
-            let producer = try KafkaProducer(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, _) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2099,7 +2094,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     try await serviceGroup.run()
                 }
 
-                let message = KafkaProducerMessage(
+                let message = KafkaProducer.Message(
                     topic: testTopic,
                     key: "key",
                     value: "value"
@@ -2117,9 +2112,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndAwaitConcurrentSends() async throws {
         try await withTestTopic(partitions: 4) { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2134,10 +2128,10 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
                 // Send 10 messages concurrently via sendAndAwait in a TaskGroup
                 let messageCount = 10
-                try await withThrowingTaskGroup(of: KafkaDeliveryReport.self) { sendGroup in
+                try await withThrowingTaskGroup(of: KafkaProducer.DeliveryReport.self) { sendGroup in
                     for i in 0..<messageCount {
                         sendGroup.addTask {
-                            let message = KafkaProducerMessage(
+                            let message = KafkaProducer.Message(
                                 topic: testTopic,
                                 key: "key-\(i)",
                                 value: "concurrent-\(i)"
@@ -2166,9 +2160,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     @Test func sendAndSendAndAwaitMixedOnSameProducer() async throws {
         try await withTestTopic { testTopic in
-            let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                config: self.producerConfig,
-                logger: .kafkaTest
+            let (producer, events) = try KafkaProducer.makeProducer(
+                config: self.producerConfig
             )
 
             let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2196,7 +2189,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 }
 
                 // send() — fire-and-forget, delivery report goes to events sequence
-                let sendMessage = KafkaProducerMessage(
+                let sendMessage = KafkaProducer.Message(
                     topic: testTopic,
                     key: "send-key",
                     value: "send-value"
@@ -2204,7 +2197,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 try producer.send(sendMessage)
 
                 // sendAndAwait() — delivery report goes to continuation, NOT events sequence
-                let awaitMessage = KafkaProducerMessage(
+                let awaitMessage = KafkaProducer.Message(
                     topic: testTopic,
                     key: "await-key",
                     value: "await-value"
@@ -2219,12 +2212,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                 // Give time for send() delivery report to arrive via events sequence
                 try await Task.sleep(for: .milliseconds(500))
 
-                // Verify ALL delivery reports arrived through events sequence —
-                // both send() and sendAndAwait() reports should appear
+                // Verify each delivery lands on exactly one channel — send() reports
+                // arrive on the events sequence, sendAndAwait() reports resolve on the
+                // continuation only. The events counter must equal the number of send()
+                // calls (1), not both.
                 let eventsCount = eventReportCount.load(ordering: .relaxed)
                 #expect(
-                    eventsCount >= 2,
-                    "Both send() and sendAndAwait() reports should arrive via events, got \(eventsCount)"
+                    eventsCount == 1,
+                    "Only send() reports flow through events; sendAndAwait must not duplicate. Got \(eventsCount)"
                 )
 
                 await serviceGroup.triggerGracefulShutdown()
@@ -2232,20 +2227,38 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         }
     }
 
+    // MARK: - Scoped withProducer
+
+    @Test func withProducerSendsMessageThenShutsDown() async throws {
+        try await withTestTopic { testTopic in
+            // withProducer runs the producer for the duration of the closure and
+            // gracefully shuts it down when the closure returns.
+            let report = try await KafkaProducer.withProducer(config: self.producerConfig) { producer, _ in
+                let message = KafkaProducer.Message(topic: testTopic, value: "hello withProducer")
+                return try await producer.sendAndAwait(message)
+            }
+
+            guard case .acknowledged(let acknowledged) = report.status else {
+                Issue.record("Expected message to be acknowledged, got \(report.status)")
+                return
+            }
+            #expect(acknowledged.topic == testTopic)
+        }
+    }
+
     // MARK: - Helpers
 
-    func produceMessages(topic: String, count: UInt) async throws -> [KafkaProducerMessage<String, String>] {
+    func produceMessages(topic: KafkaTopic, count: UInt) async throws -> [KafkaProducer.Message<String, String>] {
         let testMessages = Self.createTestMessages(topic: topic, count: count)
         try await self.produceMessages(messages: testMessages)
         return testMessages
     }
 
     func produceMessages(
-        messages: [KafkaProducerMessage<String, String>]
+        messages: [KafkaProducer.Message<String, String>]
     ) async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            config: self.producerConfig,
-            logger: .kafkaTest
+        let (producer, events) = try KafkaProducer.makeProducer(
+            config: self.producerConfig
         )
         let serviceGroupConfiguration = ServiceGroupConfiguration(
             services: [producer],
@@ -2276,17 +2289,17 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     }
 
     private static func createTestMessages(
-        topic: String,
+        topic: KafkaTopic,
         headers: [KafkaHeader] = [],
         count: UInt
-    ) -> [KafkaProducerMessage<String, String>] {
+    ) -> [KafkaProducer.Message<String, String>] {
         _createTestMessages(topic: topic, headers: headers, count: count)
     }
 
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
-        events: KafkaProducerEvents,
-        messages: [KafkaProducerMessage<String, String>],
+        events: KafkaProducer.Events,
+        messages: [KafkaProducer.Message<String, String>],
         skipConsistencyCheck: Bool = false
     ) async throws {
         try await _sendAndAcknowledgeMessages(
@@ -2437,9 +2450,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
         try await withTestTopic { testTopic1 in
             try await withTestTopic { testTopic2 in
                 // Produce a message to each topic
-                let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-                    config: self.producerConfig,
-                    logger: .kafkaTest
+                let (producer, events) = try KafkaProducer.makeProducer(
+                    config: self.producerConfig
                 )
 
                 let serviceGroupConfiguration = ServiceGroupConfiguration(
@@ -2457,8 +2469,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                         for await _ in events {}
                     }
 
-                    let msg1 = KafkaProducerMessage(topic: testTopic1, value: "msg1")
-                    let msg2 = KafkaProducerMessage(topic: testTopic2, value: "msg2")
+                    let msg1 = KafkaProducer.Message(topic: testTopic1, value: "msg1")
+                    let msg2 = KafkaProducer.Message(topic: testTopic2, value: "msg2")
                     try producer.send(msg1)
                     try producer.send(msg2)
 
@@ -2489,7 +2501,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     // Subscribe dynamically to both topics
                     try consumer.subscribe(topics: [testTopic1, testTopic2])
 
-                    var receivedTopics: Set<String> = []
+                    var receivedTopics: Set<KafkaTopic> = []
                     for try await message in consumer.messages {
                         receivedTopics.insert(message.topic)
                         if receivedTopics.count >= 2 {
