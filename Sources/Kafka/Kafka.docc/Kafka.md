@@ -22,12 +22,12 @@ Kafka integrates with [swift-log](https://github.com/apple/swift-log) for struct
 ### Producing messages
 
 - ``KafkaProducer``
-- ``KafkaProducerMessage``
-- ``KafkaDeliveryReport``
-- ``KafkaAcknowledgedMessage``
-- ``KafkaProducerMessageID``
-- ``KafkaProducerEvents``
-- ``KafkaProducerEvent``
+- ``KafkaProducer/Message``
+- ``KafkaProducer/DeliveryReport``
+- ``KafkaProducer/AcknowledgedMessage``
+- ``KafkaProducer/MessageID``
+- ``KafkaProducer/Events``
+- ``KafkaProducer/Event``
 
 ### Consuming messages
 

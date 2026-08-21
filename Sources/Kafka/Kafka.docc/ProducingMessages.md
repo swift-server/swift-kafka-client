@@ -23,10 +23,14 @@ For configurable security options, see <doc:SecuringConnections>.
 
 ### Send and await acknowledgment
 
-Construct a ``KafkaProducer``, run it inside a `ServiceGroup`, and call ``KafkaProducer/sendAndAwait(_:)`` from a sibling task. The returned ``KafkaDeliveryReport`` carries a ``KafkaDeliveryReport/status`` value of `.acknowledged(KafkaAcknowledgedMessage)` on success, or `.failure(KafkaError)` if the broker rejects the record.
+Construct a ``KafkaProducer``, run it inside a `ServiceGroup`, and call ``KafkaProducer/sendAndAwait(_:)`` from a sibling task. The returned ``KafkaProducer/DeliveryReport`` carries a ``KafkaProducer/DeliveryReport/status`` value of `.acknowledged(KafkaProducer/AcknowledgedMessage)` on success, or `.failure(KafkaError)` if the broker rejects the record.
 
 ```swift
-let producer = try KafkaProducer(config: config, logger: logger)
+let logger = Logger(label: "kafka-example")
+
+let (producer, _) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -38,7 +42,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
         let report = try await producer.sendAndAwait(message)
         switch report.status {
         case .acknowledged(let ack):
@@ -52,13 +56,14 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 ### Send records with batched delivery reports
 
-For high-throughput pipelines, create the producer alongside its events sequence with ``KafkaProducer/makeProducerWithEvents(config:logger:)``. Call ``KafkaProducer/send(_:)`` to enqueue records, and consume ``KafkaProducerEvent`` values from the events sequence to learn outcomes:
+For high-throughput pipelines, create the producer alongside its events sequence with ``KafkaProducer/makeProducer(config:)``. Call ``KafkaProducer/send(_:)`` to enqueue records, and consume ``KafkaProducer/Event`` values from the events sequence to learn outcomes:
 
 ```swift
-let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-    config: config,
-    logger: logger
-)
+let logger = Logger(label: "kafka-example")
+
+let (producer, events) = try withLogger(logger) { _ in
+    try KafkaProducer.makeProducer(config: config)
+}
 
 let serviceGroup = ServiceGroup(
     services: [producer],
@@ -70,7 +75,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        let message = KafkaProducerMessage(topic: "topic-name", value: "Hello, World!")
+        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
         try producer.send(message)
 
         for await event in events {
@@ -91,11 +96,11 @@ The events sequence delivers reports in batches as `librdkafka` flushes them, wh
 
 ### Identify a record before delivery
 
-The synchronous ``KafkaProducer/send(_:)`` returns a ``KafkaProducerMessageID``. Use this identifier to match a later ``KafkaDeliveryReport`` to the originating record; the same identifier appears on the report.
+The synchronous ``KafkaProducer/send(_:)`` returns a ``KafkaProducer/MessageID``. Use this identifier to match a later ``KafkaProducer/DeliveryReport`` to the originating record; the same identifier appears on the report.
 
 ### Handle producer events
 
-Beyond delivery reports, the events sequence emits errors and other broker events. See ``KafkaProducerEvent`` for the full set of cases. To classify errors, read ``KafkaError/isFatal`` and ``KafkaError/isRetriable``: a fatal error means the producer can't recover, and the application needs to shut it down. A retriable error typically resolves on its own as the broker recovers.
+Beyond delivery reports, the events sequence emits errors and other broker events. See ``KafkaProducer/Event`` for the full set of cases. To classify errors, read ``KafkaError/isFatal`` and ``KafkaError/isRetriable``: a fatal error means the producer can't recover, and the application needs to shut it down. A retriable error typically resolves on its own as the broker recovers.
 
 ## Topics
 
@@ -103,11 +108,11 @@ Beyond delivery reports, the events sequence emits errors and other broker event
 
 - ``KafkaProducer/send(_:)``
 - ``KafkaProducer/sendAndAwait(_:)``
-- ``KafkaProducer/makeProducerWithEvents(config:logger:)``
+- ``KafkaProducer/makeProducer(config:)``
 
 ### Inspecting outcomes
 
-- ``KafkaDeliveryReport``
-- ``KafkaAcknowledgedMessage``
-- ``KafkaProducerMessageID``
-- ``KafkaProducerEvent``
+- ``KafkaProducer/DeliveryReport``
+- ``KafkaProducer/AcknowledgedMessage``
+- ``KafkaProducer/MessageID``
+- ``KafkaProducer/Event``

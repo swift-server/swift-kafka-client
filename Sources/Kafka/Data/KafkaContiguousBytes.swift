@@ -19,7 +19,7 @@
 /// Standard Library currently does not provide such a protocol.
 ///
 /// By conforming your own types to this protocol, you can pass instances of those types
-/// directly to ``KafkaProducerMessage`` as key and value.
+/// directly to ``KafkaProducer/Message`` as key and value.
 public protocol KafkaContiguousBytes {
     /// Calls the closure you provide with the contents of the underlying storage.
     ///
