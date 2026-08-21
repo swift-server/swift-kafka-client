@@ -26,7 +26,7 @@ config.metrics.totalKafkaBrokerRequests = Gauge(label: "kafka_consumer_broker_re
 config.metrics.totalKafkaBrokerMessagesReceived = Gauge(label: "kafka_consumer_messages_received")
 config.metrics.queuedOperation = Gauge(label: "kafka_consumer_queued_operations")
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 ```
 
 The client emits metrics only when ``KafkaConfiguration/ConsumerMetrics/updateInterval`` is set **and** at least one gauge is assigned; otherwise the client skips statistics collection entirely. The producer exposes the same pattern through ``KafkaProducerConfig/metrics`` with producer-specific gauges such as ``KafkaConfiguration/ProducerMetrics/queuedProducerMessages`` and ``KafkaConfiguration/ProducerMetrics/totalKafkaBrokerMessagesSent``.
@@ -35,7 +35,7 @@ The gauges you assign are ordinary [swift-metrics](https://github.com/apple/swif
 
 ## Emit structured logs
 
-Pass a `Logger` when creating a ``KafkaProducer`` or ``KafkaConsumer``. The client logs lifecycle and operational events through it, and enriches every entry with structured metadata so you can filter and correlate logs across many clients:
+Provide a `Logger` when creating a ``KafkaProducer`` or ``KafkaConsumer`` — the producer accepts one directly, while the consumer reads the task-local logger set with `withLogger(_:_:)`. The client logs lifecycle and operational events through it, and enriches every entry with structured metadata so you can filter and correlate logs across many clients:
 
 | Metadata key | Value |
 | --- | --- |
@@ -53,7 +53,9 @@ var config = KafkaConsumerConfig()
 config.clientId = "orders-consumer"
 config.consumptionStrategy = .group(id: "orders", topics: ["orders"])
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, _, _) = try withLogger(logger) { _ in
+    try KafkaConsumer.makeConsumer(config: config)
+}
 // Every log entry from this consumer now carries kafka.client.id, kafka.client.type,
 // and kafka.group.id.
 ```

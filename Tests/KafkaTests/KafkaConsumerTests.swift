@@ -69,7 +69,9 @@ import Foundation
         )
         config.debug = [.all]
 
-        let consumer = try KafkaConsumer(config: config, logger: mockLogger)
+        let (consumer, _, _) = try withLogger(mockLogger) { _ in
+            try KafkaConsumer.makeConsumer(config: config)
+        }
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -112,8 +114,8 @@ import Foundation
             topics: ["this-topic-does-not-exist"]
         )
 
-        _ = try KafkaConsumer(config: config, logger: .kafkaTest)  // deinit called before run
-        _ = try KafkaConsumer.makeConsumerWithEvents(config: config, logger: .kafkaTest)
+        _ = try KafkaConsumer.makeConsumer(config: config)  // deinit called before run
+        _ = try KafkaConsumer.makeConsumer(config: config)
     }
 
     @Test func consumerMessagesReadCancelledBeforeRun() async throws {
@@ -124,14 +126,14 @@ import Foundation
             topics: ["this-topic-does-not-exist"]
         )
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
 
         // explicitly run and cancel message consuming task before serviceGroup.run()
         let consumingTask = Task {
-            for try await record in consumer.messages {
+            for try await record in consumerMsgs {
                 Issue.record("Unexpected record \(record))")
             }
         }
@@ -156,15 +158,15 @@ import Foundation
 
     // MARK: - Closed Consumer State Machine Tests
     //
-    // storeOffset(_:) cannot be unit-tested directly because KafkaConsumerMessage
+    // storeOffset(_:) cannot be unit-tested directly because KafkaConsumer.Message
     // can only be constructed from a real rd_kafka_message_t pointer (requires a broker).
     // All new consumer methods (storeOffset, committed, position, seek, isAssignmentLost)
     // share the same state machine guard (withClient()), so we verify the closed-consumer
-    // path through the methods that don't require a KafkaConsumerMessage.
+    // path through the methods that don't require a KafkaConsumer.Message.
 
     @Test func positionFailsOnClosedConsumerViaStateMachine() async throws {
         let config = makeConfig(enableAutoOffsetStore: false)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -191,7 +193,7 @@ import Foundation
 
     @Test func subscribedTopicsFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -206,13 +208,13 @@ import Foundation
         }
 
         #expect(throws: KafkaError.self) {
-            try consumer.subscribedTopics()
+            try consumer.subscribedTopics
         }
     }
 
     @Test func subscribeFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -233,7 +235,7 @@ import Foundation
 
     @Test func unsubscribeFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -254,7 +256,7 @@ import Foundation
 
     @Test func subscribeWithEmptyTopicsCallsUnsubscribe() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -279,7 +281,7 @@ import Foundation
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         // subscribe() in .initializing state should not crash
         try consumer.subscribe(topics: ["test-topic"])
@@ -290,10 +292,10 @@ import Foundation
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         // No subscription set — should return empty
-        let topics = try consumer.subscribedTopics()
+        let topics = try consumer.subscribedTopics
         #expect(topics.isEmpty)
     }
 
@@ -303,7 +305,7 @@ import Foundation
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -325,7 +327,7 @@ import Foundation
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         // Subscribe before run
         try consumer.subscribe(topics: ["test-topic"])
@@ -349,7 +351,7 @@ import Foundation
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         // Unsubscribe when never subscribed — should not crash
         try consumer.unsubscribe()
@@ -360,7 +362,7 @@ import Foundation
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         // librdkafka rejects duplicate topics with "Invalid argument"
         #expect(throws: KafkaError.self) {
@@ -373,7 +375,7 @@ import Foundation
         config.groupId = UUID().uuidString
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         // Regex pattern subscription — librdkafka supports ^-prefixed patterns
         try consumer.subscribe(topics: ["^test-.*"])
@@ -383,7 +385,7 @@ import Foundation
 
     @Test func pauseFailsOnUnknownPartition() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -406,7 +408,7 @@ import Foundation
 
     @Test func resumeFailsOnUnknownPartition() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -429,7 +431,7 @@ import Foundation
 
     @Test func pauseFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -452,7 +454,7 @@ import Foundation
 
     @Test func resumeFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -496,7 +498,7 @@ import Foundation
 
     @Test func committedFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -521,7 +523,7 @@ import Foundation
 
     @Test func positionFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -547,7 +549,7 @@ import Foundation
 
     @Test func isAssignmentLostFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -569,7 +571,7 @@ import Foundation
 
     @Test func isAssignmentLostReturnsFalseWhenRunning() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -603,7 +605,7 @@ import Foundation
 
     @Test func seekFailsOnClosedConsumer() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -627,38 +629,11 @@ import Foundation
         }
     }
 
-    // MARK: - scheduleCommit Config Guard Tests
-    //
-    // scheduleCommit(_:) requires a KafkaConsumerMessage which cannot be constructed
-    // without a broker. The config guard (enableAutoCommit must be false) is tested
-    // indirectly: if enableAutoCommit is true (default), calling scheduleCommit would
-    // throw a config error. The closed-consumer path is the same as other withClient()
-    // methods, already tested above.
-
     // MARK: - Commit All Tests
-
-    @Test func scheduleCommitAllFailsWithAutoCommitEnabled() async throws {
-        let config = makeConfig(enableAutoCommit: true)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
-
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await serviceGroup.run() }
-            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-
-            #expect(throws: KafkaError.self) {
-                try consumer.scheduleCommit()
-            }
-
-            await serviceGroup.triggerGracefulShutdown()
-        }
-    }
 
     @Test func commitAllFailsWithAutoCommitEnabled() async throws {
         let config = makeConfig(enableAutoCommit: true)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -668,35 +643,16 @@ import Foundation
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
 
             await #expect(throws: KafkaError.self) {
-                try await consumer.commit()
+                try await consumer.commitStoredOffsets()
             }
 
             await serviceGroup.triggerGracefulShutdown()
         }
     }
 
-    @Test func scheduleCommitAllFailsOnClosedConsumer() async throws {
-        let config = makeConfig(enableAutoCommit: false)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
-
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await serviceGroup.run() }
-            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-            await serviceGroup.triggerGracefulShutdown()
-            try await group.waitForAll()
-        }
-
-        #expect(throws: KafkaError.self) {
-            try consumer.scheduleCommit()
-        }
-    }
-
     @Test func commitAllFailsOnClosedConsumer() async throws {
         let config = makeConfig(enableAutoCommit: false)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -709,17 +665,16 @@ import Foundation
         }
 
         await #expect(throws: KafkaError.self) {
-            try await consumer.commit()
+            try await consumer.commitStoredOffsets()
         }
     }
 
-    // MARK: - makeConsumerWithEvents Tests
+    // MARK: - makeConsumer Tests
 
-    @Test func makeConsumerWithEventsConstructDeinit() async throws {
+    @Test func makeConsumerConstructDeinit() async throws {
         let config = makeConfig()
-        let (consumer, events) = try KafkaConsumer.makeConsumerWithEvents(
-            config: config,
-            logger: .kafkaTest
+        let (consumer, _, events) = try KafkaConsumer.makeConsumer(
+            config: config
         )
         _ = consumer
         _ = events
@@ -859,14 +814,14 @@ import Foundation
         #expect(set.count == 2)
     }
 
-    // MARK: - KafkaConsumerRebalance Tests
+    // MARK: - KafkaConsumer.Rebalance Tests
 
     @Test func rebalanceAssignConstruction() {
         let partitions = [
             KafkaTopicPartition(topic: "topic-a", partition: KafkaPartition(rawValue: 0)),
             KafkaTopicPartition(topic: "topic-a", partition: KafkaPartition(rawValue: 1)),
         ]
-        let rebalance = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
+        let rebalance = KafkaConsumer.Rebalance(kind: .assign, partitions: partitions)
         #expect(rebalance.kind == .assign)
         #expect(rebalance.partitions.count == 2)
         #expect(rebalance.partitions[0].topic == "topic-a")
@@ -875,7 +830,7 @@ import Foundation
     }
 
     @Test func rebalanceRevokeConstruction() {
-        let rebalance = KafkaConsumerRebalance(kind: .revoke, partitions: [])
+        let rebalance = KafkaConsumer.Rebalance(kind: .revoke, partitions: [])
         #expect(rebalance.kind == .revoke)
         #expect(rebalance.partitions.isEmpty)
     }
@@ -884,10 +839,10 @@ import Foundation
         let partitions = [
             KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))
         ]
-        let r1 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
-        let r2 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
-        let r3 = KafkaConsumerRebalance(kind: .revoke, partitions: partitions)
-        let r4 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+        let r1 = KafkaConsumer.Rebalance(kind: .assign, partitions: partitions)
+        let r2 = KafkaConsumer.Rebalance(kind: .assign, partitions: partitions)
+        let r3 = KafkaConsumer.Rebalance(kind: .revoke, partitions: partitions)
+        let r4 = KafkaConsumer.Rebalance(kind: .assign, partitions: [])
 
         #expect(r1 == r2)
         #expect(r1 != r3)
@@ -898,11 +853,11 @@ import Foundation
         let partitions = [
             KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))
         ]
-        let r1 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
-        let r2 = KafkaConsumerRebalance(kind: .assign, partitions: partitions)
-        let r3 = KafkaConsumerRebalance(kind: .revoke, partitions: partitions)
+        let r1 = KafkaConsumer.Rebalance(kind: .assign, partitions: partitions)
+        let r2 = KafkaConsumer.Rebalance(kind: .assign, partitions: partitions)
+        let r3 = KafkaConsumer.Rebalance(kind: .revoke, partitions: partitions)
 
-        var set: Set<KafkaConsumerRebalance> = []
+        var set: Set<KafkaConsumer.Rebalance> = []
         set.insert(r1)
         set.insert(r2)
         set.insert(r3)
@@ -910,19 +865,19 @@ import Foundation
     }
 
     @Test func rebalanceKindEquality() {
-        #expect(KafkaConsumerRebalance.Kind.assign == KafkaConsumerRebalance.Kind.assign)
-        #expect(KafkaConsumerRebalance.Kind.revoke == KafkaConsumerRebalance.Kind.revoke)
-        #expect(KafkaConsumerRebalance.Kind.assign != KafkaConsumerRebalance.Kind.revoke)
+        #expect(KafkaConsumer.Rebalance.Kind.assign == KafkaConsumer.Rebalance.Kind.assign)
+        #expect(KafkaConsumer.Rebalance.Kind.revoke == KafkaConsumer.Rebalance.Kind.revoke)
+        #expect(KafkaConsumer.Rebalance.Kind.assign != KafkaConsumer.Rebalance.Kind.revoke)
     }
 
-    // MARK: - KafkaConsumerEvent Rebalance Tests
+    // MARK: - KafkaConsumer.Event Rebalance Tests
 
     @Test func consumerEventRebalancePatternMatch() {
-        let rebalance = KafkaConsumerRebalance(
+        let rebalance = KafkaConsumer.Rebalance(
             kind: .assign,
             partitions: [KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0))]
         )
-        let event = KafkaConsumerEvent.rebalance(rebalance)
+        let event = KafkaConsumer.Event.rebalance(rebalance)
 
         switch event {
         case .rebalance(let r):
@@ -934,14 +889,14 @@ import Foundation
     }
 
     @Test func consumerEventFromConsumerPollEvent() {
-        let rebalance = KafkaConsumerRebalance(
+        let rebalance = KafkaConsumer.Rebalance(
             kind: .revoke,
             partitions: [
                 KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 0)),
                 KafkaTopicPartition(topic: "t", partition: KafkaPartition(rawValue: 1)),
             ]
         )
-        let event = KafkaConsumerEvent.rebalance(rebalance)
+        let event = KafkaConsumer.Event.rebalance(rebalance)
 
         switch event {
         case .rebalance(let r):
@@ -952,10 +907,10 @@ import Foundation
         }
     }
 
-    // MARK: - KafkaConsumerRebalance.Kind.error Tests
+    // MARK: - KafkaConsumer.Rebalance.Kind.error Tests
 
     @Test func rebalanceErrorConstruction() {
-        let rebalance = KafkaConsumerRebalance(kind: .error("broker unavailable"), partitions: [])
+        let rebalance = KafkaConsumer.Rebalance(kind: .error("broker unavailable"), partitions: [])
         #expect(rebalance.partitions.isEmpty)
         if case .error(let description) = rebalance.kind {
             #expect(description == "broker unavailable")
@@ -965,10 +920,10 @@ import Foundation
     }
 
     @Test func rebalanceErrorEquality() {
-        let r1 = KafkaConsumerRebalance(kind: .error("err1"), partitions: [])
-        let r2 = KafkaConsumerRebalance(kind: .error("err1"), partitions: [])
-        let r3 = KafkaConsumerRebalance(kind: .error("err2"), partitions: [])
-        let r4 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+        let r1 = KafkaConsumer.Rebalance(kind: .error("err1"), partitions: [])
+        let r2 = KafkaConsumer.Rebalance(kind: .error("err1"), partitions: [])
+        let r3 = KafkaConsumer.Rebalance(kind: .error("err2"), partitions: [])
+        let r4 = KafkaConsumer.Rebalance(kind: .assign, partitions: [])
 
         #expect(r1 == r2)
         #expect(r1 != r3)
@@ -976,11 +931,11 @@ import Foundation
     }
 
     @Test func rebalanceErrorHashable() {
-        let r1 = KafkaConsumerRebalance(kind: .error("err"), partitions: [])
-        let r2 = KafkaConsumerRebalance(kind: .error("err"), partitions: [])
-        let r3 = KafkaConsumerRebalance(kind: .assign, partitions: [])
+        let r1 = KafkaConsumer.Rebalance(kind: .error("err"), partitions: [])
+        let r2 = KafkaConsumer.Rebalance(kind: .error("err"), partitions: [])
+        let r3 = KafkaConsumer.Rebalance(kind: .assign, partitions: [])
 
-        var set: Set<KafkaConsumerRebalance> = []
+        var set: Set<KafkaConsumer.Rebalance> = []
         set.insert(r1)
         set.insert(r2)
         set.insert(r3)
@@ -988,8 +943,8 @@ import Foundation
     }
 
     @Test func rebalanceErrorEventPatternMatch() {
-        let rebalance = KafkaConsumerRebalance(kind: .error("group coordinator not available"), partitions: [])
-        let event = KafkaConsumerEvent.rebalance(rebalance)
+        let rebalance = KafkaConsumer.Rebalance(kind: .error("group coordinator not available"), partitions: [])
+        let event = KafkaConsumer.Event.rebalance(rebalance)
 
         switch event {
         case .rebalance(let r):
@@ -1007,13 +962,13 @@ import Foundation
     // MARK: - RebalanceContext Tests
 
     @Test func rebalanceContextDrainEventsEmpty() {
-        let context = RebalanceContext(logger: .kafkaTest)
+        let context = RebalanceContext()
         let events = context.drainEvents()
         #expect(events.isEmpty)
     }
 
     @Test func rebalanceContextInjectAndDrain() {
-        let context = RebalanceContext(logger: .kafkaTest)
+        let context = RebalanceContext()
 
         context._testInjectEvent(
             RebalanceContext.ConsumerRebalanceEvent(
@@ -1046,7 +1001,7 @@ import Foundation
     }
 
     @Test func rebalanceContextDrainClearsBuffer() {
-        let context = RebalanceContext(logger: .kafkaTest)
+        let context = RebalanceContext()
 
         context._testInjectEvent(
             RebalanceContext.ConsumerRebalanceEvent(kind: .assign, partitions: [("t", 0)])
@@ -1060,7 +1015,7 @@ import Foundation
     }
 
     @Test func rebalanceContextErrorEventInjection() {
-        let context = RebalanceContext(logger: .kafkaTest)
+        let context = RebalanceContext()
 
         context._testInjectEvent(
             RebalanceContext.ConsumerRebalanceEvent(kind: .error("coordinator not available"), partitions: [])
@@ -1079,7 +1034,7 @@ import Foundation
     @Test func rebalanceContextConcurrentInjectAndDrain() async {
         // This tests the core race condition: the C callback thread appends events
         // while the Swift event loop drains them concurrently.
-        let context = RebalanceContext(logger: .kafkaTest)
+        let context = RebalanceContext()
 
         // Use an actor to safely count drained events across tasks
         actor Counter {
@@ -1125,7 +1080,7 @@ import Foundation
 
     @Test func rebalanceContextConcurrentMultipleInjectersAndDrain() async {
         // Multiple "C callback threads" appending simultaneously while event loop drains
-        let context = RebalanceContext(logger: .kafkaTest)
+        let context = RebalanceContext()
         let injectersCount = 5
         let eventsPerInjecter = 50
 
@@ -1172,7 +1127,7 @@ import Foundation
 
     @Test func rebalanceContextFIFOOrderingPreservedUnderConcurrency() async {
         // Verify events from a single injecter maintain FIFO order
-        let context = RebalanceContext(logger: .kafkaTest)
+        let context = RebalanceContext()
         var allDrained: [RebalanceContext.ConsumerRebalanceEvent] = []
 
         // Inject 100 events with sequential partition IDs
@@ -1203,11 +1158,11 @@ import Foundation
         }
     }
 
-    // MARK: - KafkaConsumerEvent.error Tests
+    // MARK: - KafkaConsumer.Event.error Tests
 
     @Test func consumerEventErrorPatternMatch() {
         let error = KafkaError.config(reason: "All brokers are down")
-        let event = KafkaConsumerEvent.error(error)
+        let event = KafkaConsumer.Event.error(error)
 
         switch event {
         case .error(let e):
@@ -1221,8 +1176,8 @@ import Foundation
         let error1 = KafkaError.config(reason: "All brokers are down")
         let error2 = KafkaError.config(reason: "Authentication failed")
 
-        let event1 = KafkaConsumerEvent.error(error1)
-        let event2 = KafkaConsumerEvent.error(error2)
+        let event1 = KafkaConsumer.Event.error(error1)
+        let event2 = KafkaConsumer.Event.error(error2)
 
         // Same error code (.config), so they are equal per current Equatable (known limitation)
         #expect(event1 == event2)
@@ -1232,7 +1187,7 @@ import Foundation
 
     @Test func iteratorDropDoesNotCrashServiceGroup() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -1244,7 +1199,7 @@ import Foundation
 
             // Start consuming messages in a separate task, then drop the iterator
             group.addTask {
-                for try await _ in consumer.messages {
+                for try await _ in consumerMsgs {
                     break  // immediately drop the iterator
                 }
             }
@@ -1261,7 +1216,7 @@ import Foundation
 
     @Test func iteratorDropThenGracefulShutdownSucceeds() async throws {
         let config = makeConfig()
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -1274,7 +1229,7 @@ import Foundation
             try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
 
             // Drop the iterator by creating and immediately discarding it
-            var iterator: KafkaConsumerMessages.AsyncIterator? = consumer.messages.makeAsyncIterator()
+            var iterator: KafkaConsumer.Messages.AsyncIterator? = consumerMsgs.makeAsyncIterator()
             _ = iterator
             iterator = nil
 
@@ -1384,7 +1339,7 @@ import Foundation
         config.groupId = "test-group"
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         // This used to cause a fatalError when consumer was in the .initializing state
         consumer.triggerGracefulShutdown()
@@ -1395,26 +1350,8 @@ import Foundation
         config.groupId = "test-group"
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
         try consumer.subscribe(topics: ["test-topic"])
         consumer.triggerGracefulShutdown()
-    }
-
-    @Test func scheduleCommitAllSucceeds() async throws {
-        let config = self.makeConfig(enableAutoCommit: false)
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
-
-        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
-        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
-
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask { try await serviceGroup.run() }
-            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
-
-            try consumer.scheduleCommit()
-            try await Task.sleep(for: .milliseconds(1000), tolerance: .zero)
-
-            await serviceGroup.triggerGracefulShutdown()
-        }
     }
 }
