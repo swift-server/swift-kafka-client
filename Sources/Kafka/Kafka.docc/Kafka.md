@@ -32,11 +32,11 @@ Kafka integrates with [swift-log](https://github.com/apple/swift-log) for struct
 ### Consuming messages
 
 - ``KafkaConsumer``
-- ``KafkaConsumerMessages``
-- ``KafkaConsumerMessage``
-- ``KafkaConsumerEvents``
-- ``KafkaConsumerEvent``
-- ``KafkaConsumerRebalance``
+- ``KafkaConsumer/Messages``
+- ``KafkaConsumer/Message``
+- ``KafkaConsumer/Events``
+- ``KafkaConsumer/Event``
+- ``KafkaConsumer/Rebalance``
 - ``KafkaTimestampType``
 
 ### Configuring clients
