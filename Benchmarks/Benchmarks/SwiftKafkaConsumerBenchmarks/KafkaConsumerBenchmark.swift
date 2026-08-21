@@ -32,7 +32,7 @@ let benchmarks: @Sendable () -> Void = {
         return
     }
 
-    var uniqueTestTopic: String!
+    var uniqueTestTopic: KafkaTopic!
     let messageCount: UInt = 1000
 
     Benchmark.defaultConfiguration = .init(
@@ -84,10 +84,9 @@ let benchmarks: @Sendable () -> Void = {
         // We must specify it at least 10 otherwise CI will timeout
         consumerConfig.pollInterval = .milliseconds(1)
 
-        let consumer = try KafkaConsumer(
-            config: consumerConfig,
-            logger: .perfLogger
-        )
+        let (consumer, messages, _) = try withLogger(.perfLogger) { _ in
+            try KafkaConsumer.makeConsumer(config: consumerConfig)
+        }
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(
             services: [consumer],
@@ -114,9 +113,9 @@ let benchmarks: @Sendable () -> Void = {
                 let totalStartDate = Date.timeIntervalSinceReferenceDate
                 var totalBytes: UInt64 = 0
 
-                for try await record in consumer.messages {
+                for try await record in messages {
                     ctr += 1
-                    totalBytes += UInt64(record.value.readableBytes)
+                    totalBytes += UInt64(record.value.count)
 
                     tmpCtr += 1
                     if tmpCtr >= interval {
@@ -156,10 +155,9 @@ let benchmarks: @Sendable () -> Void = {
         // We must specify it at least 10 otherwise CI will timeout
         consumerConfig.pollInterval = .milliseconds(1)
 
-        let consumer = try KafkaConsumer(
-            config: consumerConfig,
-            logger: .perfLogger
-        )
+        let (consumer, messages, _) = try withLogger(.perfLogger) { _ in
+            try KafkaConsumer.makeConsumer(config: consumerConfig)
+        }
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(
             services: [consumer],
@@ -186,11 +184,11 @@ let benchmarks: @Sendable () -> Void = {
                 let totalStartDate = Date.timeIntervalSinceReferenceDate
                 var totalBytes: UInt64 = 0
 
-                for try await record in consumer.messages {
-                    try consumer.scheduleCommit(record)
+                for try await record in messages {
+                    Task { try? await consumer.commit(record) }
 
                     ctr += 1
-                    totalBytes += UInt64(record.value.readableBytes)
+                    totalBytes += UInt64(record.value.count)
 
                     tmpCtr += 1
                     if tmpCtr >= interval {
@@ -245,7 +243,7 @@ let benchmarks: @Sendable () -> Void = {
         }
         rd_kafka_topic_partition_list_add(
             subscriptionList,
-            uniqueTestTopic,
+            uniqueTestTopic.rawValue,
             RD_KAFKA_PARTITION_UA
         )
         rd_kafka_subscribe(kafkaHandle, subscriptionList)
@@ -316,7 +314,7 @@ let benchmarks: @Sendable () -> Void = {
         }
         rd_kafka_topic_partition_list_add(
             subscriptionList,
-            uniqueTestTopic,
+            uniqueTestTopic.rawValue,
             RD_KAFKA_PARTITION_UA
         )
         rd_kafka_subscribe(kafkaHandle, subscriptionList)

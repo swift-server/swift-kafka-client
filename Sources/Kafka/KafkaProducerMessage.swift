@@ -18,7 +18,7 @@ import NIOCore
 /// A message a producer sends to the Kafka cluster.
 public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
     /// The topic the producer sends the message to.
-    public var topic: String
+    public var topic: KafkaTopic
 
     /// The partition the producer sends the message to.
     ///
@@ -50,7 +50,7 @@ public struct KafkaProducerMessage<Key: KafkaContiguousBytes, Value: KafkaContig
     ///     - key: Guarantees that messages with the same key go to the same partition, preserving their order.
     ///     - value: The message's value.
     public init(
-        topic: String,
+        topic: KafkaTopic,
         partition: KafkaPartition = .unassigned,
         headers: [KafkaHeader] = [],
         key: Key?,
@@ -75,7 +75,7 @@ extension KafkaProducerMessage where Key == Never {
     ///     - headers: The headers of the message.
     ///     - value: The message body.
     public init(
-        topic: String,
+        topic: KafkaTopic,
         partition: KafkaPartition = .unassigned,
         headers: [KafkaHeader] = [],
         value: Value

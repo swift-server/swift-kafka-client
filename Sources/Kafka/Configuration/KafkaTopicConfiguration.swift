@@ -15,7 +15,7 @@
 /// Configuration applied to new topics that the producer creates.
 ///
 /// The ``KafkaProducer`` applies this configuration when auto-creating topics.
-public struct KafkaTopicConfiguration {
+public struct KafkaTopicConfiguration: Sendable {
     /// The number of acknowledgments the leader broker must receive from in-sync replica (ISR) brokers before responding to the request.
     public struct RequiredAcknowledgments: Sendable, Hashable {
         internal let rawValue: Int
@@ -254,10 +254,6 @@ public struct KafkaTopicConfiguration {
     /// Creates a new topic configuration with default values.
     public init() {}
 }
-
-// MARK: - KafkaTopicConfiguration + Sendable
-
-extension KafkaTopicConfiguration: Sendable {}
 
 // MARK: - KafkaTopicConfiguration + Dictionary
 

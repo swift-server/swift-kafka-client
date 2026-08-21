@@ -35,7 +35,7 @@ final class RDKafkaTopicPartitionList: @unchecked Sendable {
     }
 
     /// Add topic+partition pair to list.
-    func add(topic: String, partition: KafkaPartition) {
+    func add(topic: KafkaTopic, partition: KafkaPartition) {
         precondition(
             0...Int(Int32.max) ~= partition.rawValue || partition == .unassigned,
             "Partition ID outside of valid range \(0...Int32.max)"
@@ -43,13 +43,13 @@ final class RDKafkaTopicPartitionList: @unchecked Sendable {
 
         rd_kafka_topic_partition_list_add(
             self._internal,
-            topic,
+            topic.rawValue,
             Int32(partition.rawValue)
         )
     }
 
     /// Manually set read offset for a given topic+partition pair.
-    func setOffset(topic: String, partition: KafkaPartition, offset: Int64) {
+    func setOffset(topic: KafkaTopic, partition: KafkaPartition, offset: Int64) {
         precondition(
             0...Int(Int32.max) ~= partition.rawValue || partition == .unassigned,
             "Partition ID outside of valid range \(0...Int32.max)"
@@ -58,7 +58,7 @@ final class RDKafkaTopicPartitionList: @unchecked Sendable {
         guard
             let partitionPointer = rd_kafka_topic_partition_list_add(
                 self._internal,
-                topic,
+                topic.rawValue,
                 Int32(partition.rawValue)
             )
         else {

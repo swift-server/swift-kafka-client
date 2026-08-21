@@ -3,3 +3,49 @@ API breakage: enumelement KafkaConsumerEvent.error has been added as a new enum 
 API breakage: enumelement KafkaProducerEvent.error has been added as a new enum case
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesRecieved has been removed
 API breakage: var KafkaConfiguration.ConsumerMetrics.totalKafkaBrokerMessagesBytesRecieved has been removed
+API breakage: accessor KafkaAcknowledgedMessage.topic.Get() has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaAcknowledgedMessage.topic.Set() has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaHeader.value.Get() has return type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: accessor KafkaHeader.value.Set() has parameter 0 type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: accessor KafkaProducerMessage.topic.Get() has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaProducerMessage.topic.Set() has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaTopicPartition.topic.Get() has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaTopicPartition.topic.Set() has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaTopicPartitionOffset.topic.Get() has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: constructor KafkaConsumer.init(config:logger:) has been removed
+API breakage: constructor KafkaConsumer.init(configuration:logger:) has been removed
+API breakage: constructor KafkaHeader.init(key:value:) has parameter 1 type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: constructor KafkaProducerMessage.init(topic:partition:headers:key:value:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: constructor KafkaProducerMessage.init(topic:partition:headers:value:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: constructor KafkaTimestampType.init(rawValue:) has been removed
+API breakage: constructor KafkaTopicPartition.init(topic:partition:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: constructor KafkaTopicPartitionOffset.init(topic:partition:offset:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: enum KafkaConsumerEvent has been removed
+API breakage: func KafkaConsumer.commit() has been renamed to func commitStoredOffsets()
+API breakage: func KafkaConsumer.commit(_:) has parameter 0 type change from Kafka.KafkaConsumerMessage to Kafka.KafkaConsumer.Message
+API breakage: func KafkaConsumer.commitSync(_:) has been removed
+API breakage: func KafkaConsumer.makeConsumerWithEvents(config:logger:) has been renamed to func makeConsumer(config:)
+API breakage: func KafkaConsumer.makeConsumerWithEvents(config:logger:) has return type change from (Kafka.KafkaConsumer, Kafka.KafkaConsumerEvents) to (consumer: Kafka.KafkaConsumer, messages: Kafka.KafkaConsumer.Messages, events: Kafka.KafkaConsumer.Events)
+API breakage: func KafkaConsumer.makeConsumerWithEvents(configuration:logger:) has been removed
+API breakage: func KafkaConsumer.scheduleCommit() has been removed
+API breakage: func KafkaConsumer.scheduleCommit(_:) has been removed
+API breakage: func KafkaConsumer.storeOffset(_:) has parameter 0 type change from Kafka.KafkaConsumerMessage to Kafka.KafkaConsumer.Message
+API breakage: func KafkaConsumer.subscribe(topics:) has parameter 0 type change from [Swift.String] to [Kafka.KafkaTopic]
+API breakage: func KafkaConsumer.subscribedTopics() has been removed
+API breakage: func KafkaConsumer.triggerGracefulShutdown() has been removed
+API breakage: func KafkaConsumerConfiguration.ConsumptionStrategy.group(id:topics:) has parameter 1 type change from [Swift.String] to [Kafka.KafkaTopic]
+API breakage: func KafkaConsumerConfiguration.ConsumptionStrategy.partition(_:groupID:topic:offset:) has parameter 2 type change from Swift.String to Kafka.KafkaTopic
+API breakage: func RDKafkaClient._createUniqueTopic(partitions:) has return type change from Swift.String to Kafka.KafkaTopic
+API breakage: func RDKafkaClient._deleteTopic(_:) has parameter 0 type change from Swift.String to Kafka.KafkaTopic
+API breakage: func RDKafkaClient.makeClientForTopics(config:logger:) has been removed
+API breakage: func RDKafkaClient.makeClientForTopics(config:logger:) has been renamed to func makeClientForTopics(config:)
+API breakage: struct KafkaConsumerEvents has been removed
+API breakage: struct KafkaConsumerMessage has been removed
+API breakage: struct KafkaConsumerMessages has been removed
+API breakage: struct KafkaConsumerRebalance has been removed
+API breakage: var KafkaAcknowledgedMessage.topic has declared type change from Swift.String to Kafka.KafkaTopic
+API breakage: var KafkaConsumer.messages has been removed
+API breakage: var KafkaHeader.value has declared type change from NIOCore.ByteBuffer? to [Swift.UInt8]?
+API breakage: var KafkaProducerMessage.topic has declared type change from Swift.String to Kafka.KafkaTopic
+API breakage: var KafkaTopicPartition.topic has declared type change from Swift.String to Kafka.KafkaTopic
+API breakage: var KafkaTopicPartitionOffset.topic has declared type change from Swift.String to Kafka.KafkaTopic

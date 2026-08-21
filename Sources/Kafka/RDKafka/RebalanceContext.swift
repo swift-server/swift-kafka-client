@@ -59,7 +59,8 @@ final class RebalanceContext: @unchecked Sendable {
     /// Logger for rebalance operations. Used from the C callback thread.
     private let logger: Logger
 
-    init(logger: Logger) {
+    init() {
+        let logger = Logger.current
         self.pendingEvents = NIOLockedValueBox([])
         self.logger = logger
     }

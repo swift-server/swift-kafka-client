@@ -36,7 +36,7 @@ public func _createTestMessages(
 ) -> [KafkaProducerMessage<String, String>] {
     Array(0..<count).map {
         KafkaProducerMessage(
-            topic: topic,
+            topic: KafkaTopic(rawValue: topic),
             headers: headers,
             key: UUID().uuidString,
             value: "Hello, World! \($0) - \(Date().description)"

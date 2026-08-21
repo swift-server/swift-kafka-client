@@ -52,7 +52,7 @@ final class KafkaMetricsTests {
         config.useMockBroker()
         config.brokerAddressFamily = .v4
 
-        let consumer = try KafkaConsumer(config: config, logger: .kafkaTest)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
