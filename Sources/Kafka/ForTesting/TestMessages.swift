@@ -30,13 +30,13 @@ public enum _TestMessagesError: Error {
 /// Builds an array of test producer messages with unique keys for the topic you provide.
 @_spi(Internal)
 public func _createTestMessages(
-    topic: String,
+    topic: KafkaTopic,
     headers: [KafkaHeader] = [],
     count: UInt
-) -> [KafkaProducerMessage<String, String>] {
+) -> [KafkaProducer.Message<String, String>] {
     Array(0..<count).map {
-        KafkaProducerMessage(
-            topic: KafkaTopic(rawValue: topic),
+        KafkaProducer.Message(
+            topic: topic,
             headers: headers,
             key: UUID().uuidString,
             value: "Hello, World! \($0) - \(Date().description)"
@@ -48,11 +48,11 @@ public func _createTestMessages(
 @_spi(Internal)
 public func _sendAndAcknowledgeMessages(
     producer: KafkaProducer,
-    events: KafkaProducerEvents,
-    messages: [KafkaProducerMessage<String, String>],
+    events: KafkaProducer.Events,
+    messages: [KafkaProducer.Message<String, String>],
     skipConsistencyCheck: Bool = false
 ) async throws {
-    var messageIDs = Set<KafkaProducerMessageID>()
+    var messageIDs = Set<KafkaProducer.MessageID>()
     messageIDs.reserveCapacity(messages.count)
 
     for message in messages {
@@ -67,7 +67,7 @@ public func _sendAndAcknowledgeMessages(
         }
     }
 
-    var receivedDeliveryReports = Set<KafkaDeliveryReport>()
+    var receivedDeliveryReports = Set<KafkaProducer.DeliveryReport>()
     receivedDeliveryReports.reserveCapacity(messages.count)
 
     for await event in events {
@@ -89,7 +89,7 @@ public func _sendAndAcknowledgeMessages(
         throw _TestMessagesError.deliveryReportsIdsIncorrect
     }
 
-    let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
+    let acknowledgedMessages: [KafkaProducer.AcknowledgedMessage] = receivedDeliveryReports.compactMap {
         guard case .acknowledged(let receivedMessage) = $0.status else {
             return nil
         }

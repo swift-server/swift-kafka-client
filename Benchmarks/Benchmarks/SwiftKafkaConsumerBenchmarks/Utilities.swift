@@ -67,14 +67,14 @@ func prepareTopic(messagesCount: UInt, partitions: Int32 = -1, logger: Logger = 
     benchLog("Created topic \(uniqueTestTopic)")
 
     benchLog("Generating \(messagesCount) messages")
-    let testMessages = _createTestMessages(topic: uniqueTestTopic.rawValue, count: messagesCount)
+    let testMessages = _createTestMessages(topic: uniqueTestTopic, count: messagesCount)
     benchLog("Finish generating \(messagesCount) messages")
 
     var producerConfig = KafkaProducerConfig()
     producerConfig.bootstrapServers = [bootstrapServer]
     producerConfig.brokerAddressFamily = .v4
 
-    let (producer, acks) = try KafkaProducer.makeProducerWithEvents(config: producerConfig, logger: logger)
+    let (producer, acks) = try KafkaProducer.makeProducer(config: producerConfig)
 
     let serviceGroupConfiguration = ServiceGroupConfiguration(
         services: [producer],

@@ -80,9 +80,8 @@ final class KafkaMetricsTests {
         config.metrics.updateInterval = .milliseconds(100)
         config.metrics.queuedOperation = .init(label: "operations")
 
-        let producer = try KafkaProducer(
-            config: config,
-            logger: .kafkaTest
+        let (producer, _) = try KafkaProducer.makeProducer(
+            config: config
         )
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
