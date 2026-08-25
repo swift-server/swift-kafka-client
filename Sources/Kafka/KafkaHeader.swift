@@ -12,8 +12,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-import NIOCore
-
 /// A header attached to a Kafka message.
 ///
 /// Headers are key-value pairs that carry additional metadata alongside a Kafka message.
@@ -22,7 +20,7 @@ public struct KafkaHeader: Sendable, Hashable {
     public var key: String
 
     /// The value associated with the header.
-    public var value: ByteBuffer?
+    public var value: [UInt8]?
 
     /// Creates a new Kafka header with the key and optional value you provide.
     ///
@@ -31,7 +29,7 @@ public struct KafkaHeader: Sendable, Hashable {
     ///   - value: The optional binary value associated with the header.
     public init(
         key: String,
-        value: ByteBuffer? = nil
+        value: [UInt8]? = nil
     ) {
         self.key = key
         self.value = value

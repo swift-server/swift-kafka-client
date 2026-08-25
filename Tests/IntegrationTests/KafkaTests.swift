@@ -32,15 +32,14 @@ import Foundation
 private let kafkaHost: String = ProcessInfo.processInfo.environment["KAFKA_HOST"] ?? "localhost"
 private let kafkaPort: Int = .init(ProcessInfo.processInfo.environment["KAFKA_PORT"] ?? "9092")!
 
-func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async throws -> Void) async throws {
+func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) async throws -> Void) async throws {
     var basicConfig = KafkaConsumerConfig()
     basicConfig.groupId = UUID().uuidString
     basicConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
     basicConfig.brokerAddressFamily = .v4
 
     let client = try RDKafkaClient.makeClientForTopics(
-        config: basicConfig,
-        logger: .kafkaTest
+        config: basicConfig
     )
     let testTopic = try await client._createUniqueTopic(partitions: partitions)
 
@@ -280,7 +279,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
             let testMessages = Self.createTestMessages(
                 topic: testTopic,
                 headers: [
-                    KafkaHeader(key: "some.header", value: ByteBuffer(string: "some-header-value")),
+                    KafkaHeader(key: "some.header", value: Array("some-header-value".utf8)),
                     KafkaHeader(key: "some.null.header", value: nil),
                 ],
                 count: 10
@@ -2234,7 +2233,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
 
     // MARK: - Helpers
 
-    func produceMessages(topic: String, count: UInt) async throws -> [KafkaProducerMessage<String, String>] {
+    func produceMessages(topic: KafkaTopic, count: UInt) async throws -> [KafkaProducerMessage<String, String>] {
         let testMessages = Self.createTestMessages(topic: topic, count: count)
         try await self.produceMessages(messages: testMessages)
         return testMessages
@@ -2276,11 +2275,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
     }
 
     private static func createTestMessages(
-        topic: String,
+        topic: KafkaTopic,
         headers: [KafkaHeader] = [],
         count: UInt
     ) -> [KafkaProducerMessage<String, String>] {
-        _createTestMessages(topic: topic, headers: headers, count: count)
+        _createTestMessages(topic: topic.rawValue, headers: headers, count: count)
     }
 
     private static func sendAndAcknowledgeMessages(
@@ -2489,7 +2488,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: String) async th
                     // Subscribe dynamically to both topics
                     try consumer.subscribe(topics: [testTopic1, testTopic2])
 
-                    var receivedTopics: Set<String> = []
+                    var receivedTopics: Set<KafkaTopic> = []
                     for try await message in consumer.messages {
                         receivedTopics.insert(message.topic)
                         if receivedTopics.count >= 2 {
