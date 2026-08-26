@@ -15,59 +15,53 @@
 import Crdkafka
 import NIOCore
 
-/// A message acknowledged by the Kafka cluster.
-public struct KafkaAcknowledgedMessage {
-    /// The topic the producer sent the message to.
-    public var topic: KafkaTopic
-    /// The partition the producer sent the message to.
-    public var partition: KafkaPartition
-    /// The key of the message.
-    public var key: ByteBuffer?
-    /// The body of the message.
-    public var value: ByteBuffer
-    /// The offset of the message in its partition.
-    public var offset: KafkaOffset
-    /// The headers of the message.
-    public var headers: [KafkaHeader]
+extension KafkaProducer {
+    /// A message acknowledged by the Kafka cluster.
+    public struct AcknowledgedMessage: Hashable, Sendable {
+        /// The topic the producer sent the message to.
+        public var topic: KafkaTopic
+        /// The partition the producer sent the message to.
+        public var partition: KafkaPartition
+        /// The key of the message.
+        public var key: [UInt8]?
+        /// The body of the message.
+        public var value: [UInt8]
+        /// The offset of the message in its partition.
+        public var offset: KafkaOffset
+        /// The headers of the message.
+        public var headers: [KafkaHeader]
 
-    /// Creates a ``KafkaAcknowledgedMessage`` from an `rd_kafka_message_t` pointer.
-    /// - Throws: A ``KafkaError`` for failed acknowledgments or malformed messages.
-    internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
-        let rdKafkaMessage = messagePointer.pointee
+        /// Creates a ``KafkaProducer/AcknowledgedMessage`` from an `rd_kafka_message_t` pointer.
+        /// - Throws: A ``KafkaError`` for failed acknowledgments or malformed messages.
+        internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
+            let rdKafkaMessage = messagePointer.pointee
 
-        let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
-        self.value = ByteBuffer(bytes: valueBufferPointer)
+            let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
+            self.value = [UInt8](valueBufferPointer)
 
-        guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
+            guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
+                throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
+            }
+
+            guard let topic = String(validatingCString: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
+                fatalError("Received topic name that is non-valid UTF-8")
+            }
+
+            self.topic = KafkaTopic(rawValue: topic)
+
+            self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
+            self.headers = try RDKafkaClient.getHeaders(for: messagePointer)
+            if let keyPointer = rdKafkaMessage.key {
+                let keyBufferPointer = UnsafeRawBufferPointer(
+                    start: keyPointer,
+                    count: rdKafkaMessage.key_len
+                )
+                self.key = [UInt8](keyBufferPointer)
+            } else {
+                self.key = nil
+            }
+
+            self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
         }
-
-        guard let topic = String(validatingCString: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
-            fatalError("Received topic name that is non-valid UTF-8")
-        }
-
-        self.topic = KafkaTopic(rawValue: topic)
-
-        self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
-        self.headers = try RDKafkaClient.getHeaders(for: messagePointer)
-        if let keyPointer = rdKafkaMessage.key {
-            let keyBufferPointer = UnsafeRawBufferPointer(
-                start: keyPointer,
-                count: rdKafkaMessage.key_len
-            )
-            self.key = .init(bytes: keyBufferPointer)
-        } else {
-            self.key = nil
-        }
-
-        self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
     }
 }
-
-// MARK: KafkaAcknowledgedMessage + Hashable
-
-extension KafkaAcknowledgedMessage: Hashable {}
-
-// MARK: KafkaAcknowledgedMessage + Sendable
-
-extension KafkaAcknowledgedMessage: Sendable {}

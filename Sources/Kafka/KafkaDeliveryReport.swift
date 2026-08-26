@@ -14,40 +14,42 @@
 
 import Crdkafka
 
-/// A delivery report for a message the producer sent to the Kafka cluster.
-public struct KafkaDeliveryReport: Sendable, Hashable {
-    /// The outcome of a producer's attempt to deliver a message to the Kafka cluster.
-    public enum Status: Sendable, Hashable {
-        /// The Kafka cluster successfully acknowledged the message.
-        case acknowledged(message: KafkaAcknowledgedMessage)
-        /// The Kafka cluster failed to acknowledge the message and encountered an error.
-        case failure(KafkaError)
-    }
-
-    /// The delivery status of the producer message.
-    public var status: Status
-
-    /// The unique identifier the producer assigned when sending the message to Kafka.
-    ///
-    /// ``KafkaProducer/send(_:)`` returns the same identifier, which correlates
-    /// a sent message with a delivery report.
-    public var id: KafkaProducerMessageID
-
-    internal init?(messagePointer: UnsafePointer<rd_kafka_message_t>?) {
-        guard let messagePointer else {
-            return nil
+extension KafkaProducer {
+    /// A delivery report for a message the producer sent to the Kafka cluster.
+    public struct DeliveryReport: Sendable, Hashable {
+        /// The outcome of a producer's attempt to deliver a message to the Kafka cluster.
+        public enum Status: Sendable, Hashable {
+            /// The Kafka cluster successfully acknowledged the message.
+            case acknowledged(message: AcknowledgedMessage)
+            /// The Kafka cluster failed to acknowledge the message and encountered an error.
+            case failure(KafkaError)
         }
 
-        self.id = KafkaProducerMessageID(rawValue: UInt(bitPattern: messagePointer.pointee._private))
+        /// The delivery status of the producer message.
+        public var status: Status
 
-        do {
-            let message = try KafkaAcknowledgedMessage(messagePointer: messagePointer)
-            self.status = .acknowledged(message: message)
-        } catch {
-            guard let error = error as? KafkaError else {
-                fatalError("Caught error that is not of type \(KafkaError.self)")
+        /// The unique identifier the producer assigned when sending the message to Kafka.
+        ///
+        /// ``KafkaProducer/send(_:)`` returns the same identifier, which correlates
+        /// a sent message with a delivery report.
+        public var id: MessageID
+
+        internal init?(messagePointer: UnsafePointer<rd_kafka_message_t>?) {
+            guard let messagePointer else {
+                return nil
             }
-            self.status = .failure(error)
+
+            self.id = MessageID(rawValue: UInt(bitPattern: messagePointer.pointee._private))
+
+            do {
+                let message = try AcknowledgedMessage(messagePointer: messagePointer)
+                self.status = .acknowledged(message: message)
+            } catch {
+                guard let error = error as? KafkaError else {
+                    fatalError("Caught error that is not of type \(KafkaError.self)")
+                }
+                self.status = .failure(error)
+            }
         }
     }
 }

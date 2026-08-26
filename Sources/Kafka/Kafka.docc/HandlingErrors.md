@@ -11,8 +11,8 @@ Both the producer and the consumer report failures as ``KafkaError`` values. A `
 A ``KafkaError`` reaches your code in three ways:
 
 - **Thrown** from throwing calls such as ``KafkaProducer/send(_:)``, ``KafkaProducer/sendAndAwait(_:)``, ``KafkaConsumer/subscribe(topics:)``, and ``KafkaConsumer/commit(_:)``.
-- **On an event sequence**, as ``KafkaConsumer/Event/error(_:)`` or ``KafkaProducerEvent/error(_:)`` — for example, a broker disconnection or an authentication failure.
-- **In a delivery report**, when a ``KafkaDeliveryReport``'s status is `failure` because a message could not be delivered.
+- **On an event sequence**, as ``KafkaConsumer/Event/error(_:)`` or ``KafkaProducer/Event/error(_:)`` — for example, a broker disconnection or an authentication failure.
+- **In a delivery report**, when a ``KafkaProducer/DeliveryReport``'s status is `failure` because a message could not be delivered.
 
 ## Classify an error
 
@@ -58,5 +58,5 @@ func handle(_ error: KafkaError, logger: Logger) {
 ### Error events
 
 - ``KafkaConsumer/Event``
-- ``KafkaProducerEvent``
-- ``KafkaDeliveryReport``
+- ``KafkaProducer/Event``
+- ``KafkaProducer/DeliveryReport``

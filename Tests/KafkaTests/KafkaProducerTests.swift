@@ -35,9 +35,8 @@ import Foundation
     }
 
     @Test func send() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            config: self.config,
-            logger: .kafkaTest
+        let (producer, events) = try KafkaProducer.makeProducer(
+            config: self.config
         )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
@@ -51,7 +50,7 @@ import Foundation
 
             let expectedTopic: KafkaTopic = "test-topic"
             let headers = [KafkaHeader(key: "some", value: Array("test".utf8))]
-            let message = KafkaProducerMessage(
+            let message = KafkaProducer.Message(
                 topic: expectedTopic,
                 headers: headers,
                 key: "key",
@@ -60,7 +59,7 @@ import Foundation
 
             let messageID = try producer.send(message)
 
-            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
+            var receivedDeliveryReports = Set<KafkaProducer.DeliveryReport>()
 
             for await event in events {
                 switch event {
@@ -86,8 +85,8 @@ import Foundation
             }
 
             #expect(expectedTopic == receivedMessage.topic)
-            #expect(ByteBuffer(string: message.key!) == receivedMessage.key)
-            #expect(ByteBuffer(string: message.value) == receivedMessage.value)
+            #expect(Array(message.key!.utf8) == receivedMessage.key)
+            #expect(Array(message.value.utf8) == receivedMessage.value)
             #expect(headers == receivedMessage.headers)
 
             // Shutdown the serviceGroup
@@ -96,9 +95,8 @@ import Foundation
     }
 
     @Test func sendEmptyMessage() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            config: self.config,
-            logger: .kafkaTest
+        let (producer, events) = try KafkaProducer.makeProducer(
+            config: self.config
         )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
@@ -111,14 +109,14 @@ import Foundation
             }
 
             let expectedTopic: KafkaTopic = "test-topic"
-            let message = KafkaProducerMessage(
+            let message = KafkaProducer.Message(
                 topic: expectedTopic,
                 value: ByteBuffer()
             )
 
             let messageID = try producer.send(message)
 
-            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
+            var receivedDeliveryReports = Set<KafkaProducer.DeliveryReport>()
 
             for await event in events {
                 switch event {
@@ -144,7 +142,7 @@ import Foundation
             }
 
             #expect(expectedTopic == receivedMessage.topic)
-            #expect(message.value == receivedMessage.value)
+            #expect(Array(message.value.readableBytesView) == receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -152,9 +150,8 @@ import Foundation
     }
 
     @Test func sendTwoTopics() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            config: self.config,
-            logger: .kafkaTest
+        let (producer, events) = try KafkaProducer.makeProducer(
+            config: self.config
         )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
@@ -166,23 +163,23 @@ import Foundation
                 try await serviceGroup.run()
             }
 
-            let message1 = KafkaProducerMessage(
+            let message1 = KafkaProducer.Message(
                 topic: "test-topic1",
                 key: "key1",
                 value: "Hello, Munich!"
             )
-            let message2 = KafkaProducerMessage(
+            let message2 = KafkaProducer.Message(
                 topic: "test-topic2",
                 key: "key2",
                 value: "Hello, London!"
             )
 
-            var messageIDs = Set<KafkaProducerMessageID>()
+            var messageIDs = Set<KafkaProducer.MessageID>()
 
             messageIDs.insert(try producer.send(message1))
             messageIDs.insert(try producer.send(message2))
 
-            var receivedDeliveryReports = Set<KafkaDeliveryReport>()
+            var receivedDeliveryReports = Set<KafkaProducer.DeliveryReport>()
 
             for await event in events {
                 switch event {
@@ -201,7 +198,7 @@ import Foundation
 
             #expect(Set(receivedDeliveryReports.map(\.id)) == messageIDs)
 
-            let acknowledgedMessages: [KafkaAcknowledgedMessage] = receivedDeliveryReports.compactMap {
+            let acknowledgedMessages: [KafkaProducer.AcknowledgedMessage] = receivedDeliveryReports.compactMap {
                 guard case .acknowledged(let receivedMessage) = $0.status else {
                     return nil
                 }
@@ -211,10 +208,10 @@ import Foundation
             #expect(acknowledgedMessages.count == 2)
             #expect(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
             #expect(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
-            #expect(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message1.key!) }))
-            #expect(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message2.key!) }))
-            #expect(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message1.value) }))
-            #expect(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message2.value) }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == Array(message1.key!.utf8) }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == Array(message2.key!.utf8) }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == Array(message1.value.utf8) }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == Array(message2.value.utf8) }))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -230,7 +227,9 @@ import Foundation
         // Set no bootstrap servers to trigger librdkafka configuration warning
         let config = KafkaProducerConfig()
 
-        let producer = try KafkaProducer(config: config, logger: mockLogger)
+        let (producer, _) = try withLogger(mockLogger) { _ in
+            try KafkaProducer.makeProducer(config: config)
+        }
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
@@ -265,10 +264,9 @@ import Foundation
         #expect(expectedSource == receivedEvent.source)
     }
 
-    @Test func sendFailsAfterTerminatingAcknowledgementSequence() async throws {
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            config: self.config,
-            logger: .kafkaTest
+    @Test func sendSucceedsAfterTerminatingAcknowledgementSequence() async throws {
+        let (producer, events) = try KafkaProducer.makeProducer(
+            config: self.config
         )
 
         let serviceGroupConfiguration = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
@@ -280,12 +278,12 @@ import Foundation
                 try await serviceGroup.run()
             }
 
-            let message1 = KafkaProducerMessage(
+            let message1 = KafkaProducer.Message(
                 topic: "test-topic1",
                 key: "key1",
                 value: "Hello, Cupertino!"
             )
-            let message2 = KafkaProducerMessage(
+            let message2 = KafkaProducer.Message(
                 topic: "test-topic2",
                 key: "key2",
                 value: "Hello, San Diego!"
@@ -294,15 +292,13 @@ import Foundation
             try producer.send(message1)
 
             // Terminate the events sequence by deallocating its AsyncIterator
-            var iterator: KafkaProducerEvents.AsyncIterator? = events.makeAsyncIterator()
+            var iterator: KafkaProducer.Events.AsyncIterator? = events.makeAsyncIterator()
             _ = iterator
             iterator = nil
 
-            // Sending a new message should fail after the events sequence
+            // Sending a new message should succeed even after the events sequence
             // has been terminated
-            #expect(throws: KafkaError.connectionClosed(reason: "reason")) {
-                try producer.send(message2)
-            }
+            try producer.send(message2)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -311,8 +307,8 @@ import Foundation
 
     @Test func noMemoryLeakAfterShutdown() async throws {
         var producer: KafkaProducer?
-        var events: KafkaProducerEvents?
-        (producer, events) = try KafkaProducer.makeProducerWithEvents(config: self.config, logger: .kafkaTest)
+        var events: KafkaProducer.Events?
+        (producer, events) = try KafkaProducer.makeProducer(config: self.config)
         _ = events
 
         weak var producerCopy: KafkaProducer?
@@ -342,16 +338,16 @@ import Foundation
         let config = KafkaProducerConfig()
 
         // deinit called before run
-        _ = try KafkaProducer(config: config, logger: .kafkaTest)
+        _ = try KafkaProducer.makeProducer(config: config)
 
         // deinit called before run
-        _ = try KafkaProducer.makeProducerWithEvents(config: config, logger: .kafkaTest)
+        _ = try KafkaProducer.makeProducer(config: config)
     }
 
     @Test func producerEventsReadCancelledBeforeRun() async throws {
         let config = KafkaProducerConfig()
 
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(config: config, logger: .kafkaTest)
+        let (producer, events) = try KafkaProducer.makeProducer(config: config)
 
         let svcGroupConfig = ServiceGroupConfiguration(services: [producer], logger: .kafkaTest)
         let serviceGroup = ServiceGroup(configuration: svcGroupConfig)
@@ -381,11 +377,11 @@ import Foundation
         }
     }
 
-    // MARK: - KafkaProducerEvent.error Tests
+    // MARK: - KafkaProducer.Event.error Tests
 
     @Test func producerEventErrorPatternMatch() {
         let error = KafkaError.config(reason: "Authentication failed")
-        let event = KafkaProducerEvent.error(error)
+        let event = KafkaProducer.Event.error(error)
 
         switch event {
         case .error(let e):

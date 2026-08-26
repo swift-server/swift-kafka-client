@@ -12,40 +12,34 @@
 //
 //===----------------------------------------------------------------------===//
 
-/// An identifier for a message produced by a Kafka producer.
-///
-/// Use a ``KafkaProducerMessageID`` to correlate an incoming ``KafkaDeliveryReport`` with the
-/// corresponding ``KafkaProducer/send(_:)`` call that produced it.
-public struct KafkaProducerMessageID {
-    internal var rawValue: UInt
+extension KafkaProducer {
+    /// An identifier for a message produced by a Kafka producer.
+    ///
+    /// Use a ``KafkaProducer/MessageID`` to correlate an incoming ``KafkaProducer/DeliveryReport`` with the
+    /// corresponding ``KafkaProducer/send(_:)`` call that produced it.
+    public struct MessageID: Hashable, Sendable {
+        internal var rawValue: UInt
 
-    internal init(rawValue: UInt) {
-        self.rawValue = rawValue
+        internal init(rawValue: UInt) {
+            self.rawValue = rawValue
+        }
     }
 }
 
-// MARK: - KafkaProducerMessageID + CustomStringConvertible
+// MARK: - KafkaProducer.MessageID + CustomStringConvertible
 
-extension KafkaProducerMessageID: CustomStringConvertible {
+extension KafkaProducer.MessageID: CustomStringConvertible {
     /// A textual representation of the producer message identifier.
     public var description: String {
         String(self.rawValue)
     }
 }
 
-// MARK: - KafkaProducerMessageID + Hashable
+// MARK: - KafkaProducer.MessageID + Comparable
 
-extension KafkaProducerMessageID: Hashable {}
-
-// MARK: - KafkaProducerMessageID + Comparable
-
-extension KafkaProducerMessageID: Comparable {
+extension KafkaProducer.MessageID: Comparable {
     /// Returns a Boolean value that indicates whether the first identifier is ordered before the second.
-    public static func < (lhs: KafkaProducerMessageID, rhs: KafkaProducerMessageID) -> Bool {
+    public static func < (lhs: KafkaProducer.MessageID, rhs: KafkaProducer.MessageID) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 }
-
-// MARK: - KafkaProducerMessageID + Sendable
-
-extension KafkaProducerMessageID: Sendable {}

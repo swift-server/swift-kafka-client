@@ -84,9 +84,8 @@ let benchmarks: @Sendable () -> Void = {
         producerConfig.additionalConfig["test.mock.num.brokers"] = "1"
         producerConfig.brokerAddressFamily = .v4
 
-        let (producer, events) = try KafkaProducer.makeProducerWithEvents(
-            config: producerConfig,
-            logger: .benchLogger
+        let (producer, events) = try KafkaProducer.makeProducer(
+            config: producerConfig
         )
         let messages = _createTestMessages(topic: "benchmark-topic", count: messageCount)
 

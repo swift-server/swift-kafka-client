@@ -121,7 +121,7 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter newMessageID: ID assigned to the `message`.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages.
     func produce<Key, Value>(
-        message: KafkaProducerMessage<Key, Value>,
+        message: KafkaProducer.Message<Key, Value>,
         newMessageID: UInt,
         topicHandles: RDKafkaTopicHandles
     ) throws {
@@ -229,7 +229,7 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter body: The closure that uses the pointer.
     @discardableResult
     private static func withMessageKeyAndValueBuffer<T, Key, Value>(
-        for message: KafkaProducerMessage<Key, Value>,
+        for message: KafkaProducer.Message<Key, Value>,
         _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T  // (keyBuffer, valueBuffer)
     ) rethrows -> T {
         try message.value.withUnsafeBytes { valueBuffer in
@@ -299,7 +299,7 @@ public final class RDKafkaClient: Sendable {
     /// Typed event returned by ``producerEventPoll(maxEvents:)``.
     /// Contains only events relevant to a Kafka producer.
     enum ProducerPollEvent {
-        case deliveryReport(results: [KafkaDeliveryReport])
+        case deliveryReport(results: [KafkaProducer.DeliveryReport])
         case statistics(RDKafkaStatistics)
         case error(KafkaError)
     }
@@ -423,13 +423,13 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
     /// - Returns: Delivery report results parsed from the event.
-    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> [KafkaDeliveryReport] {
+    private func handleDeliveryReportEvent(_ event: OpaquePointer?) -> [KafkaProducer.DeliveryReport] {
         let deliveryReportCount = rd_kafka_event_message_count(event)
-        var deliveryReportResults = [KafkaDeliveryReport]()
+        var deliveryReportResults = [KafkaProducer.DeliveryReport]()
         deliveryReportResults.reserveCapacity(deliveryReportCount)
 
         while let messagePointer = rd_kafka_event_message_next(event) {
-            guard let messageStatus = KafkaDeliveryReport(messagePointer: messagePointer) else {
+            guard let messageStatus = KafkaProducer.DeliveryReport(messagePointer: messagePointer) else {
                 continue
             }
             deliveryReportResults.append(messageStatus)

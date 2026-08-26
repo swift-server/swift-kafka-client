@@ -57,28 +57,30 @@ let logger = Logger(label: "kafka-example")
 var config = KafkaProducerConfig()
 config.bootstrapServers = ["localhost:9092"]
 
-let producer = try KafkaProducer(config: config, logger: logger)
+try await withLogger(logger) { _ in
+    let (producer, _) = try KafkaProducer.makeProducer(config: config)
 
-let serviceGroup = ServiceGroup(
-    services: [producer],
-    gracefulShutdownSignals: [.sigterm],
-    logger: logger
-)
+    let serviceGroup = ServiceGroup(
+        services: [producer],
+        gracefulShutdownSignals: [.sigterm],
+        logger: logger
+    )
 
-await withThrowingTaskGroup(of: Void.self) { group in
-    group.addTask { try await serviceGroup.run() }
+    await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask { try await serviceGroup.run() }
 
-    group.addTask {
-        let message = KafkaProducerMessage(
-            topic: "topic-name",
-            value: "Hello, World!"
-        )
-        let report = try await producer.sendAndAwait(message)
-        switch report.status {
-        case .acknowledged(let ack):
-            print("Delivered to partition \(ack.partition) at offset \(ack.offset)")
-        case .failure(let error):
-            print("Delivery failed: \(error)")
+        group.addTask {
+            let message = KafkaProducer.Message(
+                topic: "topic-name",
+                value: "Hello, World!"
+            )
+            let report = try await producer.sendAndAwait(message)
+            switch report.status {
+            case .acknowledged(let ack):
+                print("Delivered to partition \(ack.partition) at offset \(ack.offset)")
+            case .failure(let error):
+                print("Delivery failed: \(error)")
+            }
         }
     }
 }
