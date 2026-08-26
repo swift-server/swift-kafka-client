@@ -86,7 +86,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
 
 ### Read messages from a topic
 
-To consume messages, create a ``KafkaConsumer`` with a group consumption strategy, run it inside a `ServiceGroup`, and iterate ``KafkaConsumer/messages``:
+To consume messages, create a ``KafkaConsumer`` with a group consumption strategy using ``KafkaConsumer/makeConsumer(config:)``, run it inside a `ServiceGroup`, and iterate the returned ``KafkaConsumer/Messages`` sequence:
 
 ```swift
 var config = KafkaConsumerConfig()
@@ -96,7 +96,7 @@ config.consumptionStrategy = .group(
     topics: ["topic-name"]
 )
 
-let consumer = try KafkaConsumer(config: config, logger: logger)
+let (consumer, messages, _) = try KafkaConsumer.makeConsumer(config: config)
 
 let serviceGroup = ServiceGroup(
     services: [consumer],
@@ -108,7 +108,7 @@ await withThrowingTaskGroup(of: Void.self) { group in
     group.addTask { try await serviceGroup.run() }
 
     group.addTask {
-        for try await message in consumer.messages {
+        for try await message in messages {
             print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
         }
     }

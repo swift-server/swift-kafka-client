@@ -4,9 +4,9 @@ An object that consumes messages from a Kafka cluster as part of a service lifec
 
 ## Overview
 
-Create a consumer from a ``KafkaConsumerConfig``, run it inside a `ServiceGroup`, and iterate ``KafkaConsumer/messages`` to receive records. The consumer conforms to `Service`, so the surrounding application controls its lifecycle; the `run()` method drives the underlying poll loop until the calling task is canceled or a graceful shutdown is triggered.
+Create a consumer from a ``KafkaConsumerConfig``, run it inside a `ServiceGroup`, and iterate its ``KafkaConsumer/Messages`` sequence to receive records. The consumer conforms to `Service`, so the surrounding application controls its lifecycle; the `run()` method drives the underlying poll loop until the calling task is canceled or a graceful shutdown is triggered.
 
-By default, the consumer stores and commits offsets automatically as iteration proceeds. For at-least-once delivery, disable automatic offset storage and call ``storeOffset(_:)`` after processing each record. For full control over commit timing, disable auto-commit as well and use ``commit(_:)`` or ``commit()`` explicitly.
+By default, the consumer stores and commits offsets automatically as iteration proceeds. For at-least-once delivery, disable automatic offset storage and call ``storeOffset(_:)`` after processing each record. For full control over commit timing, disable auto-commit as well and use ``commit(_:)`` or ``commitStoredOffsets()`` explicitly.
 
 For an end-to-end guide including configuration, rebalance handling, and offset patterns, see <doc:ConsumingMessages>.
 
@@ -14,33 +14,28 @@ For an end-to-end guide including configuration, rebalance handling, and offset 
 
 ### Creating a consumer
 
-- ``init(config:logger:)``
-- ``makeConsumerWithEvents(config:logger:)``
+- ``makeConsumer(config:)``
 
 ### Consuming messages
 
-- ``messages``
-- ``KafkaConsumerMessages``
-- ``KafkaConsumerMessage``
+- ``KafkaConsumer/Messages``
+- ``KafkaConsumer/Message``
 
 ### Running the service
 
 - ``run()``
-- ``triggerGracefulShutdown()``
 
 ### Managing subscriptions
 
 - ``subscribe(topics:)``
 - ``unsubscribe()``
-- ``subscribedTopics()``
+- ``subscribedTopics``
 
 ### Storing and committing offsets
 
 - ``storeOffset(_:)``
 - ``commit(_:)``
-- ``commit()``
-- ``scheduleCommit(_:)``
-- ``scheduleCommit()``
+- ``commitStoredOffsets()``
 
 ### Querying position
 
@@ -59,6 +54,6 @@ For an end-to-end guide including configuration, rebalance handling, and offset 
 
 ### Observing events
 
-- ``KafkaConsumerEvents``
-- ``KafkaConsumerEvent``
-- ``KafkaConsumerRebalance``
+- ``KafkaConsumer/Events``
+- ``KafkaConsumer/Event``
+- ``KafkaConsumer/Rebalance``

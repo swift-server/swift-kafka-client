@@ -117,7 +117,7 @@ public final class RDKafkaClient: Sendable {
 
     /// Produce a message to the Kafka cluster.
     ///
-    /// - Parameter message: The ``KafkaProducerMessage`` to send to the KafkaCluster.
+    /// - Parameter message: The ``KafkaProducer/Message`` to send to the KafkaCluster.
     /// - Parameter newMessageID: ID assigned to the `message`.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages.
     func produce<Key, Value>(
@@ -224,7 +224,7 @@ public final class RDKafkaClient: Sendable {
         )
     }
 
-    /// Scoped accessor that enables safe access to a ``KafkaProducerMessage``'s key and value raw buffers.
+    /// Scoped accessor that enables safe access to a ``KafkaProducer/Message``'s key and value raw buffers.
     /// - Warning: Do not escape the pointer from the closure for later use.
     /// - Parameter body: The closure that uses the pointer.
     @discardableResult
@@ -549,9 +549,9 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Important: This method should only be invoked from ``KafkaConsumer``.
     ///
-    /// - Returns: A ``KafkaConsumerMessage`` or `nil` if there are no new messages.
+    /// - Returns: A ``KafkaConsumer/Message`` or `nil` if there are no new messages.
     /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-    func consumerPoll(for pollTimeoutMs: Int32 = 0) throws -> KafkaConsumerMessage? {
+    func consumerPoll(for pollTimeoutMs: Int32 = 0) throws -> KafkaConsumer.Message? {
         guard let messagePointer = rd_kafka_consumer_poll(self.kafkaHandle.pointer, pollTimeoutMs) else {
             // No error, there might be no more messages
             return nil
@@ -567,7 +567,7 @@ public final class RDKafkaClient: Sendable {
             return nil
         }
 
-        let message = try KafkaConsumerMessage(messagePointer: messagePointer)
+        let message = try KafkaConsumer.Message(messagePointer: messagePointer)
         return message
     }
 
@@ -708,7 +708,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed.
-    func storeOffset(_ message: KafkaConsumerMessage) throws {
+    func storeOffset(_ message: KafkaConsumer.Message) throws {
         // rd_kafka_offsets_store expects the offset of the *next* message to consume,
         // which is the current message's offset + 1.
         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
@@ -725,52 +725,6 @@ public final class RDKafkaClient: Sendable {
                 listPointer
             )
         }
-
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
-        }
-    }
-
-    /// Schedules a non-blocking, fire-and-forget commit of the message's offset to Kafka.
-    ///
-    /// The client discards any errors encountered after scheduling the commit.
-    ///
-    /// - Parameter message: Last received message to mark as read.
-    /// - Throws: A ``KafkaError`` if scheduling the commit failed.
-    func scheduleCommit(_ message: KafkaConsumerMessage) throws {
-        // The offset committed is always the offset of the next requested message.
-        // Thus, we increase the offset of the current message by one before committing it.
-        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-        let changesList = RDKafkaTopicPartitionList()
-        changesList.setOffset(
-            topic: message.topic,
-            partition: message.partition,
-            offset: Int64(message.offset.rawValue + 1)
-        )
-
-        let error = changesList.withListPointer { listPointer in
-            rd_kafka_commit(
-                self.kafkaHandle.pointer,
-                listPointer,
-                1  // async = true
-            )
-        }
-
-        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-            throw KafkaError.rdKafkaError(wrapping: error)
-        }
-    }
-
-    /// Schedule an async commit of all stored offsets.
-    /// Returns immediately. Any errors after scheduling are discarded.
-    ///
-    /// Equivalent to `rd_kafka_commit(rk, NULL, async=1)`.
-    func scheduleCommitAll() throws {
-        let error = rd_kafka_commit(
-            self.kafkaHandle.pointer,
-            nil,
-            1  // async = true
-        )
 
         if error != RD_KAFKA_RESP_ERR_NO_ERROR {
             throw KafkaError.rdKafkaError(wrapping: error)
@@ -811,7 +765,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if the commit failed.
-    func commit(_ message: KafkaConsumerMessage) async throws {
+    func commit(_ message: KafkaConsumer.Message) async throws {
         let promise = CommitPromise()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -1023,7 +977,9 @@ public final class RDKafkaClient: Sendable {
         let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitionOffsets.count))
         for tpo in topicPartitionOffsets {
             guard let offset = tpo.offset else {
-                throw KafkaError.config(reason: "Seek requires a non-nil offset for \(tpo.topic):\(tpo.partition)")
+                throw KafkaError.config(
+                    reason: "Seek requires a non-nil offset for \(tpo.topic):\(tpo.partition)"
+                )
             }
             tpl.setOffset(
                 topic: tpo.topic,
@@ -1121,7 +1077,7 @@ public final class RDKafkaClient: Sendable {
             }
 
             guard let headerKeyPointer else {
-                fatalError("Found null pointer when reading KafkaConsumerMessage header key")
+                fatalError("Found null pointer when reading consumer message header key")
             }
             let headerKey = String(cString: headerKeyPointer)
 
