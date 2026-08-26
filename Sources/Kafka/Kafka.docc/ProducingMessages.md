@@ -28,27 +28,27 @@ Construct a ``KafkaProducer``, run it inside a `ServiceGroup`, and call ``KafkaP
 ```swift
 let logger = Logger(label: "kafka-example")
 
-let (producer, _) = try withLogger(logger) { _ in
-    try KafkaProducer.makeProducer(config: config)
-}
+try await withLogger(logger) { _ in
+    let (producer, _) = try KafkaProducer.makeProducer(config: config)
 
-let serviceGroup = ServiceGroup(
-    services: [producer],
-    gracefulShutdownSignals: [.sigterm],
-    logger: logger
-)
+    let serviceGroup = ServiceGroup(
+        services: [producer],
+        gracefulShutdownSignals: [.sigterm],
+        logger: logger
+    )
 
-await withThrowingTaskGroup(of: Void.self) { group in
-    group.addTask { try await serviceGroup.run() }
+    await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask { try await serviceGroup.run() }
 
-    group.addTask {
-        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
-        let report = try await producer.sendAndAwait(message)
-        switch report.status {
-        case .acknowledged(let ack):
-            print("Delivered to partition \(ack.partition) at offset \(ack.offset)")
-        case .failure(let error):
-            print("Delivery failed: \(error)")
+        group.addTask {
+            let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
+            let report = try await producer.sendAndAwait(message)
+            switch report.status {
+            case .acknowledged(let ack):
+                print("Delivered to partition \(ack.partition) at offset \(ack.offset)")
+            case .failure(let error):
+                print("Delivery failed: \(error)")
+            }
         }
     }
 }
@@ -61,31 +61,31 @@ For high-throughput pipelines, create the producer alongside its events sequence
 ```swift
 let logger = Logger(label: "kafka-example")
 
-let (producer, events) = try withLogger(logger) { _ in
-    try KafkaProducer.makeProducer(config: config)
-}
+try await withLogger(logger) { _ in
+    let (producer, events) = try KafkaProducer.makeProducer(config: config)
 
-let serviceGroup = ServiceGroup(
-    services: [producer],
-    gracefulShutdownSignals: [.sigterm],
-    logger: logger
-)
+    let serviceGroup = ServiceGroup(
+        services: [producer],
+        gracefulShutdownSignals: [.sigterm],
+        logger: logger
+    )
 
-await withThrowingTaskGroup(of: Void.self) { group in
-    group.addTask { try await serviceGroup.run() }
+    await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask { try await serviceGroup.run() }
 
-    group.addTask {
-        let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
-        try producer.send(message)
+        group.addTask {
+            let message = KafkaProducer.Message(topic: "topic-name", value: "Hello, World!")
+            try producer.send(message)
 
-        for await event in events {
-            switch event {
-            case .deliveryReports(let reports):
-                for report in reports {
-                    // Handle delivery acknowledgment.
+            for await event in events {
+                switch event {
+                case .deliveryReports(let reports):
+                    for report in reports {
+                        // Handle delivery acknowledgment.
+                    }
+                default:
+                    break
                 }
-            default:
-                break
             }
         }
     }

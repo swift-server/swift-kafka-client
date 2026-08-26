@@ -85,8 +85,8 @@ import Foundation
             }
 
             #expect(expectedTopic == receivedMessage.topic)
-            #expect(ByteBuffer(string: message.key!) == receivedMessage.key)
-            #expect(ByteBuffer(string: message.value) == receivedMessage.value)
+            #expect(Array(message.key!.utf8) == receivedMessage.key)
+            #expect(Array(message.value.utf8) == receivedMessage.value)
             #expect(headers == receivedMessage.headers)
 
             // Shutdown the serviceGroup
@@ -142,7 +142,7 @@ import Foundation
             }
 
             #expect(expectedTopic == receivedMessage.topic)
-            #expect(message.value == receivedMessage.value)
+            #expect(Array(message.value.readableBytesView) == receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -208,10 +208,10 @@ import Foundation
             #expect(acknowledgedMessages.count == 2)
             #expect(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
             #expect(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
-            #expect(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message1.key!) }))
-            #expect(acknowledgedMessages.contains(where: { $0.key == ByteBuffer(string: message2.key!) }))
-            #expect(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message1.value) }))
-            #expect(acknowledgedMessages.contains(where: { $0.value == ByteBuffer(string: message2.value) }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == Array(message1.key!.utf8) }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == Array(message2.key!.utf8) }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == Array(message1.value.utf8) }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == Array(message2.value.utf8) }))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()

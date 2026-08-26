@@ -23,9 +23,9 @@ extension KafkaProducer {
         /// The partition the producer sent the message to.
         public var partition: KafkaPartition
         /// The key of the message.
-        public var key: ByteBuffer?
+        public var key: [UInt8]?
         /// The body of the message.
-        public var value: ByteBuffer
+        public var value: [UInt8]
         /// The offset of the message in its partition.
         public var offset: KafkaOffset
         /// The headers of the message.
@@ -37,7 +37,7 @@ extension KafkaProducer {
             let rdKafkaMessage = messagePointer.pointee
 
             let valueBufferPointer = UnsafeRawBufferPointer(start: rdKafkaMessage.payload, count: rdKafkaMessage.len)
-            self.value = ByteBuffer(bytes: valueBufferPointer)
+            self.value = [UInt8](valueBufferPointer)
 
             guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
                 throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
@@ -56,7 +56,7 @@ extension KafkaProducer {
                     start: keyPointer,
                     count: rdKafkaMessage.key_len
                 )
-                self.key = .init(bytes: keyBufferPointer)
+                self.key = [UInt8](keyBufferPointer)
             } else {
                 self.key = nil
             }
