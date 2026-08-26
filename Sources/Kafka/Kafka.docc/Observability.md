@@ -53,11 +53,11 @@ var config = KafkaConsumerConfig()
 config.clientId = "orders-consumer"
 config.consumptionStrategy = .group(id: "orders", topics: ["orders"])
 
-let (consumer, _, _) = try withLogger(logger) { _ in
-    try KafkaConsumer.makeConsumer(config: config)
+try withLogger(logger) { _ in
+    let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
+    // Every log entry from this consumer now carries kafka.client.id, kafka.client.type,
+    // and kafka.group.id.
 }
-// Every log entry from this consumer now carries kafka.client.id, kafka.client.type,
-// and kafka.group.id.
 ```
 
 Set the `Logger`'s log level to control verbosity — the client logs routine progress at `debug` and `trace`, and surfaces problems at `info` and above.

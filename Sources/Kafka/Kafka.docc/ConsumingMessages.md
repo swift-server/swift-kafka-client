@@ -30,22 +30,22 @@ Run the consumer inside a `ServiceGroup` and read records from its ``KafkaConsum
 ```swift
 let logger = Logger(label: "kafka-example")
 
-let (consumer, messages, _) = try withLogger(logger) { _ in
-    try KafkaConsumer.makeConsumer(config: config)
-}
+try await withLogger(logger) { _ in
+    let (consumer, messages, _) = try KafkaConsumer.makeConsumer(config: config)
 
-let serviceGroup = ServiceGroup(
-    services: [consumer],
-    gracefulShutdownSignals: [.sigterm],
-    logger: logger
-)
+    let serviceGroup = ServiceGroup(
+        services: [consumer],
+        gracefulShutdownSignals: [.sigterm],
+        logger: logger
+    )
 
-await withThrowingTaskGroup(of: Void.self) { group in
-    group.addTask { try await serviceGroup.run() }
+    await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask { try await serviceGroup.run() }
 
-    group.addTask {
-        for try await message in messages {
-            print("Received: \(message.topic.rawValue)/\(message.partition) at offset \(message.offset)")
+        group.addTask {
+            for try await message in messages {
+                print("Received: \(message.topic.rawValue)/\(message.partition) at offset \(message.offset)")
+            }
         }
     }
 }
@@ -147,45 +147,45 @@ The following example creates the consumer with ``KafkaConsumer/makeConsumer(con
 ```swift
 config.partitionAssignmentStrategy = "cooperative-sticky"
 
-let (consumer, messages, events) = try withLogger(logger) { _ in
-    try KafkaConsumer.makeConsumer(config: config)
-}
+try await withLogger(logger) { _ in
+    let (consumer, messages, events) = try KafkaConsumer.makeConsumer(config: config)
 
-let serviceGroup = ServiceGroup(
-    services: [consumer],
-    gracefulShutdownSignals: [.sigterm],
-    logger: logger
-)
+    let serviceGroup = ServiceGroup(
+        services: [consumer],
+        gracefulShutdownSignals: [.sigterm],
+        logger: logger
+    )
 
-await withThrowingTaskGroup(of: Void.self) { group in
-    group.addTask { try await serviceGroup.run() }
+    await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask { try await serviceGroup.run() }
 
-    // Consume records.
-    group.addTask {
-        for try await message in messages {
-            // Process the record, then store or commit its offset.
+        // Consume records.
+        group.addTask {
+            for try await message in messages {
+                // Process the record, then store or commit its offset.
+            }
         }
-    }
 
-    // Observe rebalances.
-    group.addTask {
-        for await event in events {
-            switch event {
-            case .rebalance(let rebalance):
-                switch rebalance.kind {
-                case .assign:
-                    // Partitions were assigned; initialize per-partition state.
+        // Observe rebalances.
+        group.addTask {
+            for await event in events {
+                switch event {
+                case .rebalance(let rebalance):
+                    switch rebalance.kind {
+                    case .assign:
+                        // Partitions were assigned; initialize per-partition state.
+                        break
+                    case .revoke:
+                        // Partitions are moving away; commit their offsets first.
+                        break
+                    case .error(let description):
+                        logger.warning("Rebalance error", metadata: ["error": "\(description)"])
+                    }
+                case .error(let error):
+                    logger.error("Kafka client error", metadata: ["error": "\(error)"])
+                default:
                     break
-                case .revoke:
-                    // Partitions are moving away; commit their offsets first.
-                    break
-                case .error(let description):
-                    logger.warning("Rebalance error", metadata: ["error": "\(description)"])
                 }
-            case .error(let error):
-                logger.error("Kafka client error", metadata: ["error": "\(error)"])
-            default:
-                break
             }
         }
     }
