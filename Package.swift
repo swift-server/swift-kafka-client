@@ -114,7 +114,10 @@ let package = Package(
         ),
         .testTarget(
             name: "IntegrationTests",
-            dependencies: ["Kafka"]
+            dependencies: [
+                "Kafka",
+                .product(name: "MetricsTestKit", package: "swift-metrics"),
+            ]
         ),
     ]
 )

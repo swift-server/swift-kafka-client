@@ -37,7 +37,10 @@ public struct KafkaProducerConfig: Sendable {
     public var shutdownFlushTimeoutMs: Int = 10000
 
     /// Producer metrics configuration.
-    public var metrics: KafkaConfiguration.ProducerMetrics = .init()
+    ///
+    /// Default: ``KafkaMetricsConfig/enabled(prefix:updateInterval:)`` with a 5-second interval.
+    /// Set to ``KafkaMetricsConfig/disabled`` to turn metrics and statistics collection off.
+    public var metrics: KafkaMetricsConfig = .enabled()
 
     // MARK: - Properties generated from librdkafka config list
 
@@ -1155,11 +1158,8 @@ public struct KafkaProducerConfig: Sendable {
         config["partitioner"] = self.partitioner?.description
         config["compression.level"] = self.compressionLevel?.description
 
-        if config["statistics.interval.ms"] == nil,
-            metrics.enabled,
-            let updateInterval = metrics.updateInterval
-        {
-            config["statistics.interval.ms"] = String(updateInterval.inMilliseconds)
+        if config["statistics.interval.ms"] == nil, metrics.isEnabled {
+            config["statistics.interval.ms"] = String(metrics.updateInterval.inMilliseconds)
         }
 
         for (key, value) in self.additionalConfig {
