@@ -62,6 +62,11 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
         public static let unknownTopic = RDKafkaCode(rawValue: -188)
         /// Unknown partition.
         public static let unknownPartition = RDKafkaCode(rawValue: -190)
+        /// The broker doesn't host the requested topic or partition.
+        ///
+        /// Unlike ``unknownTopic``, which the client reports locally, the broker reports this code,
+        /// for example in ``KafkaClusterMetadata/Topic/error`` for a topic that doesn't exist.
+        public static let unknownTopicOrPartition = RDKafkaCode(rawValue: 3)
         /// No error.
         public static let noError = RDKafkaCode(rawValue: 0)
 
