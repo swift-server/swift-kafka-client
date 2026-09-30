@@ -1,32 +1,108 @@
 name: swift-kafka-client
 
 services:
+  # One-shot: generates the test-only PKI into the shared `kafka-secrets` volume, then exits.
+  # Keeps private keys out of the repo (only docker/ssl/generate.sh is tracked).
+  cert-gen:
+    image: apache/kafka:3.9.1
+    volumes:
+      - ./ssl:/generate:ro
+      - kafka-secrets:/etc/kafka/secrets
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        export PATH="/opt/java/openjdk/bin:$$PATH"  # keytool
+        /bin/bash /generate/generate.sh /etc/kafka/secrets
+
   kafka:
     image: apache/kafka:3.9.1
     healthcheck:
       test:
         [
           "CMD",
-          "kafka-broker-api-versions.sh",
+          "/opt/kafka/bin/kafka-broker-api-versions.sh",
           "--bootstrap-server=localhost:9092",
         ]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 40s
+    depends_on:
+      cert-gen:
+        condition: service_completed_successfully
+    volumes:
+      # Test-only PKI generated at startup by cert-gen. Consumed by the SSL/SASL_SSL listeners.
+      - kafka-secrets:/etc/kafka/secrets:ro
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      # PLAINTEXT (existing tests), SSL (TLS + mTLS), SASL_SSL (SCRAM over TLS), CONTROLLER.
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,SSL://:9094,SASL_SSL://:9095"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092,SSL://kafka:9094,SASL_SSL://kafka:9095"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,SSL:SSL,SASL_SSL:SASL_SSL"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      # TLS material. The apache/kafka image reads PKCS#12 keystores plus credential files
+      # (each holding the store/key password) from /etc/kafka/secrets (see docker/ssl/generate.sh).
+      KAFKA_SSL_KEYSTORE_FILENAME: "broker.keystore.p12"
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: "keystore_creds"
+      KAFKA_SSL_KEY_CREDENTIALS: "key_creds"
+      KAFKA_SSL_KEYSTORE_TYPE: "PKCS12"
+      KAFKA_SSL_TRUSTSTORE_FILENAME: "broker.truststore.p12"
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: "truststore_creds"
+      KAFKA_SSL_TRUSTSTORE_TYPE: "PKCS12"
+      # "requested" lets the SSL listener accept both anonymous TLS and mTLS clients.
+      KAFKA_SSL_CLIENT_AUTH: "requested"
+      KAFKA_SASL_ENABLED_MECHANISMS: "SCRAM-SHA-256"
+      # Server-side JAAS entry enabling SCRAM validation on the SASL_SSL listener.
+      KAFKA_OPTS: "-Djava.security.auth.login.config=/etc/kafka/secrets/kafka_jaas.conf"
+      # Authorization. ANONYMOUS (PLAINTEXT/anonymous-TLS), the mTLS client, and the SCRAM
+      # authN user are super users; only `authzuser` is subject to ACLs (see kafka-setup).
+      KAFKA_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_SUPER_USERS: "User:ANONYMOUS;User:CN=swift-kafka-test-client;User:testuser"
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # One-shot: creates SCRAM users, the authZ test topics, and the ACLs, then exits.
+  # Runs over PLAINTEXT as ANONYMOUS (a super user), so it is authorized to administer.
+  kafka-setup:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        export PATH="/opt/kafka/bin:$$PATH"
+        echo "Creating SCRAM credentials..."
+        kafka-configs.sh --bootstrap-server kafka:9092 --alter \
+          --add-config 'SCRAM-SHA-256=[password=test-password]' \
+          --entity-type users --entity-name testuser
+        kafka-configs.sh --bootstrap-server kafka:9092 --alter \
+          --add-config 'SCRAM-SHA-256=[password=test-password]' \
+          --entity-type users --entity-name authzuser
+        echo "Creating authorization test topics..."
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic authz-allowed --partitions 1 --replication-factor 1
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+          --topic authz-denied --partitions 1 --replication-factor 1
+        echo "Granting authzuser access to authz-allowed only..."
+        kafka-acls.sh --bootstrap-server kafka:9092 --add \
+          --allow-principal User:authzuser \
+          --operation Write --operation Read --operation Describe \
+          --topic authz-allowed
+        kafka-acls.sh --bootstrap-server kafka:9092 --add \
+          --allow-principal User:authzuser \
+          --operation Read --operation Describe --group '*'
+        echo "Kafka setup complete."
 
   client:
     image: swift-kafka-client:${IMAGE_TAG:-local-${SWIFT_VERSION:-6.2}-${UBUNTU_VERSION:-jammy}-${IMAGE_PLATFORM:-amd64}}
@@ -36,11 +112,32 @@ services:
         swift_version: "${SWIFT_VERSION:-6.2}"
       platforms:
         - linux/${IMAGE_PLATFORM:-amd64}
-    depends_on: [kafka]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-setup:
+        condition: service_completed_successfully
     volumes:
       - ..:/swift-kafka-client:z
+      - kafka-secrets:/etc/kafka/secrets:ro
     working_dir: /swift-kafka-client
     environment:
       KAFKA_HOST: kafka
       KAFKA_PORT: 9092
+      # Presence of KAFKA_SSL_PORT enables the SSL/SASL/ACL integration tests.
+      KAFKA_SSL_PORT: 9094
+      KAFKA_SASL_SSL_PORT: 9095
+      KAFKA_SSL_CA_LOCATION: /etc/kafka/secrets/ca.crt
+      KAFKA_SSL_CLIENT_CERT_LOCATION: /etc/kafka/secrets/client.crt
+      KAFKA_SSL_CLIENT_KEY_LOCATION: /etc/kafka/secrets/client.key
+      KAFKA_SCRAM_USER: testuser
+      KAFKA_SCRAM_PASSWORD: test-password
+      KAFKA_AUTHZ_USER: authzuser
+      KAFKA_AUTHZ_PASSWORD: test-password
+      KAFKA_AUTHZ_ALLOWED_TOPIC: authz-allowed
+      KAFKA_AUTHZ_DENIED_TOPIC: authz-denied
     command: ["/bin/bash"]
+
+volumes:
+  # Holds the test PKI produced by cert-gen; shared read-only with the broker and client.
+  kafka-secrets:

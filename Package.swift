@@ -15,7 +15,21 @@
 
 import PackageDescription
 
-let rdkafkaExclude = [
+// Route librdkafka's OpenSSL usage onto swift-nio-ssl's vendored BoringSSL (CNIOBoringSSL) on all
+// platforms via custom/openssl_shim, so TLS/crypto is self-contained (no system OpenSSL) and the
+// package builds for the fully-static Linux (musl) SDK. We depend on the public `NIOSSL` product,
+// which links CNIOBoringSSL transitively, and provide small shims (custom/musl_compat) for the two
+// functions librdkafka needs that BoringSSL lacks.
+//
+// GSSAPI/Kerberos (Cyrus SASL) is opt-in and OFF by default: it needs the system libsasl2 library,
+// which isn't available in a fully-static build. Set SWIFT_KAFKA_ENABLE_GSSAPI=1 at build time to
+// compile the Cyrus SASL provider and link libsasl2 (requires libsasl2 development headers on the
+// host). SCRAM, PLAIN, and TLS/mTLS remain available regardless.
+let enableGSSAPI = ["1", "true", "yes"].contains(
+    (Context.environment["SWIFT_KAFKA_ENABLE_GSSAPI"] ?? "").lowercased()
+)
+
+var rdkafkaExclude = [
     "./librdkafka/src/CMakeLists.txt",
     "./librdkafka/src/Makefile",
     "./librdkafka/src/README.lz4.md",
@@ -26,13 +40,15 @@ let rdkafkaExclude = [
     "./librdkafka/src/rdwin32.h",
     "./librdkafka/src/statistics_schema.json",
     "./librdkafka/src/win32_config.h",
-    // Remove dependency on cURL. Disabling `ENABLE_CURL` and `WITH_CURL` does
-    // not appear to prevent processing of the below files, so we have to exclude
-    // them explicitly.
     "./librdkafka/src/rdkafka_sasl_oauthbearer.c",
     "./librdkafka/src/rdkafka_sasl_oauthbearer_oidc.c",
     "./librdkafka/src/rdhttp.c",
 ]
+if !enableGSSAPI {
+    // Cyrus SASL (GSSAPI/Kerberos) unconditionally includes <sasl/sasl.h> and needs libsasl2;
+    // exclude it unless GSSAPI is explicitly enabled.
+    rdkafkaExclude.append("./librdkafka/src/rdkafka_sasl_cyrus.c")
+}
 
 let package = Package(
     name: "swift-kafka-client",
@@ -43,43 +59,41 @@ let package = Package(
         .tvOS(.v18),
     ],
     products: [
-        .library(
-            name: "Kafka",
-            targets: ["Kafka"]
-        ),
-        .library(
-            name: "KafkaFoundationCompat",
-            targets: ["KafkaFoundationCompat"]
-        ),
+        .library(name: "Kafka", targets: ["Kafka"]),
+        .library(name: "KafkaFoundationCompat", targets: ["KafkaFoundationCompat"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.55.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.29.0"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", from: "2.1.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
         .package(url: "https://github.com/apple/swift-metrics", from: "2.4.1"),
-        // The zstd Swift package produces warnings that we cannot resolve:
-        // https://github.com/facebook/zstd/issues/3328
         .package(url: "https://github.com/facebook/zstd.git", from: "1.5.0"),
     ],
     targets: [
         .target(
             name: "Crdkafka",
             dependencies: [
-                "COpenSSL",
+                // NIOSSL pulls CNIOBoringSSL (vendored BoringSSL, incl. TLS) into the link transitively.
+                .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "libzstd", package: "zstd"),
             ],
             exclude: rdkafkaExclude,
-            sources: ["./librdkafka/src/"],
+            sources: [
+                "./librdkafka/src/",
+                "./custom/musl_compat",  // BoringSSL shims
+            ],
             publicHeadersPath: "./include",
             cSettings: [
+                // openssl_shim redirects <openssl/*.h> onto CNIOBoringSSL; must precede any system openssl.
+                .headerSearchPath("./custom/openssl_shim"),
                 // dummy folder, because config.h is included as "../config.h" in librdkafka
                 .headerSearchPath("./custom/config/dummy"),
                 .headerSearchPath("./librdkafka/src"),
-            ],
+            ] + (enableGSSAPI ? [.define("SWIFT_KAFKA_ENABLE_GSSAPI")] : []),
             linkerSettings: [
-                .linkedLibrary("sasl2"),
-                .linkedLibrary("z"),  // zlib
-            ]
+                .linkedLibrary("z")  // zlib; ssl/crypto come from CNIOBoringSSL
+            ] + (enableGSSAPI ? [.linkedLibrary("sasl2")] : [])
         ),
         .target(
             name: "Kafka",
@@ -93,17 +107,14 @@ let package = Package(
         ),
         .target(
             name: "KafkaFoundationCompat",
-            dependencies: [
-                "Kafka"
-            ]
+            dependencies: ["Kafka"]
         ),
-        .systemLibrary(
-            name: "COpenSSL",
-            pkgConfig: "openssl",
-            providers: [
-                .brew(["openssl@3"]),
-                .apt(["libssl-dev"]),
-            ]
+        // Minimal executable that forces a final link of librdkafka against CNIOBoringSSL. It lets
+        // the static Linux (musl) SDK build be verified with `swift build`, since the test bundle
+        // can't be built for musl (swift-testing isn't shipped in that SDK).
+        .executableTarget(
+            name: "StaticLinkCheck",
+            dependencies: ["Kafka"]
         ),
         .testTarget(
             name: "KafkaTests",
@@ -126,7 +137,7 @@ for target in package.targets {
         settings.append(.enableExperimentalFeature("StrictConcurrency=complete"))
         target.swiftSettings = settings
     case .macro, .plugin, .system, .binary:
-        break  // These targets do not support settings
+        break
     @unknown default:
         fatalError("Update to handle new target type \(target.type)")
     }
@@ -137,13 +148,12 @@ for target in package.targets {
     switch target.type {
     case .regular, .test, .executable:
         var settings = target.swiftSettings ?? []
-        // https://github.com/swiftlang/swift-evolution/blob/main/proposals/0444-member-import-visibility.md
         settings.append(.enableUpcomingFeature("MemberImportVisibility"))
         target.swiftSettings = settings
     case .macro, .plugin, .system, .binary:
-        ()  // not applicable
+        ()
     @unknown default:
-        ()  // we don't know what to do here, do nothing
+        ()
     }
 }
 // --- END: STANDARD CROSS-REPO SETTINGS DO NOT EDIT --- //

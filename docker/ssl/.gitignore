@@ -1,0 +1,5 @@
+# The test PKI is generated at container startup (docker-compose `cert-gen` service)
+# into a shared volume, and never committed. Only the generator is tracked.
+*
+!.gitignore
+!generate.sh
