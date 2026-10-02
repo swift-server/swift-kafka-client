@@ -59,6 +59,8 @@ public final class KafkaProducer: Service, Sendable {
 
     /// The configuration object of the producer client.
     private let config: KafkaProducerConfig
+    /// Metric instruments; nil when metrics are disabled.
+    private let clientMetrics: KafkaProducerMetrics?
 
     /// A logger.
     private let logger: Logger
@@ -69,14 +71,20 @@ public final class KafkaProducer: Service, Sendable {
     /// - Parameter stateMachine: The ``KafkaProducer/StateMachine`` instance associated with the ``KafkaProducer``.
     /// - Parameter config: The ``KafkaProducerConfig`` for configuring the ``KafkaProducer``.
     /// - Parameter topicConfiguration: The ``KafkaTopicConfiguration`` used for newly created topics.
+    /// - Parameter clientName: librdkafka's handle name, used to identify this client's metrics when no `client.id` is set.
     /// - Throws: A ``KafkaError`` if initializing the producer failed.
     private init(
         stateMachine: NIOLockedValueBox<KafkaProducer.StateMachine>,
         config: KafkaProducerConfig,
+        clientName: String,
         logger: Logger
     ) {
         self.stateMachine = stateMachine
         self.config = config
+        self.clientMetrics =
+            config.metrics.isEnabled
+            ? KafkaProducerMetrics(prefix: config.metrics.prefix, clientID: config.clientId ?? clientName)
+            : nil
         var enrichedLogger = logger
         if let clientId = config.clientId {
             enrichedLogger[metadataKey: KafkaLoggingKeys.clientId] = "\(clientId)"
@@ -115,7 +123,7 @@ public final class KafkaProducer: Service, Sendable {
 
         var subscribedEvents: [RDKafkaEvent] = [.log, .deliveryReport, .error]
         // Listen to statistics events when statistics enabled
-        if config.metrics.enabled {
+        if config.metrics.isEnabled {
             subscribedEvents.append(.statistics)
         }
 
@@ -129,6 +137,7 @@ public final class KafkaProducer: Service, Sendable {
         let producer = KafkaProducer(
             stateMachine: stateMachine,
             config: config,
+            clientName: client.name,
             logger: logger
         )
 
@@ -206,10 +215,11 @@ public final class KafkaProducer: Service, Sendable {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        self.config.metrics.update(with: statistics)
+                        self.clientMetrics?.updateFromStatistics(statistics)
                     case .deliveryReport(let reports):
                         _ = self.dispatchDeliveryReports(reports)
                     case .error(let kafkaError):
+                        self.clientMetrics?.recordError()
                         self.logger.info(
                             "Kafka client error",
                             error: kafkaError
@@ -222,13 +232,14 @@ public final class KafkaProducer: Service, Sendable {
                 for event in events {
                     switch event {
                     case .statistics(let statistics):
-                        self.config.metrics.update(with: statistics)
+                        self.clientMetrics?.updateFromStatistics(statistics)
                     case .deliveryReport(let reports):
                         let reportsForEvents = self.dispatchDeliveryReports(reports)
                         if !reportsForEvents.isEmpty {
                             _ = source?.yield(.deliveryReports(reportsForEvents))
                         }
                     case .error(let kafkaError):
+                        self.clientMetrics?.recordError()
                         _ = source?.yield(.error(kafkaError))
                         self.logger.info(
                             "Kafka client error",
@@ -284,8 +295,9 @@ public final class KafkaProducer: Service, Sendable {
         for report in reports {
             switch report.status {
             case .acknowledged:
-                break
+                self.clientMetrics?.recordDeliverySuccess()
             case .failure(let error):
+                self.clientMetrics?.recordDeliveryFailure()
                 self.logger.debug(
                     "Message delivery failed",
                     error: error,
@@ -347,6 +359,7 @@ public final class KafkaProducer: Service, Sendable {
                     topicHandles: topicHandles
                 )
             } catch {
+                self.clientMetrics?.recordSendError()
                 self.logger.info(
                     "Failed to produce message",
                     error: error,
@@ -370,6 +383,10 @@ public final class KafkaProducer: Service, Sendable {
     public func sendAndAwait<Key, Value>(
         _ message: Message<Key, Value>
     ) async throws -> DeliveryReport {
+        // Measure end-to-end acknowledged-send latency (enqueue → delivery report).
+        let clock = ContinuousClock()
+        let start = clock.now
+
         // Get the message ID and produce BEFORE entering the continuation,
         // so we have the ID available for the cancellation handler.
         let action = try self.stateMachine.withLockedValue { try $0.send() }
@@ -390,7 +407,7 @@ public final class KafkaProducer: Service, Sendable {
             $0.initializeContinuation(for: newMessageID)
         }
 
-        return try await withTaskCancellationHandler {
+        let report = try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<DeliveryReport, Error>) in
                 // Transition from .initialized to .pending BEFORE producing.
@@ -414,6 +431,7 @@ public final class KafkaProducer: Service, Sendable {
                         topicHandles: topicHandles
                     )
                 } catch {
+                    self.clientMetrics?.recordSendError()
                     let removed = self.stateMachine.withLockedValue {
                         $0.removeContinuation(for: newMessageID)
                     }
@@ -429,6 +447,10 @@ public final class KafkaProducer: Service, Sendable {
             }
             cancelled?.resume(throwing: CancellationError())
         }
+
+        // Reached only when the delivery report acknowledged the message.
+        self.clientMetrics?.recordSend(duration: start.duration(to: clock.now))
+        return report
     }
 }
 
