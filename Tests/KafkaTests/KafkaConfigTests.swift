@@ -31,6 +31,8 @@ import Testing
                 "debug": "consumer,broker",
                 "enable.auto.offset.store": "false",
                 "socket.timeout.ms": "5000",
+                // Metrics are enabled by default and request statistics at their update interval.
+                "statistics.interval.ms": "5000",
             ]
         )
     }
@@ -41,7 +43,8 @@ import Testing
 
         #expect(
             config.config == [
-                "group.id": "test-group"
+                "group.id": "test-group",
+                "statistics.interval.ms": "5000",
             ]
         )
 
@@ -49,9 +52,23 @@ import Testing
         config.groupId = "explicit-id"
         #expect(
             config.config == [
-                "group.id": "explicit-id"
+                "group.id": "explicit-id",
+                "statistics.interval.ms": "5000",
             ]
         )
+    }
+
+    @Test func statisticsIntervalFollowsMetricsConfig() async throws {
+        var config = KafkaConsumerConfig()
+        config.metrics = .disabled
+        #expect(config.config["statistics.interval.ms"] == nil)
+
+        config.metrics = .enabled(updateInterval: .seconds(30))
+        #expect(config.config["statistics.interval.ms"] == "30000")
+
+        // An explicitly configured interval takes priority over the metrics interval.
+        config.statisticsIntervalMs = 1000
+        #expect(config.config["statistics.interval.ms"] == "1000")
     }
 
     @available(*, deprecated, message: "Use KafkaConsumerConfig instead")
@@ -68,7 +85,7 @@ import Testing
             config.config == configuration.dictionary
         )
         #expect(config.pollInterval == configuration.pollInterval)
-        #expect(config.metrics.enabled == configuration.metrics.enabled)
+        #expect(config.metrics.isEnabled == configuration.metrics.isEnabled)
         #expect(config.consumptionStrategy == configuration.consumptionStrategy)
     }
 
@@ -86,6 +103,7 @@ import Testing
                 "debug": "consumer,broker",
                 "enable.idempotence": "true",
                 "socket.timeout.ms": "5000",
+                "statistics.interval.ms": "5000",
             ]
         )
     }
@@ -106,6 +124,6 @@ import Testing
         #expect(config.config == configDict)
         #expect(config.pollInterval == configuration.pollInterval)
         #expect(config.shutdownFlushTimeoutMs == configuration.flushTimeoutMilliseconds)
-        #expect(config.metrics.enabled == configuration.metrics.enabled)
+        #expect(config.metrics.isEnabled == configuration.metrics.isEnabled)
     }
 }
