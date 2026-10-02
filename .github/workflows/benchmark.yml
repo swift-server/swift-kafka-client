@@ -40,10 +40,13 @@ jobs:
           MATRIX_LINUX_COMMAND: "curl -s https://raw.githubusercontent.com/apple/swift-nio/main/scripts/check_benchmark_thresholds.sh | BENCHMARK_PACKAGE_PATH=Benchmarks bash -s -- --disable-sandbox"
           MATRIX_LINUX_SETUP_COMMAND: "swift --version && apt-get update -y -q && apt-get install -y -q curl jq libjemalloc-dev libsasl2-dev libssl-dev && git config --global --add safe.directory /$(basename ${{ github.workspace }})"
           # nightly-main is excluded (Swift development trunk, too volatile for
-          # stable baselines) and 6.1 is excluded (no longer supported). The gate
-          # covers 6.2, 6.3, and nightly-next.
+          # stable baselines) and 6.1 is excluded (no longer supported). 6.4 is
+          # excluded until a Benchmarks/Thresholds/6.4 baseline is seeded (the
+          # matrix auto-adds newly released toolchains). The gate covers 6.2,
+          # 6.3, and nightly-next.
           MATRIX_LINUX_NIGHTLY_MAIN_ENABLED: false
           MATRIX_LINUX_6_1_ENABLED: false
+          MATRIX_LINUX_6_4_ENABLED: false
 
   benchmarks:
     name: Benchmarks
