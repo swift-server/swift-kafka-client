@@ -33,14 +33,14 @@ extension KafkaConsumer {
         }
 
         /// Whether this is an assignment, revocation, or error.
-        public let kind: Kind
+        public var kind: Kind
 
         /// The partitions involved in this rebalance.
         ///
         /// For ``Kind/assign``: the partitions newly assigned to this consumer.
         /// For ``Kind/revoke``: the partitions being revoked from this consumer.
         /// For ``Kind/error(_:)``: empty.
-        public let partitions: [KafkaTopicPartition]
+        public var partitions: [KafkaTopicPartition]
 
         /// Creates a rebalance event description.
         /// - Parameters:
