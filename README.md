@@ -12,6 +12,7 @@ The Swift Kafka Client library provides a convenient way to interact with [Apach
 - Pause/resume partition consumption
 - Typed error handling with retriable and fatal error classification
 - SASL and TLS authentication
+- Fully static Linux builds via the Swift Static Linux (musl) SDK — TLS uses a vendored BoringSSL, so no system OpenSSL is required
 - Integration with [swift-service-lifecycle](https://github.com/swift-server/swift-service-lifecycle), [swift-log](https://github.com/apple/swift-log), and [swift-metrics](https://github.com/apple/swift-metrics)
 - Full librdkafka configuration exposed as typed Swift properties
 
@@ -333,6 +334,25 @@ config.saslUsername = "user"
 config.saslPassword = "password"
 ```
 
+### Metrics
+
+Metrics are **auto-registered and enabled by default** — the client periodically samples its internal librdkafka statistics and delivery/commit events into [swift-metrics](https://github.com/apple/swift-metrics) instruments under a prefix you choose (default: `kafka`, every 5 seconds). You don't assign individual instruments; the client owns them and routes their values to whatever backend you bootstrap through `MetricsSystem`. Customize the prefix/interval, or turn metrics off, via the `metrics` property:
+
+```swift
+import Kafka
+
+var config = KafkaConsumerConfig()
+config.bootstrapServers = ["localhost:9092"]
+config.consumptionStrategy = .group(id: "example-group", topics: ["topic-name"])
+
+// Default is .enabled(prefix: "kafka", updateInterval: .seconds(5)). Customize it:
+config.metrics = .enabled(prefix: "orders", updateInterval: .seconds(1))
+// ...or disable metrics (and statistics collection) entirely:
+// config.metrics = .disabled
+
+let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
+```
+
 ### Error handling
 
 The events sequence surfaces errors from librdkafka with typed error codes:
@@ -363,8 +383,11 @@ Its source files are excluded in `Package.swift`.
 
 ### Dependencies
 
-- **macOS**: `brew install openssl@3`
-- **Linux**: `apt-get install libssl-dev libsasl2-dev`
+The default build is self-contained — TLS is provided by a vendored BoringSSL (via swift-nio-ssl), so **no system OpenSSL is required** on any platform.
+
+GSSAPI/Kerberos authentication is opt-in and off by default. To enable it, build with `SWIFT_KAFKA_ENABLE_GSSAPI=1`; on Linux this additionally needs the Cyrus SASL development headers:
+
+- **Linux (GSSAPI only)**: `apt-get install libsasl2-dev`
 
 ## Development setup
 
