@@ -423,6 +423,10 @@ extension KafkaConfiguration {
         private let _internal: _SASLMechanism
 
         /// Use the GSSAPI mechanism.
+        ///
+        /// - Note: GSSAPI/Kerberos support is opt-in and is not compiled in by default. Build with
+        ///   `SWIFT_KAFKA_ENABLE_GSSAPI=1` (which links the system `libsasl2`); otherwise the broker
+        ///   connection fails when this mechanism is selected. SCRAM, PLAIN, and TLS/mTLS are always available.
         public static func gssapi(kerberosConfiguration: KerberosConfiguration) -> SASLMechanism {
             SASLMechanism(
                 _internal: .gssapi(kerberosConfiguration: kerberosConfiguration)

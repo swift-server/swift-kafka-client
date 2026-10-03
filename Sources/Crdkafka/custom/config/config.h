@@ -130,8 +130,12 @@
 #define WITH_SSL 1
 // libcrypto
 #define OPENSSL_SUPPRESS_DEPRECATED "OPENSSL_SUPPRESS_DEPRECATED"
-// libsasl2
+// libsasl2 (Cyrus SASL / GSSAPI): opt-in via SWIFT_KAFKA_ENABLE_GSSAPI (see Package.swift).
+#ifdef SWIFT_KAFKA_ENABLE_GSSAPI
 #define WITH_SASL_CYRUS 1
+#else
+#define WITH_SASL_CYRUS 0
+#endif
 // libzstd
 #define WITH_ZSTD 1
 // libcurl
