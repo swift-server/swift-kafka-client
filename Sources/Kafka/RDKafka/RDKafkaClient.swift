@@ -62,6 +62,11 @@ public final class RDKafkaClient: Sendable {
         rd_kafka_set_log_queue(self.kafkaHandle.pointer, self.queueHandle.pointer)
     }
 
+    /// librdkafka's handle instance name (e.g. `rdkafka#consumer-1`), unique within the process.
+    var name: String {
+        String(cString: rd_kafka_name(self.kafkaHandle.pointer))
+    }
+
     deinit {
         // Loose reference to librdkafka's event queue
         rd_kafka_queue_destroy(self.queueHandle.pointer)
@@ -466,7 +471,11 @@ public final class RDKafkaClient: Sendable {
                 return json
             }
         } catch {
-            assertionFailure("Error occurred when decoding JSON statistics: \(error) when decoding \(jsonStr)")
+            // Skip unparsable stats instead of crashing — observability must not disrupt the client.
+            self.logger.info(
+                "Skipping unparsable Kafka statistics sample",
+                metadata: ["error": "\(error)"]
+            )
         }
         return nil
     }

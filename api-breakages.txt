@@ -69,3 +69,17 @@ API breakage: var KafkaHeader.value has declared type change from NIOCore.ByteBu
 API breakage: var KafkaProducerMessage.topic has declared type change from Swift.String to Kafka.KafkaTopic
 API breakage: var KafkaTopicPartition.topic has declared type change from Swift.String to Kafka.KafkaTopic
 API breakage: var KafkaTopicPartitionOffset.topic has declared type change from Swift.String to Kafka.KafkaTopic
+API breakage: accessor KafkaConsumerConfig.metrics.Get() has return type change from Kafka.KafkaConfiguration.ConsumerMetrics to Kafka.KafkaMetricsConfig
+API breakage: accessor KafkaConsumerConfig.metrics.Set() has parameter 0 type change from Kafka.KafkaConfiguration.ConsumerMetrics to Kafka.KafkaMetricsConfig
+API breakage: accessor KafkaConsumerConfiguration.metrics.Get() has return type change from Kafka.KafkaConfiguration.ConsumerMetrics to Kafka.KafkaMetricsConfig
+API breakage: accessor KafkaConsumerConfiguration.metrics.Set() has parameter 0 type change from Kafka.KafkaConfiguration.ConsumerMetrics to Kafka.KafkaMetricsConfig
+API breakage: accessor KafkaProducerConfig.metrics.Get() has return type change from Kafka.KafkaConfiguration.ProducerMetrics to Kafka.KafkaMetricsConfig
+API breakage: accessor KafkaProducerConfig.metrics.Set() has parameter 0 type change from Kafka.KafkaConfiguration.ProducerMetrics to Kafka.KafkaMetricsConfig
+API breakage: accessor KafkaProducerConfiguration.metrics.Get() has return type change from Kafka.KafkaConfiguration.ProducerMetrics to Kafka.KafkaMetricsConfig
+API breakage: accessor KafkaProducerConfiguration.metrics.Set() has parameter 0 type change from Kafka.KafkaConfiguration.ProducerMetrics to Kafka.KafkaMetricsConfig
+API breakage: struct KafkaConfiguration.ConsumerMetrics has been removed
+API breakage: struct KafkaConfiguration.ProducerMetrics has been removed
+API breakage: var KafkaConsumerConfig.metrics has declared type change from Kafka.KafkaConfiguration.ConsumerMetrics to Kafka.KafkaMetricsConfig
+API breakage: var KafkaConsumerConfiguration.metrics has declared type change from Kafka.KafkaConfiguration.ConsumerMetrics to Kafka.KafkaMetricsConfig
+API breakage: var KafkaProducerConfig.metrics has declared type change from Kafka.KafkaConfiguration.ProducerMetrics to Kafka.KafkaMetricsConfig
+API breakage: var KafkaProducerConfiguration.metrics has declared type change from Kafka.KafkaConfiguration.ProducerMetrics to Kafka.KafkaMetricsConfig
