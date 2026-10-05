@@ -964,6 +964,63 @@ public final class RDKafkaClient: Sendable {
         rd_kafka_assignment_lost(self.kafkaHandle.pointer) == 1
     }
 
+    /// Retrieve cluster metadata (brokers, topics, partition leaders, and replicas) from a broker.
+    ///
+    /// - Parameters:
+    ///   - topic: The topic to describe, or `nil` to describe every topic in the cluster.
+    ///   - timeoutMilliseconds: Maximum time to wait for the broker's response.
+    /// - Returns: A ``KafkaClusterMetadata`` snapshot.
+    /// - Throws: A ``KafkaError`` if the request failed or timed out.
+    func metadata(topic: KafkaTopic?, timeoutMilliseconds: Int32) async throws -> KafkaClusterMetadata {
+        // rd_kafka_metadata is blocking — offload to a DispatchQueue so it does not
+        // block Swift Concurrency's cooperative thread pool. Capturing `self` keeps the
+        // client handle alive until the request completes.
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<KafkaClusterMetadata, Error>) in
+            Self.blockingQueue.async {
+                continuation.resume(
+                    with: Result {
+                        try self.fetchMetadata(topic: topic, timeoutMilliseconds: timeoutMilliseconds)
+                    }
+                )
+            }
+        }
+    }
+
+    /// Performs the blocking `rd_kafka_metadata` call. Must not run on the cooperative thread pool.
+    private func fetchMetadata(topic: KafkaTopic?, timeoutMilliseconds: Int32) throws -> KafkaClusterMetadata {
+        var topicHandle: OpaquePointer?
+        if let topic {
+            guard let handle = rd_kafka_topic_new(self.kafkaHandle.pointer, topic.rawValue, nil) else {
+                // rd_kafka_last_error() is thread-local, so read it on this thread right away.
+                throw KafkaError.rdKafkaError(wrapping: rd_kafka_last_error())
+            }
+            topicHandle = handle
+        }
+        defer {
+            if let topicHandle {
+                rd_kafka_topic_destroy(topicHandle)
+            }
+        }
+
+        var metadataPointer: UnsafePointer<rd_kafka_metadata>?
+        let error = rd_kafka_metadata(
+            self.kafkaHandle.pointer,
+            topic == nil ? 1 : 0,  // all_topics
+            topicHandle,  // only_rkt
+            &metadataPointer,
+            timeoutMilliseconds
+        )
+        guard error == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
+        guard let metadataPointer else {
+            throw KafkaError.rdKafkaError(wrapping: RD_KAFKA_RESP_ERR__FAIL)
+        }
+        defer { rd_kafka_metadata_destroy(metadataPointer) }
+
+        return KafkaClusterMetadata(metadataPointer)
+    }
+
     /// Seek consumer for partitions to the per-partition offset.
     ///
     /// The offset may be either absolute (>= 0) or a logical offset

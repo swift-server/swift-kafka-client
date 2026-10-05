@@ -57,6 +57,10 @@ Kafka integrates with [swift-log](https://github.com/apple/swift-log) for struct
 - ``KafkaOffset``
 - ``KafkaHeader``
 
+### Inspecting the cluster
+
+- ``KafkaClusterMetadata``
+
 ### Handling errors
 
 - ``KafkaError``

@@ -676,6 +676,39 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
+    /// Retrieves cluster metadata from a broker: the brokers, and for each topic its partitions
+    /// with their leader, replicas, and in-sync replicas.
+    ///
+    /// The metadata comes from the broker that answers the request and reflects that broker's view
+    /// of the cluster at the time, so leadership can change immediately afterwards. You can call this
+    /// method before or after running the consumer.
+    ///
+    /// Requesting a topic that doesn't exist doesn't throw; the returned topic reports
+    /// ``KafkaError/RDKafkaCode/unknownTopicOrPartition`` in its ``KafkaClusterMetadata/Topic/error``.
+    /// The request only creates the topic if you enable `allow.auto.create.topics`.
+    ///
+    /// - Parameters:
+    ///   - topic: The topic to describe, or `nil` to describe every topic in the cluster.
+    ///   - timeout: Maximum time to wait for the broker's response. Default: 5 seconds.
+    /// - Returns: A ``KafkaClusterMetadata`` snapshot.
+    /// - Throws: A ``KafkaError`` if the request failed or timed out, or if the consumer is closed.
+    public func metadata(
+        topic: KafkaTopic? = nil,
+        timeout: Duration = .milliseconds(5000)
+    ) async throws -> KafkaClusterMetadata {
+        // Metadata requests use their own reply queue, so they work before `run()` as well.
+        let action = self.stateMachine.withLockedValue { $0.withClientForSubscription() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to fetch metadata on a closed consumer")
+        case .client(let client):
+            return try await client.metadata(
+                topic: topic,
+                timeoutMilliseconds: Int32(timeout.inMilliseconds)
+            )
+        }
+    }
+
     /// Retrieves the current positions (next offset to be fetched) for the topic+partition pairs you provide.
     ///
     /// The position reflects the consumer's in-memory position, which is the last consumed
