@@ -22,3 +22,26 @@ jobs:
   release-builds:
     name: Release builds
     uses: ./.github/workflows/release_builds.yml
+
+  static-sdk:
+    name: Static SDK
+    uses: apple/swift-nio/.github/workflows/static_sdk.yml@main
+
+  gssapi-build:
+    name: GSSAPI opt-in build
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2-jammy
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: true
+      - name: Mark the workspace as safe
+        # https://github.com/actions/checkout/issues/766
+        run: git config --global --add safe.directory ${GITHUB_WORKSPACE}
+      - name: Install Cyrus SASL headers
+        run: apt-get -qq update && apt-get -qq -y install libsasl2-dev
+      - name: Build with GSSAPI enabled (opt-in Cyrus SASL path)
+        run: SWIFT_KAFKA_ENABLE_GSSAPI=1 swift build
