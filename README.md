@@ -57,8 +57,7 @@ try await withLogger(logger) { _ in
 
     let serviceGroup = ServiceGroup(
         services: [producer],
-        gracefulShutdownSignals: [.sigterm],
-        logger: logger
+        gracefulShutdownSignals: [.sigterm]
     )
 
     await withThrowingTaskGroup(of: Void.self) { group in
@@ -91,8 +90,7 @@ try await withLogger(logger) { _ in
 
     let serviceGroup = ServiceGroup(
         services: [producer],
-        gracefulShutdownSignals: [.sigterm],
-        logger: logger
+        gracefulShutdownSignals: [.sigterm]
     )
 
     await withThrowingTaskGroup(of: Void.self) { group in
@@ -151,8 +149,7 @@ try await withLogger(logger) { _ in
 
     let serviceGroup = ServiceGroup(
         services: [consumer],
-        gracefulShutdownSignals: [.sigterm],
-        logger: logger
+        gracefulShutdownSignals: [.sigterm]
     )
 
     await withThrowingTaskGroup(of: Void.self) { group in
@@ -184,8 +181,7 @@ try await withLogger(logger) { _ in
 
     let serviceGroup = ServiceGroup(
         services: [consumer],
-        gracefulShutdownSignals: [.sigterm],
-        logger: logger
+        gracefulShutdownSignals: [.sigterm]
     )
 
     await withThrowingTaskGroup(of: Void.self) { group in
@@ -219,8 +215,7 @@ try await withLogger(logger) { _ in
 
     let serviceGroup = ServiceGroup(
         services: [consumer],
-        gracefulShutdownSignals: [.sigterm],
-        logger: logger
+        gracefulShutdownSignals: [.sigterm]
     )
 
     await withThrowingTaskGroup(of: Void.self) { group in
