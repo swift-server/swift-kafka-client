@@ -138,6 +138,29 @@ try consumer.resume(topicPartitions: [partition])
 
 While a partition is paused, the consumer stops fetching records for it but continues to participate in the group, including heartbeats and rebalances.
 
+### Inspect cluster metadata
+
+Call ``KafkaConsumer/metadata(topic:timeout:)`` to ask a broker which brokers and topics the cluster has, and, for each partition, which broker leads it and which replicas are in sync:
+
+```swift
+let metadata = try await consumer.metadata(topic: "topic-name")
+
+for topic in metadata.topics {
+    if let error = topic.error {
+        print("\(topic.name): \(error)")  // for example, unknownTopicOrPartition
+        continue
+    }
+    for partition in topic.partitions {
+        print(
+            "\(topic.name)[\(partition.id)] leader: \(partition.leader.map(String.init) ?? "none"),",
+            "replicas: \(partition.replicas), in sync: \(partition.inSyncReplicas)"
+        )
+    }
+}
+```
+
+Pass `nil` for the topic to describe every topic in the cluster. The result is a snapshot of the answering broker's view, so leadership can change immediately afterwards. You can call this method before running the consumer.
+
 ### Observe rebalances
 
 When the membership of a consumer group changes — a consumer joins, leaves, or fails — Kafka redistributes the group's partitions across the remaining members. This is a *rebalance*. ``KafkaConsumer`` performs the assign and unassign automatically and surfaces a ``KafkaConsumer/Rebalance`` notification through the ``KafkaConsumer/Events`` sequence, so you can react — for example, by committing offsets for partitions that are moving away.
@@ -221,6 +244,11 @@ Choose an assignment strategy with ``KafkaConsumerConfig/partitionAssignmentStra
 
 - ``KafkaConsumer/pause(topicPartitions:)``
 - ``KafkaConsumer/resume(topicPartitions:)``
+
+### Inspecting the cluster
+
+- ``KafkaConsumer/metadata(topic:timeout:)``
+- ``KafkaClusterMetadata``
 
 ### Observing rebalances and events
 

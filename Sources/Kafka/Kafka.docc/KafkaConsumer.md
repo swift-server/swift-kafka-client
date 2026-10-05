@@ -43,6 +43,10 @@ For an end-to-end guide including configuration, rebalance handling, and offset 
 - ``position(topicPartitions:)``
 - ``isAssignmentLost``
 
+### Inspecting the cluster
+
+- ``metadata(topic:timeout:)``
+
 ### Pausing and resuming partitions
 
 - ``pause(topicPartitions:)``

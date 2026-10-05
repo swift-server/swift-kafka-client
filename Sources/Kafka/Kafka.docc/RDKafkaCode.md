@@ -31,6 +31,7 @@ Each code's ``description`` includes the underlying name and numeric value, whic
 
 - ``unknownTopic``
 - ``unknownPartition``
+- ``unknownTopicOrPartition``
 
 ### Other
 
