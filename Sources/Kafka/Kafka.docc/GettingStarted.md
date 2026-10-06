@@ -62,8 +62,7 @@ try await withLogger(logger) { _ in
 
     let serviceGroup = ServiceGroup(
         services: [producer],
-        gracefulShutdownSignals: [.sigterm],
-        logger: logger
+        gracefulShutdownSignals: [.sigterm]
     )
 
     await withThrowingTaskGroup(of: Void.self) { group in
@@ -98,20 +97,21 @@ config.consumptionStrategy = .group(
     topics: ["topic-name"]
 )
 
-let (consumer, messages, _) = try KafkaConsumer.makeConsumer(config: config)
+try await withLogger(logger) { _ in
+    let (consumer, messages, _) = try KafkaConsumer.makeConsumer(config: config)
 
-let serviceGroup = ServiceGroup(
-    services: [consumer],
-    gracefulShutdownSignals: [.sigterm],
-    logger: logger
-)
+    let serviceGroup = ServiceGroup(
+        services: [consumer],
+        gracefulShutdownSignals: [.sigterm]
+    )
 
-await withThrowingTaskGroup(of: Void.self) { group in
-    group.addTask { try await serviceGroup.run() }
+    await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask { try await serviceGroup.run() }
 
-    group.addTask {
-        for try await message in messages {
-            print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
+        group.addTask {
+            for try await message in messages {
+                print("Received: \(message.topic)/\(message.partition) at offset \(message.offset)")
+            }
         }
     }
 }
