@@ -355,6 +355,28 @@ extension RDKafkaStatistics {
     }
 }
 
+extension RDKafkaStatistics.PartitionStats {
+    /// Whether this consumer currently owns (is fetching, or about to fetch) the partition.
+    ///
+    /// librdkafka lists every known partition of a subscribed topic in its statistics, and it does not
+    /// reset a partition's offsets when the consumer loses it. The fetch state is the only per-partition
+    /// signal of ownership: it is `stopping` and then `stopped` after a revoke or loss, and `none` for a
+    /// partition this consumer never owned.
+    var isOwnedByConsumer: Bool {
+        switch self.fetchState {
+        case "active", "offset-query", "offset-wait", "validate-epoch-wait":
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether this consumer owned the partition and has since given it up (revoked or lost).
+    var wasReleasedByConsumer: Bool {
+        self.fetchState == "stopping" || self.fetchState == "stopped"
+    }
+}
+
 extension RDKafkaStatistics {
     /// Consumer group statistics.
     struct ConsumerGroupStats: Hashable, Codable {

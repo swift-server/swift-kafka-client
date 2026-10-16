@@ -33,6 +33,14 @@ final class KafkaProducerMetrics: Sendable {
     private let brokerRequestLatencyLabel: String
     private let clientDimension: (String, String)
 
+    /// The base labels of the per-broker latency windows this producer emits.
+    private var brokerWindowLabels: [String] {
+        [
+            self.brokerRTTLabel, self.brokerThrottleLabel, self.brokerQueueLatencyLabel,
+            self.brokerRequestLatencyLabel,
+        ]
+    }
+
     /// - Parameters:
     ///   - prefix: Label prefix for every instrument.
     ///   - clientID: Value of the `client_id` dimension that identifies this client instance.
@@ -86,25 +94,69 @@ final class KafkaProducerMetrics: Sendable {
         self.errors.increment()
     }
 
+    /// Marks every gauge that derives from statistics as "no data" (`NaN`) after a statistics sample
+    /// could not be decoded, instead of leaving the previous sample's values looking current.
+    ///
+    /// Cumulative totals are left untouched: `NaN` would break any rate computed over them.
+    ///
+    /// - Parameter last: The last successfully decoded sample, which identifies the broker gauges that
+    ///   exist. `nil` if there has been none.
+    func recordStatisticsUnavailable(last: RDKafkaStatistics?) {
+        self.queueMessages.record(Double.nan)
+        self.queueBytes.record(Double.nan)
+        self.batchSizeAvg.record(Double.nan)
+        guard let last else { return }
+        KafkaMetricSupport.markWindowsUnavailable(
+            baseLabels: self.brokerWindowLabels,
+            clientDimension: self.clientDimension,
+            brokers: Array(last.brokers.values)
+        )
+    }
+
+    /// Removes every instrument from the metrics backend. Called when the producer shuts down, so a
+    /// stopped producer does not keep exporting its last values.
+    ///
+    /// - Parameter last: The last successfully decoded sample, which identifies the broker gauges that
+    ///   exist. `nil` if there has been none.
+    func destroy(last: RDKafkaStatistics?) {
+        self.sendErrors.destroy()
+        self.sendDuration.destroy()
+        self.deliverySuccess.destroy()
+        self.deliveryFailure.destroy()
+        self.errors.destroy()
+        self.messagesSent.destroy()
+        self.bytesSent.destroy()
+        self.queueMessages.destroy()
+        self.queueBytes.destroy()
+        self.batchSizeAvg.destroy()
+        guard let last else { return }
+        KafkaMetricSupport.destroyWindows(
+            baseLabels: self.brokerWindowLabels,
+            clientDimension: self.clientDimension,
+            brokers: Array(last.brokers.values)
+        )
+    }
+
     func updateFromStatistics(_ stats: RDKafkaStatistics) {
         self.queueMessages.record(stats.queueMessages)
         self.queueBytes.record(stats.queueMessagesSize)
 
-        // librdkafka reports cumulative totals, so they are set as-is rather than accumulated.
+        // librdkafka reports cumulative totals, so they are set as-is rather than accumulated. Bytes are
+        // message bytes, not wire-level traffic.
         self.messagesSent.set(stats.messagesSentTotal)
-        self.bytesSent.set(stats.bytesSentTotal)
+        self.bytesSent.set(stats.messageBytesSentTotal)
 
+        // Topics that sent no batch in this interval have nothing to average, so they are left out
+        // instead of pulling the average towards 0. With no batches at all there is no data.
         var totalBatchSize = 0
         var topicCount = 0
         for topic in stats.topics.values {
-            if let avg = topic.batchBytes?.avg {
-                totalBatchSize += avg
+            if let batchBytes = topic.batchBytes, batchBytes.count > 0 {
+                totalBatchSize += batchBytes.avg
                 topicCount += 1
             }
         }
-        if topicCount > 0 {
-            self.batchSizeAvg.record(totalBatchSize / topicCount)
-        }
+        self.batchSizeAvg.record(topicCount > 0 ? Double(totalBatchSize) / Double(topicCount) : Double.nan)
 
         for broker in stats.brokers.values {
             KafkaMetricSupport.recordWindow(
