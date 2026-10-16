@@ -567,8 +567,11 @@ struct RDKafkaStatisticsTests {
         #expect(
             try metrics.expectGauge("kafka.producer.broker.queue.latency.avg.ms", broker).lastValue == 23726.0 / 1000
         )
-        // outbuf_latency has cnt == 0 in the fixture, so the window is skipped entirely.
-        #expect((try? metrics.expectGauge("kafka.producer.broker.request.latency.avg.ms", broker)) == nil)
+        // outbuf_latency has cnt == 0 in the fixture, so the window has no data (NaN, not 0).
+        let requestLatency = try #require(
+            try metrics.expectGauge("kafka.producer.broker.request.latency.avg.ms", broker).lastValue
+        )
+        #expect(requestLatency.isNaN)
     }
 
     @Test func consumerStatisticsPopulateInstruments() throws {
@@ -582,11 +585,13 @@ struct RDKafkaStatisticsTests {
         let client = [("client_id", "test-client")]
         // queue.operations mirrors `replyq` (0 in the fixture).
         #expect(try metrics.expectGauge("kafka.consumer.queue.operations", client).lastValue == 0)
-        // Rebalances mirror the authoritative cgrp counter (rebalance_cnt == 2).
-        #expect(try metrics.expectMeter("kafka.consumer.rebalances", client).lastValue == 2)
-        // Every partition in the fixture reports consumer_lag == -1 (unknown), which is skipped, so
-        // the max-lag gauge settles at 0.
-        #expect(try metrics.expectGauge("kafka.consumer.lag.max", client).lastValue == 0)
+        // The statistics' `rebalance_cnt` (2 in the fixture) counts every assign and every revoke, so it
+        // is not used: rebalances are counted in Swift, one per assignment.
+        #expect(try metrics.expectMeter("kafka.consumer.rebalances", client).lastValue == nil)
+        // No partition in the fixture is owned (fetch_state "none"), so there is no lag to report. That
+        // is "no data" (NaN), which must not read as "fully caught up" (0).
+        let lagMax = try #require(try metrics.expectGauge("kafka.consumer.lag.max", client).lastValue)
+        #expect(lagMax.isNaN)
         // Per-broker round-trip latency is recorded for the consumer too (milliseconds).
         let broker = client + [("broker", "localhost:9092/2")]
         #expect(try metrics.expectGauge("kafka.consumer.broker.rtt.avg.ms", broker).lastValue == 2349.0 / 1000)

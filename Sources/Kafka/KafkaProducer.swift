@@ -207,6 +207,13 @@ public final class KafkaProducer: Service, Sendable {
     }
 
     private func _run() async throws {
+        // The last statistics sample that decoded successfully: it identifies the per-broker gauges that
+        // exist, so they can be marked "no data" or removed. Only this loop reads or writes it.
+        var lastStatistics: RDKafkaStatistics?
+        defer {
+            // A stopped producer must not keep exporting its last values.
+            self.clientMetrics?.destroy(last: lastStatistics)
+        }
         while !Task.isCancelled {
             let nextAction = self.stateMachine.withLockedValue { $0.nextPollLoopAction() }
             switch nextAction {
@@ -216,6 +223,9 @@ public final class KafkaProducer: Service, Sendable {
                     switch event {
                     case .statistics(let statistics):
                         self.clientMetrics?.updateFromStatistics(statistics)
+                        lastStatistics = statistics
+                    case .statisticsUnavailable:
+                        self.clientMetrics?.recordStatisticsUnavailable(last: lastStatistics)
                     case .deliveryReport(let reports):
                         _ = self.dispatchDeliveryReports(reports)
                     case .error(let kafkaError):
@@ -233,6 +243,9 @@ public final class KafkaProducer: Service, Sendable {
                     switch event {
                     case .statistics(let statistics):
                         self.clientMetrics?.updateFromStatistics(statistics)
+                        lastStatistics = statistics
+                    case .statisticsUnavailable:
+                        self.clientMetrics?.recordStatisticsUnavailable(last: lastStatistics)
                     case .deliveryReport(let reports):
                         let reportsForEvents = self.dispatchDeliveryReports(reports)
                         if !reportsForEvents.isEmpty {

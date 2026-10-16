@@ -306,6 +306,8 @@ public final class RDKafkaClient: Sendable {
     enum ProducerPollEvent {
         case deliveryReport(results: [KafkaProducer.DeliveryReport])
         case statistics(RDKafkaStatistics)
+        /// A statistics sample arrived but could not be decoded.
+        case statisticsUnavailable
         case error(KafkaError)
     }
 
@@ -313,6 +315,10 @@ public final class RDKafkaClient: Sendable {
     /// Contains only events relevant to a Kafka consumer.
     enum ConsumerPollEvent {
         case statistics(RDKafkaStatistics)
+        /// A statistics sample arrived but could not be decoded.
+        case statisticsUnavailable
+        /// The result of a commit librdkafka made on its own (`enable.auto.commit`).
+        case automaticCommit(succeeded: Bool)
         case error(KafkaError)
     }
 
@@ -342,6 +348,8 @@ public final class RDKafkaClient: Sendable {
             case .statistics:
                 if let statistics = self.handleStatistics(event) {
                     events.append(.statistics(statistics))
+                } else {
+                    events.append(.statisticsUnavailable)
                 }
             case .error:
                 if let error = self.handleErrorEvent(event) {
@@ -350,7 +358,7 @@ public final class RDKafkaClient: Sendable {
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
-                self.handleOffsetCommitEvent(event)
+                _ = self.handleOffsetCommitEvent(event)
             case .none:
                 return events
             default:
@@ -385,6 +393,8 @@ public final class RDKafkaClient: Sendable {
             case .statistics:
                 if let statistics = self.handleStatistics(event) {
                     events.append(.statistics(statistics))
+                } else {
+                    events.append(.statisticsUnavailable)
                 }
             case .error:
                 if let error = self.handleErrorEvent(event) {
@@ -393,7 +403,9 @@ public final class RDKafkaClient: Sendable {
             case .log:
                 self.handleLogEvent(event)
             case .offsetCommit:
-                self.handleOffsetCommitEvent(event)
+                if let automaticCommit = self.handleOffsetCommitEvent(event) {
+                    events.append(automaticCommit)
+                }
             case .deliveryReport:
                 // Should never occur on a consumer queue, but handle defensively.
                 _ = self.handleDeliveryReportEvent(event)
@@ -529,19 +541,32 @@ public final class RDKafkaClient: Sendable {
     /// Handle event of type `RDKafkaEvent.offsetCommit`.
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    private func handleOffsetCommitEvent(_ event: OpaquePointer?) {
-        guard let opaquePointer = rd_kafka_event_opaque(event) else {
-            // No opaque pointer means this is an auto-commit event (e.g. triggered by
-            // rd_kafka_consumer_close_queue during shutdown) rather than a user-initiated
-            // rd_kafka_commit_queue call. These don't have a callback to invoke.
+    /// - Returns: The outcome of an automatic commit, or `nil` for a commit the application requested
+    ///   (whose outcome is delivered through its `CommitPromise` instead) and for an automatic commit
+    ///   that had no offsets to commit.
+    private func handleOffsetCommitEvent(_ event: OpaquePointer?) -> ConsumerPollEvent? {
+        // A commit the application requested carries its `CommitPromise` as the event's opaque. An
+        // automatic commit carries no promise: its opaque is either absent or the client's own configured
+        // opaque (the `RebalanceContext` of a consumer), which must never be read as a promise.
+        guard let opaquePointer = rd_kafka_event_opaque(event),
+            opaquePointer != rd_kafka_opaque(self.kafkaHandle.pointer)
+        else {
+            // This is an auto-commit event (e.g. triggered by rd_kafka_consumer_close_queue during
+            // shutdown) rather than a user-initiated rd_kafka_commit_queue call. These don't have a
+            // callback to invoke.
             let error = rd_kafka_event_error(event)
+            if error == RD_KAFKA_RESP_ERR__NO_OFFSET {
+                // Every auto-commit interval reports this when no offset changed since the last commit.
+                // Nothing was committed, so it is neither a success nor a failure.
+                return nil
+            }
             if error != RD_KAFKA_RESP_ERR_NO_ERROR {
                 self.logger.info(
                     "Auto-commit failed during event processing",
                     metadata: ["error": "\(String(cString: rd_kafka_err2str(error)))"]
                 )
             }
-            return
+            return .automaticCommit(succeeded: error == RD_KAFKA_RESP_ERR_NO_ERROR)
         }
         let promise = Unmanaged<CommitPromise>.fromOpaque(opaquePointer).takeRetainedValue()
 
@@ -549,9 +574,10 @@ public final class RDKafkaClient: Sendable {
         guard error == RD_KAFKA_RESP_ERR_NO_ERROR else {
             let kafkaError = KafkaError.rdKafkaError(wrapping: error)
             promise.resume(with: .failure(kafkaError))
-            return
+            return nil
         }
         promise.resume(with: .success(()))
+        return nil
     }
 
     /// Request a new message from the Kafka cluster.

@@ -137,7 +137,9 @@ public final class KafkaConsumer: Sendable, Service {
         let logger = Logger.current
         var subscribedEvents: [RDKafkaEvent] = [.log, .rebalance, .error]
         let isAutoCommitEnabled = config.enableAutoCommit ?? true
-        if !isAutoCommitEnabled {
+        // Commits the application requests resolve through this event. Automatic commits also produce
+        // it, which is how they are counted in the metrics.
+        if !isAutoCommitEnabled || config.metrics.isEnabled {
             subscribedEvents.append(.offsetCommit)
         }
         if config.metrics.isEnabled {
@@ -403,7 +405,10 @@ public final class KafkaConsumer: Sendable, Service {
 
     /// Run loop polling Kafka for new events.
     private func eventRunLoop() async throws {
+        var metricsState = KafkaConsumerMetricsState()
         defer {
+            // A closed consumer must not keep exporting its last values.
+            self.clientMetrics?.destroy(last: metricsState.lastStatistics)
             // Guarantee the events stream is finished on ALL exit paths:
             // normal .terminatePollLoop, Task cancellation (CancellationError from Task.sleep),
             // or any other thrown error. Without this, `for await event in events` hangs forever.
@@ -420,10 +425,10 @@ public final class KafkaConsumer: Sendable, Service {
                     self.logger.info("Closing KafkaConsumer failed", error: error)
                     self.stateMachine.withLockedValue { $0.closeFailed() }
                 }
-                self.pollAndDrainEvents(client: client)
+                self.pollAndDrainEvents(client: client, metricsState: &metricsState)
                 try await Task.sleep(for: self.config.pollInterval)
             case .pollForEvents(let client):
-                self.pollAndDrainEvents(client: client)
+                self.pollAndDrainEvents(client: client, metricsState: &metricsState)
                 try await Task.sleep(for: self.config.pollInterval)
             case .suspendPollLoop:
                 try await Task.sleep(for: self.config.pollInterval)
@@ -432,7 +437,7 @@ public final class KafkaConsumer: Sendable, Service {
                 // before we polled the shutdown revoke from mainQueue. Do one last poll+drain
                 // so no rebalance events are lost.
                 if let client {
-                    self.finalDrain(client: client)
+                    self.finalDrain(client: client, metricsState: &metricsState)
                 }
                 self.logger.debug("Kafka consumer shut down")
                 return
@@ -441,12 +446,17 @@ public final class KafkaConsumer: Sendable, Service {
     }
 
     /// Poll librdkafka event queue and drain buffered rebalance events.
-    private func pollAndDrainEvents(client: RDKafkaClient) {
+    private func pollAndDrainEvents(client: RDKafkaClient, metricsState: inout KafkaConsumerMetricsState) {
         let events = client.consumerEventPoll()
         for event in events {
             switch event {
             case .statistics(let statistics):
                 self.clientMetrics?.updateFromStatistics(statistics)
+                metricsState.lastStatistics = statistics
+            case .statisticsUnavailable:
+                self.clientMetrics?.recordStatisticsUnavailable(last: metricsState.lastStatistics)
+            case .automaticCommit(let succeeded):
+                self.clientMetrics?.recordAutomaticCommit(succeeded: succeeded)
             case .error(let kafkaError):
                 self.clientMetrics?.recordError()
                 if let source = self.eventsSource {
@@ -465,6 +475,9 @@ public final class KafkaConsumer: Sendable, Service {
             switch event.kind {
             case .assign:
                 kind = .assign
+                // An assignment completes a rebalance (a revoke is only its first half).
+                metricsState.rebalanceCount += 1
+                self.clientMetrics?.recordRebalances(total: metricsState.rebalanceCount)
             case .revoke:
                 kind = .revoke
             case .error(let description):
@@ -500,56 +513,8 @@ public final class KafkaConsumer: Sendable, Service {
     /// mainQueue and completed (`rkcg_terminated = true`) before the event loop
     /// had a chance to poll it. This one last poll+drain ensures that event
     /// is not lost.
-    private func finalDrain(client: RDKafkaClient) {
-        let events = client.consumerEventPoll()
-        for event in events {
-            switch event {
-            case .statistics(let statistics):
-                self.clientMetrics?.updateFromStatistics(statistics)
-            case .error(let kafkaError):
-                self.clientMetrics?.recordError()
-                if let source = self.eventsSource {
-                    _ = source.yield(.error(kafkaError))
-                }
-                self.logger.info(
-                    "Kafka client error",
-                    error: kafkaError
-                )
-            }
-        }
-
-        let rebalanceEvents = self.rebalanceContext.drainEvents()
-        for event in rebalanceEvents {
-            let kind: Rebalance.Kind
-            switch event.kind {
-            case .assign:
-                kind = .assign
-            case .revoke:
-                kind = .revoke
-            case .error(let description):
-                kind = .error(description)
-            }
-
-            let rebalance = Rebalance(
-                kind: kind,
-                partitions: event.partitions.map {
-                    KafkaTopicPartition(
-                        topic: KafkaTopic(rawValue: $0.topic),
-                        partition: KafkaPartition(rawValue: $0.partition)
-                    )
-                }
-            )
-            if let source = self.eventsSource {
-                _ = source.yield(.rebalance(rebalance))
-            }
-            self.logger.debug(
-                "Consumer rebalance",
-                metadata: [
-                    KafkaLoggingKeys.rebalanceKind: "\(rebalance.kind)",
-                    KafkaLoggingKeys.partitions: "\(rebalance.partitions.map { "\($0.topic):\($0.partition)" })",
-                ]
-            )
-        }
+    private func finalDrain(client: RDKafkaClient, metricsState: inout KafkaConsumerMetricsState) {
+        self.pollAndDrainEvents(client: client, metricsState: &metricsState)
     }
 
     /// Stores the offset of a consumed message in the local offset store.

@@ -14,6 +14,18 @@
 
 import Metrics
 
+/// State the consumer's event loop keeps between polls on behalf of ``KafkaConsumerMetrics``.
+///
+/// The event loop is the only place that serves statistics and rebalance events, so it owns this state
+/// and no lock is needed.
+struct KafkaConsumerMetricsState {
+    /// The last statistics sample that decoded successfully. It identifies the per-partition and
+    /// per-broker gauges that exist, so they can be marked "no data" or removed later.
+    var lastStatistics: RDKafkaStatistics?
+    /// The number of assignments received so far: one per completed rebalance.
+    var rebalanceCount = 0
+}
+
 /// Holds all consumer metric instruments and provides thread-safe recording methods.
 final class KafkaConsumerMetrics: Sendable {
     private let lagMax: Gauge
@@ -30,6 +42,11 @@ final class KafkaConsumerMetrics: Sendable {
     private let brokerRTTLabel: String
     private let brokerThrottleLabel: String
     private let clientDimension: (String, String)
+
+    /// The base labels of the per-broker latency windows this consumer emits.
+    private var brokerWindowLabels: [String] {
+        [self.brokerRTTLabel, self.brokerThrottleLabel]
+    }
 
     /// - Parameters:
     ///   - prefix: Label prefix for every instrument.
@@ -80,35 +97,115 @@ final class KafkaConsumerMetrics: Sendable {
         self.commitsFailed.increment()
     }
 
+    /// Records the outcome of a commit librdkafka made on its own (`enable.auto.commit`).
+    ///
+    /// No duration is recorded: the application never awaits these commits, so there is no start time.
+    func recordAutomaticCommit(succeeded: Bool) {
+        if succeeded {
+            self.commits.increment()
+        } else {
+            self.commitsFailed.increment()
+        }
+    }
+
+    /// Sets the total number of rebalances this consumer completed (one per assignment received).
+    ///
+    /// librdkafka's `rebalance_cnt` is not used: it counts every assign and every revoke operation, so a
+    /// single eager rebalance would count twice.
+    func recordRebalances(total: Int) {
+        self.rebalances.set(total)
+    }
+
+    /// Marks every gauge that derives from statistics as "no data" (`NaN`) after a statistics sample
+    /// could not be decoded, instead of leaving the previous sample's values looking current.
+    ///
+    /// Cumulative totals are left untouched: `NaN` would break any rate computed over them.
+    ///
+    /// - Parameter last: The last successfully decoded sample, which identifies the partition and broker
+    ///   gauges that exist. `nil` if there has been none.
+    func recordStatisticsUnavailable(last: RDKafkaStatistics?) {
+        self.queueOperations.record(Double.nan)
+        self.lagMax.record(Double.nan)
+        guard let last else { return }
+        for (topicName, topic) in last.topics {
+            for partition in (topic.partitions ?? [:]).values where partition.isOwnedByConsumer {
+                self.lagGauge(topic: topicName, partition: partition.partition).record(Double.nan)
+            }
+        }
+        KafkaMetricSupport.markWindowsUnavailable(
+            baseLabels: self.brokerWindowLabels,
+            clientDimension: self.clientDimension,
+            brokers: Array(last.brokers.values)
+        )
+    }
+
+    /// Removes every instrument from the metrics backend. Called when the consumer closes, so a closed
+    /// consumer does not keep exporting its last values.
+    ///
+    /// - Parameter last: The last successfully decoded sample, which identifies the partition and broker
+    ///   gauges that exist. `nil` if there has been none.
+    func destroy(last: RDKafkaStatistics?) {
+        self.lagMax.destroy()
+        self.errors.destroy()
+        self.rebalances.destroy()
+        self.commits.destroy()
+        self.commitsFailed.destroy()
+        self.commitDuration.destroy()
+        self.messagesReceived.destroy()
+        self.bytesReceived.destroy()
+        self.queueOperations.destroy()
+        guard let last else { return }
+        for (topicName, topic) in last.topics {
+            for partition in (topic.partitions ?? [:]).values {
+                self.lagGauge(topic: topicName, partition: partition.partition).destroy()
+            }
+        }
+        KafkaMetricSupport.destroyWindows(
+            baseLabels: self.brokerWindowLabels,
+            clientDimension: self.clientDimension,
+            brokers: Array(last.brokers.values)
+        )
+    }
+
+    /// The lag gauge of one partition. The metrics backend returns the existing instrument for the same
+    /// label and dimensions, so rebuilding it lets us update or `destroy()` it without keeping references.
+    private func lagGauge(topic: String, partition: Int) -> Gauge {
+        Gauge(
+            label: self.lagLabel,
+            dimensions: [
+                self.clientDimension,
+                (KafkaMetricLabels.topicDimension, topic),
+                (KafkaMetricLabels.partitionDimension, "\(partition)"),
+            ]
+        )
+    }
+
     func updateFromStatistics(_ stats: RDKafkaStatistics) {
         self.queueOperations.record(stats.queueOperations)
 
-        // librdkafka reports cumulative totals, so they are set as-is rather than accumulated.
+        // librdkafka reports cumulative totals, so they are set as-is rather than accumulated. Bytes are
+        // message bytes (as in the Java client's `bytes-consumed-total`), not wire-level traffic.
         self.messagesReceived.set(stats.messagesReceivedTotal)
-        self.bytesReceived.set(stats.bytesReceivedTotal)
+        self.bytesReceived.set(stats.messageBytesReceivedTotal)
 
-        // Authoritative cgrp counter; counting assign/revoke events would double-count.
-        if let rebalancesTotal = stats.consumerGroup?.rebalancesTotal {
-            self.rebalances.set(rebalancesTotal)
-        }
-
-        var maxLag = 0
+        // Per-partition lag is only meaningful for partitions this consumer owns. librdkafka keeps
+        // listing a revoked or lost partition with its frozen lag, so its gauge is destroyed instead
+        // of being republished, and it is left out of the maximum.
+        var maxLag: Int?
         for (topicName, topic) in stats.topics {
             for partition in (topic.partitions ?? [:]).values {
-                let lag = partition.consumerLag
-                guard lag >= 0 else { continue }
-                Gauge(
-                    label: self.lagLabel,
-                    dimensions: [
-                        self.clientDimension,
-                        (KafkaMetricLabels.topicDimension, topicName),
-                        (KafkaMetricLabels.partitionDimension, "\(partition.partition)"),
-                    ]
-                ).record(lag)
-                maxLag = max(maxLag, lag)
+                if partition.isOwnedByConsumer {
+                    let lag = partition.consumerLag
+                    guard lag >= 0 else { continue }
+                    self.lagGauge(topic: topicName, partition: partition.partition).record(lag)
+                    maxLag = max(maxLag ?? lag, lag)
+                } else if partition.wasReleasedByConsumer {
+                    self.lagGauge(topic: topicName, partition: partition.partition).destroy()
+                }
             }
         }
-        self.lagMax.record(maxLag)
+        // With no lag to report there is no data, which must not read as "fully caught up" (0).
+        self.lagMax.record(maxLag.map(Double.init) ?? Double.nan)
 
         for broker in stats.brokers.values {
             KafkaMetricSupport.recordWindow(
