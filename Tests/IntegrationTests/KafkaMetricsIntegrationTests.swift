@@ -197,18 +197,20 @@ struct KafkaMetricsIntegrationTests {
 
                 try await withThrowingTaskGroup(of: Void.self) { group in
                     group.addTask { try await serviceGroup.run() }
+                    // Keep polling for the whole test, like an application would. The commit is made by
+                    // librdkafka on its own schedule, so no fixed delay after the last message is reliable.
+                    group.addTask { for try await _ in messages {} }
                     group.addTask {
-                        var consumed = 0
-                        for try await _ in messages {
-                            consumed += 1
-                            if consumed >= messageCount { break }
-                        }
-                        // Several commit intervals, including idle ones with nothing left to commit.
-                        try await Task.sleep(for: .seconds(2))
-
                         let client = [("client_id", "metrics-integration-autocommit")]
                         let commits = try metrics.expectCounter("kafka.consumer.commits.total", client)
+                        let deadline = ContinuousClock.now + .seconds(60)
+                        while commits.totalValue < 1 && ContinuousClock.now < deadline {
+                            try await Task.sleep(for: .milliseconds(100))
+                        }
                         #expect(commits.totalValue >= 1, "automatic commits should be counted")
+
+                        // Keep going for a few more commit intervals, which have nothing left to commit.
+                        try await Task.sleep(for: .seconds(1))
                         // Idle intervals report "no offset to commit"; that is not a failed commit.
                         let failed = try metrics.expectCounter("kafka.consumer.commits.failed", client)
                         #expect(failed.totalValue == 0)
@@ -216,10 +218,11 @@ struct KafkaMetricsIntegrationTests {
                         #expect(try metrics.expectTimer("kafka.consumer.commit.duration", client).values.isEmpty)
                         // One assignment is one rebalance (librdkafka's own counter would say 1 assign + more).
                         #expect(try metrics.expectMeter("kafka.consumer.rebalances", client).lastValue == 1)
+
+                        await serviceGroup.triggerGracefulShutdown()
                     }
 
-                    try await group.next()
-                    await serviceGroup.triggerGracefulShutdown()
+                    try await group.waitForAll()
                 }
             }
         }
