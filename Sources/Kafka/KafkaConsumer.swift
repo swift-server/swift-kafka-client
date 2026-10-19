@@ -493,6 +493,13 @@ public final class KafkaConsumer: Sendable, Service {
                     )
                 }
             )
+
+            if case .revoke = kind {
+                self.clientMetrics?.removePartitions(rebalance.partitions)
+            } else if case .error = kind {
+                self.clientMetrics?.removePartitions(rebalance.partitions)
+            }
+
             if let source = self.eventsSource {
                 _ = source.yield(.rebalance(rebalance))
             }

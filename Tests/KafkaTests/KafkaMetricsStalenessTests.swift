@@ -153,8 +153,7 @@ struct KafkaMetricsStalenessTests {
                 .init(partition: 1, fetchState: "active", lag: 20),
             ]
         )
-        // Partition 0 was revoked: librdkafka keeps listing it with its frozen lag, but the
-        // fetch state is no longer active.
+        // Partition 0 was revoked.
         let afterRevoke = try StatsJSON.make(
             type: "consumer",
             partitions: [
@@ -166,6 +165,12 @@ struct KafkaMetricsStalenessTests {
         withMetricsFactory(metrics) {
             let consumerMetrics = KafkaConsumerMetrics(prefix: "kafka", clientID: "test-client")
             consumerMetrics.updateFromStatistics(owned)
+
+            // New: The rebalance handler calls removePartitions when a revoke event arrives.
+            consumerMetrics.removePartitions([
+                KafkaTopicPartition(topic: KafkaTopic(rawValue: "orders"), partition: KafkaPartition(rawValue: 0))
+            ])
+
             consumerMetrics.updateFromStatistics(afterRevoke)
         }
 
@@ -189,6 +194,12 @@ struct KafkaMetricsStalenessTests {
         withMetricsFactory(metrics) {
             let consumerMetrics = KafkaConsumerMetrics(prefix: "kafka", clientID: "test-client")
             consumerMetrics.updateFromStatistics(owned)
+
+            // New: The rebalance handler calls removePartitions.
+            consumerMetrics.removePartitions([
+                KafkaTopicPartition(topic: KafkaTopic(rawValue: "orders"), partition: KafkaPartition(rawValue: 0))
+            ])
+
             consumerMetrics.updateFromStatistics(stopping)
         }
 

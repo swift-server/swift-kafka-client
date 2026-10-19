@@ -370,11 +370,6 @@ extension RDKafkaStatistics.PartitionStats {
             return false
         }
     }
-
-    /// Whether this consumer owned the partition and has since given it up (revoked or lost).
-    var wasReleasedByConsumer: Bool {
-        self.fetchState == "stopping" || self.fetchState == "stopped"
-    }
 }
 
 extension RDKafkaStatistics {

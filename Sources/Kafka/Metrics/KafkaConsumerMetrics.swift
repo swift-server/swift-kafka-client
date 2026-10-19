@@ -199,8 +199,6 @@ final class KafkaConsumerMetrics: Sendable {
                     guard lag >= 0 else { continue }
                     self.lagGauge(topic: topicName, partition: partition.partition).record(lag)
                     maxLag = max(maxLag ?? lag, lag)
-                } else if partition.wasReleasedByConsumer {
-                    self.lagGauge(topic: topicName, partition: partition.partition).destroy()
                 }
             }
         }
@@ -222,6 +220,13 @@ final class KafkaConsumerMetrics: Sendable {
                 divisorToMilliseconds: 1,
                 broker.throttleTime
             )
+        }
+    }
+
+    /// Removes the lag gauge for partitions that are no longer owned by this consumer.
+    func removePartitions(_ partitions: [KafkaTopicPartition]) {
+        for partition in partitions {
+            self.lagGauge(topic: partition.topic.description, partition: partition.partition.rawValue).destroy()
         }
     }
 }
