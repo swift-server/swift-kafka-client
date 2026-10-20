@@ -56,7 +56,8 @@ enum KafkaMetricLabels {
     static let unitMilliseconds = "ms"
 
     // Dimensions
-    /// Identifies the client instance: the configured `client.id`, else librdkafka's unique handle name.
+    /// Identifies the client instance: the configured `client.id`, else librdkafka's handle name (unique within
+    /// a process, not across processes). Clients in one process must not share an explicit `client.id`.
     static let clientIdDimension = "client_id"
     static let topicDimension = "topic"
     static let partitionDimension = "partition"
@@ -66,7 +67,10 @@ enum KafkaMetricLabels {
 /// Shared helpers for emitting librdkafka statistics into swift-metrics instruments.
 enum KafkaMetricSupport {
     /// Emits a pre-aggregated latency window as `<baseLabel>.{avg,p99,max}.ms` gauges (milliseconds),
-    /// dimensioned by client and broker. Skips windows with no measurements (`count == 0`).
+    /// dimensioned by client and broker.
+    ///
+    /// A window with no measurements (`count == 0`) has no latency to report, so its gauges are set to
+    /// `NaN` ("no data") rather than keeping the previous interval's value or reporting a misleading `0`.
     ///
     /// - Parameter divisorToMilliseconds: `1000` for microsecond sources, `1` for `throttle` (already ms).
     static func recordWindow(
@@ -76,14 +80,73 @@ enum KafkaMetricSupport {
         divisorToMilliseconds: Double,
         _ window: RDKafkaStatistics.WindowStats
     ) {
-        guard window.count > 0 else { return }
+        let gauges = Self.windowGauges(baseLabel: baseLabel, clientDimension: clientDimension, broker: broker)
+        guard window.count > 0 else {
+            gauges.avg.record(Double.nan)
+            gauges.p99.record(Double.nan)
+            gauges.max.record(Double.nan)
+            return
+        }
+        gauges.avg.record(Double(window.avg) / divisorToMilliseconds)
+        gauges.p99.record(Double(window.p99) / divisorToMilliseconds)
+        gauges.max.record(Double(window.max) / divisorToMilliseconds)
+    }
+
+    /// Sets the latency windows of the given brokers to "no data" (`NaN`).
+    static func markWindowsUnavailable(
+        baseLabels: [String],
+        clientDimension: (String, String),
+        brokers: [RDKafkaStatistics.BrokerStats]
+    ) {
+        for broker in brokers {
+            for baseLabel in baseLabels {
+                let gauges = Self.windowGauges(
+                    baseLabel: baseLabel,
+                    clientDimension: clientDimension,
+                    broker: broker.name
+                )
+                gauges.avg.record(Double.nan)
+                gauges.p99.record(Double.nan)
+                gauges.max.record(Double.nan)
+            }
+        }
+    }
+
+    /// Removes the latency window gauges of the given brokers from the metrics backend.
+    static func destroyWindows(
+        baseLabels: [String],
+        clientDimension: (String, String),
+        brokers: [RDKafkaStatistics.BrokerStats]
+    ) {
+        for broker in brokers {
+            for baseLabel in baseLabels {
+                let gauges = Self.windowGauges(
+                    baseLabel: baseLabel,
+                    clientDimension: clientDimension,
+                    broker: broker.name
+                )
+                gauges.avg.destroy()
+                gauges.p99.destroy()
+                gauges.max.destroy()
+            }
+        }
+    }
+
+    /// The `avg`, `p99` and `max` gauges of one broker's latency window.
+    ///
+    /// The metrics backend hands back the existing instrument for a label and dimension set, so
+    /// rebuilding the gauges lets callers update or `destroy()` them without keeping references.
+    static func windowGauges(
+        baseLabel: String,
+        clientDimension: (String, String),
+        broker: String
+    ) -> (avg: Gauge, p99: Gauge, max: Gauge) {
         let dimensions = [clientDimension, (KafkaMetricLabels.brokerDimension, broker)]
         let unit = KafkaMetricLabels.unitMilliseconds
-        Gauge(label: "\(baseLabel).\(KafkaMetricLabels.windowAvg).\(unit)", dimensions: dimensions)
-            .record(Double(window.avg) / divisorToMilliseconds)
-        Gauge(label: "\(baseLabel).\(KafkaMetricLabels.windowP99).\(unit)", dimensions: dimensions)
-            .record(Double(window.p99) / divisorToMilliseconds)
-        Gauge(label: "\(baseLabel).\(KafkaMetricLabels.windowMax).\(unit)", dimensions: dimensions)
-            .record(Double(window.max) / divisorToMilliseconds)
+        return (
+            avg: Gauge(label: "\(baseLabel).\(KafkaMetricLabels.windowAvg).\(unit)", dimensions: dimensions),
+            p99: Gauge(label: "\(baseLabel).\(KafkaMetricLabels.windowP99).\(unit)", dimensions: dimensions),
+            max: Gauge(label: "\(baseLabel).\(KafkaMetricLabels.windowMax).\(unit)", dimensions: dimensions)
+        )
     }
 }

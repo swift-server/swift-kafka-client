@@ -29,7 +29,7 @@ extension KafkaProducer {
                 self = .deliveryReports(results)
             case .error(let kafkaError):
                 self = .error(kafkaError)
-            case .statistics:
+            case .statistics, .statisticsUnavailable:
                 fatalError("Cannot cast \(event) to KafkaProducer.Event")
             }
         }

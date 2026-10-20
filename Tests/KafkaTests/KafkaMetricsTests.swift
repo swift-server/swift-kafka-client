@@ -66,16 +66,21 @@ struct KafkaMetricsTests {
 
             try await Task.sleep(for: .seconds(1))
 
+            // The auto-register model emits under the configured prefix, without the
+            // caller assigning any instruments.
+            let value = try metrics.expectGauge(
+                "kafka.consumer.queue.operations",
+                [("client_id", "metrics-test-consumer")]
+            ).lastValue
+            #expect(value != nil)
+
             await serviceGroup.triggerGracefulShutdown()
         }
 
-        // The auto-register model emits under the configured prefix, without the
-        // caller assigning any instruments.
-        let value = try metrics.expectGauge(
-            "kafka.consumer.queue.operations",
-            [("client_id", "metrics-test-consumer")]
-        ).lastValue
-        #expect(value != nil)
+        // A closed consumer must not keep exporting its last values.
+        #expect(metrics.recorders.isEmpty, "gauges left after close: \(metrics.recorders.map(\.label))")
+        #expect(metrics.meters.isEmpty, "meters left after close: \(metrics.meters.map(\.label))")
+        #expect(metrics.counters.isEmpty, "counters left after close: \(metrics.counters.map(\.label))")
     }
 
     @Test func producerMetricsAutoRegistered() async throws {
@@ -99,15 +104,20 @@ struct KafkaMetricsTests {
 
             try await Task.sleep(for: .seconds(1))
 
+            // Without a configured `client.id`, the client is identified by librdkafka's handle name.
+            let queueMessages = metrics.recorders.filter { $0.label == "kafka.producer.queue.messages" }
+            #expect(queueMessages.count == 1)
+            let clientID = queueMessages.first?.dimensions.first { $0.0 == "client_id" }?.1
+            #expect(clientID?.hasPrefix("rdkafka#producer-") == true)
+            #expect(queueMessages.first?.lastValue != nil)
+
             await serviceGroup.triggerGracefulShutdown()
         }
 
-        // Without a configured `client.id`, the client is identified by librdkafka's handle name.
-        let queueMessages = metrics.recorders.filter { $0.label == "kafka.producer.queue.messages" }
-        #expect(queueMessages.count == 1)
-        let clientID = queueMessages.first?.dimensions.first { $0.0 == "client_id" }?.1
-        #expect(clientID?.hasPrefix("rdkafka#producer-") == true)
-        #expect(queueMessages.first?.lastValue != nil)
+        // A stopped producer must not keep exporting its last values.
+        #expect(metrics.recorders.isEmpty, "gauges left after shutdown: \(metrics.recorders.map(\.label))")
+        #expect(metrics.meters.isEmpty, "meters left after shutdown: \(metrics.meters.map(\.label))")
+        #expect(metrics.counters.isEmpty, "counters left after shutdown: \(metrics.counters.map(\.label))")
     }
 
     @Test func metricsAreEnabledByDefault() {
