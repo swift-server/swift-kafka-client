@@ -64,7 +64,3 @@ Kafka integrates with [swift-log](https://github.com/apple/swift-log) for struct
 ### Handling errors
 
 - ``KafkaError``
-
-### Working with message data
-
-- ``KafkaContiguousBytes``

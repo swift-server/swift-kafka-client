@@ -59,8 +59,7 @@ let package = Package(
         .tvOS(.v18),
     ],
     products: [
-        .library(name: "Kafka", targets: ["Kafka"]),
-        .library(name: "KafkaFoundationCompat", targets: ["KafkaFoundationCompat"]),
+        .library(name: "Kafka", targets: ["Kafka"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.55.0"),
@@ -104,10 +103,6 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "Metrics", package: "swift-metrics"),
             ]
-        ),
-        .target(
-            name: "KafkaFoundationCompat",
-            dependencies: ["Kafka"]
         ),
         // Minimal executable that forces a final link of librdkafka against CNIOBoringSSL. It lets
         // the static Linux (musl) SDK build be verified with `swift build`, since the test bundle

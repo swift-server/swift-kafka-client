@@ -85,8 +85,8 @@ import Foundation
             }
 
             #expect(expectedTopic == receivedMessage.topic)
-            #expect(Array(message.key!.utf8) == receivedMessage.key)
-            #expect(Array(message.value.utf8) == receivedMessage.value)
+            #expect(message.key! == receivedMessage.key)
+            #expect(message.value == receivedMessage.value)
             #expect(headers == receivedMessage.headers)
 
             // Shutdown the serviceGroup
@@ -111,7 +111,7 @@ import Foundation
             let expectedTopic: KafkaTopic = "test-topic"
             let message = KafkaProducer.Message(
                 topic: expectedTopic,
-                value: ByteBuffer()
+                value: [UInt8]()
             )
 
             let messageID = try producer.send(message)
@@ -142,7 +142,7 @@ import Foundation
             }
 
             #expect(expectedTopic == receivedMessage.topic)
-            #expect(Array(message.value.readableBytesView) == receivedMessage.value)
+            #expect(message.value == receivedMessage.value)
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()
@@ -208,10 +208,10 @@ import Foundation
             #expect(acknowledgedMessages.count == 2)
             #expect(acknowledgedMessages.contains(where: { $0.topic == message1.topic }))
             #expect(acknowledgedMessages.contains(where: { $0.topic == message2.topic }))
-            #expect(acknowledgedMessages.contains(where: { $0.key == Array(message1.key!.utf8) }))
-            #expect(acknowledgedMessages.contains(where: { $0.key == Array(message2.key!.utf8) }))
-            #expect(acknowledgedMessages.contains(where: { $0.value == Array(message1.value.utf8) }))
-            #expect(acknowledgedMessages.contains(where: { $0.value == Array(message2.value.utf8) }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == message1.key! }))
+            #expect(acknowledgedMessages.contains(where: { $0.key == message2.key! }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == message1.value }))
+            #expect(acknowledgedMessages.contains(where: { $0.value == message2.value }))
 
             // Shutdown the serviceGroup
             await serviceGroup.triggerGracefulShutdown()

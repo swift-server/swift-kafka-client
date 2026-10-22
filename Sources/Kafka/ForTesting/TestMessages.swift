@@ -33,7 +33,7 @@ public func _createTestMessages(
     topic: KafkaTopic,
     headers: [KafkaHeader] = [],
     count: UInt
-) -> [KafkaProducer.Message<String, String>] {
+) -> [KafkaProducer.Message] {
     Array(0..<count).map {
         KafkaProducer.Message(
             topic: topic,
@@ -49,7 +49,7 @@ public func _createTestMessages(
 public func _sendAndAcknowledgeMessages(
     producer: KafkaProducer,
     events: KafkaProducer.Events,
-    messages: [KafkaProducer.Message<String, String>],
+    messages: [KafkaProducer.Message],
     skipConsistencyCheck: Bool = false
 ) async throws {
     var messageIDs = Set<KafkaProducer.MessageID>()
@@ -104,8 +104,8 @@ public func _sendAndAcknowledgeMessages(
     }
     for message in messages {
         guard acknowledgedMessages.contains(where: { $0.topic == message.topic }),
-            acknowledgedMessages.contains(where: { $0.key == Array(message.key!.utf8) }),
-            acknowledgedMessages.contains(where: { $0.value == Array(message.value.utf8) })
+            acknowledgedMessages.contains(where: { $0.key == message.key }),
+            acknowledgedMessages.contains(where: { $0.value == message.value })
         else {
             throw _TestMessagesError.deliveryReportsIncorrect
         }

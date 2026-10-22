@@ -92,6 +92,17 @@ try await withLogger(logger) { _ in
 
 The events sequence delivers reports in batches as `librdkafka` flushes them, which keeps overhead lower than awaiting each message individually.
 
+### Send bytes you already hold
+
+``KafkaProducer/Message`` stores its key and value as `[UInt8]`, and builds them from a `String` or an array. If your payload lives in another type, such as `Foundation.Data` from a `JSONEncoder`, pass its bytes as a `RawSpan` instead of copying them into an array first:
+
+```swift
+let payload: Data = try JSONEncoder().encode(order)
+let report = try await producer.sendAndAwait(topic: "orders", value: payload.bytes)
+```
+
+``KafkaProducer/send(topic:partition:headers:key:value:)`` and ``KafkaProducer/sendAndAwait(topic:partition:headers:key:value:)`` accept a `RawSpan` for the key and the value. Header values stay `[UInt8]`.
+
 ### Identify a record before delivery
 
 The synchronous ``KafkaProducer/send(_:)`` returns a ``KafkaProducer/MessageID``. Use this identifier to match a later ``KafkaProducer/DeliveryReport`` to the originating record; the same identifier appears on the report.
@@ -106,6 +117,8 @@ Beyond delivery reports, the events sequence emits errors and other broker event
 
 - ``KafkaProducer/send(_:)``
 - ``KafkaProducer/sendAndAwait(_:)``
+- ``KafkaProducer/send(topic:partition:headers:key:value:)``
+- ``KafkaProducer/sendAndAwait(topic:partition:headers:key:value:)``
 - ``KafkaProducer/makeProducer(config:)``
 
 ### Inspecting outcomes

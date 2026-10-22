@@ -361,22 +361,66 @@ public final class KafkaProducer: Service, Sendable {
     /// of the corresponding ``KafkaProducer/DeliveryReport``.
     /// - Throws: A ``KafkaError`` if sending the message failed.
     @discardableResult
-    public func send<Key, Value>(_ message: Message<Key, Value>) throws -> MessageID {
+    public func send(_ message: Message) throws -> MessageID {
+        try self.enqueue(topic: message.topic) { client, newMessageID, topicHandles in
+            try client.produce(message: message, newMessageID: newMessageID, topicHandles: topicHandles)
+        }
+    }
+
+    /// Sends a message to the Kafka cluster from borrowed bytes.
+    ///
+    /// Use this overload to send bytes you hold in another type without first copying them into an array.
+    /// For example, pass `data.bytes` for a `Foundation.Data`.
+    ///
+    /// This method does not wait until the message is sent and acknowledged by the cluster.
+    /// For acknowledged delivery, use ``sendAndAwait(topic:partition:headers:key:value:)``.
+    ///
+    /// - Parameters:
+    ///   - topic: The topic the producer sends the message to.
+    ///   - partition: The partition to send to. Defaults to ``KafkaPartition/unassigned``.
+    ///   - headers: The headers of the message.
+    ///   - key: The optional key. Messages with the same key go to the same partition when the partition is unassigned.
+    ///   - value: The bytes of the message's value.
+    /// - Returns: Unique ``KafkaProducer/MessageID`` matching the ``KafkaProducer/DeliveryReport/id`` property
+    /// of the corresponding ``KafkaProducer/DeliveryReport``.
+    /// - Throws: A ``KafkaError`` if sending the message failed.
+    @discardableResult
+    public func send(
+        topic: KafkaTopic,
+        partition: KafkaPartition = .unassigned,
+        headers: [KafkaHeader] = [],
+        key: RawSpan? = nil,
+        value: RawSpan
+    ) throws -> MessageID {
+        try self.enqueue(topic: topic) { client, newMessageID, topicHandles in
+            try client.produce(
+                topic: topic,
+                partition: partition,
+                headers: headers,
+                key: key,
+                value: value,
+                newMessageID: newMessageID,
+                topicHandles: topicHandles
+            )
+        }
+    }
+
+    /// Reserves a message ID and hands the client to `produce`, recording metrics and logging on failure.
+    private func enqueue(
+        topic: KafkaTopic,
+        _ produce: (RDKafkaClient, UInt, RDKafkaTopicHandles) throws -> Void
+    ) throws -> MessageID {
         let action = try self.stateMachine.withLockedValue { try $0.send() }
         switch action {
         case .send(let client, let newMessageID, let topicHandles):
             do {
-                try client.produce(
-                    message: message,
-                    newMessageID: newMessageID,
-                    topicHandles: topicHandles
-                )
+                try produce(client, newMessageID, topicHandles)
             } catch {
                 self.clientMetrics?.recordSendError()
                 self.logger.info(
                     "Failed to produce message",
                     error: error,
-                    metadata: [KafkaLoggingKeys.topic: "\(message.topic)"]
+                    metadata: [KafkaLoggingKeys.topic: "\(topic)"]
                 )
                 throw error
             }
@@ -393,8 +437,47 @@ public final class KafkaProducer: Service, Sendable {
     /// - Parameter message: The ``KafkaProducer/Message`` to send.
     /// - Returns: A ``KafkaProducer/DeliveryReport`` with the delivery status.
     /// - Throws: A ``KafkaError`` if the message could not be enqueued or was rejected by the broker.
-    public func sendAndAwait<Key, Value>(
-        _ message: Message<Key, Value>
+    public func sendAndAwait(_ message: Message) async throws -> DeliveryReport {
+        try await self.enqueueAndAwait { client, newMessageID, topicHandles in
+            try client.produce(message: message, newMessageID: newMessageID, topicHandles: topicHandles)
+        }
+    }
+
+    /// Sends a message to the Kafka cluster from borrowed bytes and awaits the delivery report.
+    ///
+    /// The span overload of ``sendAndAwait(_:)``.
+    ///
+    /// - Parameters:
+    ///   - topic: The topic the producer sends the message to.
+    ///   - partition: The partition to send to. Defaults to ``KafkaPartition/unassigned``.
+    ///   - headers: The headers of the message.
+    ///   - key: The optional key. Messages with the same key go to the same partition when the partition is unassigned.
+    ///   - value: The bytes of the message's value.
+    /// - Returns: A ``KafkaProducer/DeliveryReport`` with the delivery status.
+    /// - Throws: A ``KafkaError`` if the message could not be enqueued or was rejected by the broker.
+    public func sendAndAwait(
+        topic: KafkaTopic,
+        partition: KafkaPartition = .unassigned,
+        headers: [KafkaHeader] = [],
+        key: RawSpan? = nil,
+        value: RawSpan
+    ) async throws -> DeliveryReport {
+        try await self.enqueueAndAwait { client, newMessageID, topicHandles in
+            try client.produce(
+                topic: topic,
+                partition: partition,
+                headers: headers,
+                key: key,
+                value: value,
+                newMessageID: newMessageID,
+                topicHandles: topicHandles
+            )
+        }
+    }
+
+    /// Reserves a message ID, hands the client to `produce`, and suspends until the delivery report arrives.
+    private func enqueueAndAwait(
+        _ produce: (RDKafkaClient, UInt, RDKafkaTopicHandles) throws -> Void
     ) async throws -> DeliveryReport {
         // Measure end-to-end acknowledged-send latency (enqueue → delivery report).
         let clock = ContinuousClock()
@@ -438,11 +521,7 @@ public final class KafkaProducer: Service, Sendable {
                 }
 
                 do {
-                    try client.produce(
-                        message: message,
-                        newMessageID: newMessageID,
-                        topicHandles: topicHandles
-                    )
+                    try produce(client, newMessageID, topicHandles)
                 } catch {
                     self.clientMetrics?.recordSendError()
                     let removed = self.stateMachine.withLockedValue {

@@ -125,35 +125,109 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter message: The ``KafkaProducer/Message`` to send to the KafkaCluster.
     /// - Parameter newMessageID: ID assigned to the `message`.
     /// - Parameter topicHandles: Topic handles that this client uses to produce new messages.
-    func produce<Key, Value>(
-        message: KafkaProducer.Message<Key, Value>,
+    func produce(
+        message: KafkaProducer.Message,
+        newMessageID: UInt,
+        topicHandles: RDKafkaTopicHandles
+    ) throws {
+        try message.value.withUnsafeBytes { valueBuffer in
+            if let key = message.key {
+                try key.withUnsafeBytes { keyBuffer in
+                    try self.produce(
+                        topic: message.topic,
+                        partition: message.partition,
+                        headers: message.headers,
+                        keyBuffer: keyBuffer,
+                        valueBuffer: valueBuffer,
+                        newMessageID: newMessageID,
+                        topicHandles: topicHandles
+                    )
+                }
+            } else {
+                try self.produce(
+                    topic: message.topic,
+                    partition: message.partition,
+                    headers: message.headers,
+                    keyBuffer: nil,
+                    valueBuffer: valueBuffer,
+                    newMessageID: newMessageID,
+                    topicHandles: topicHandles
+                )
+            }
+        }
+    }
+
+    /// Produce a message to the Kafka cluster from borrowed bytes.
+    ///
+    /// The bytes are handed to librdkafka as pointers. The span overload relies on `RD_KAFKA_MSG_F_COPY`
+    /// (see the private `produce`), which makes librdkafka copy them before `rd_kafka_produceva` returns.
+    func produce(
+        topic: KafkaTopic,
+        partition: KafkaPartition,
+        headers: [KafkaHeader],
+        key: RawSpan?,
+        value: RawSpan,
+        newMessageID: UInt,
+        topicHandles: RDKafkaTopicHandles
+    ) throws {
+        try value.withUnsafeBytes { valueBuffer in
+            if let key {
+                try key.withUnsafeBytes { keyBuffer in
+                    try self.produce(
+                        topic: topic,
+                        partition: partition,
+                        headers: headers,
+                        keyBuffer: keyBuffer,
+                        valueBuffer: valueBuffer,
+                        newMessageID: newMessageID,
+                        topicHandles: topicHandles
+                    )
+                }
+            } else {
+                try self.produce(
+                    topic: topic,
+                    partition: partition,
+                    headers: headers,
+                    keyBuffer: nil,
+                    valueBuffer: valueBuffer,
+                    newMessageID: newMessageID,
+                    topicHandles: topicHandles
+                )
+            }
+        }
+    }
+
+    private func produce(
+        topic: KafkaTopic,
+        partition: KafkaPartition,
+        headers: [KafkaHeader],
+        keyBuffer: UnsafeRawBufferPointer?,
+        valueBuffer: UnsafeRawBufferPointer,
         newMessageID: UInt,
         topicHandles: RDKafkaTopicHandles
     ) throws {
         precondition(
-            0...Int(Int32.max) ~= message.partition.rawValue || message.partition == .unassigned,
+            0...Int(Int32.max) ~= partition.rawValue || partition == .unassigned,
             "Partition ID outside of valid range \(0...Int32.max)"
         )
 
         // Pass message over to librdkafka where it will be queued and sent to the Kafka Cluster.
         // Returns 0 on success, error code otherwise.
         let error = try topicHandles.withTopicHandlePointer(
-            topic: message.topic
+            topic: topic
         ) { topicHandle in
-            try Self.withMessageKeyAndValueBuffer(for: message) { keyBuffer, valueBuffer in
-                let errorPointer = try Self.withKafkaCHeaders(for: message.headers) { cHeaders in
-                    try self._produceVariadic(
-                        topicHandle: topicHandle,
-                        partition: Int32(message.partition.rawValue),
-                        messageFlags: RD_KAFKA_MSG_F_COPY,
-                        key: keyBuffer,
-                        value: valueBuffer,
-                        opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
-                        cHeaders: cHeaders
-                    )
-                }
-                return rd_kafka_error_code(errorPointer)
+            let errorPointer = try Self.withKafkaCHeaders(for: headers) { cHeaders in
+                try self._produceVariadic(
+                    topicHandle: topicHandle,
+                    partition: Int32(partition.rawValue),
+                    messageFlags: RD_KAFKA_MSG_F_COPY,
+                    key: keyBuffer,
+                    value: valueBuffer,
+                    opaque: UnsafeMutableRawPointer(bitPattern: newMessageID),
+                    cHeaders: cHeaders
+                )
             }
+            return rd_kafka_error_code(errorPointer)
         }
 
         if error != RD_KAFKA_RESP_ERR_NO_ERROR {
@@ -227,25 +301,6 @@ public final class RDKafkaClient: Sendable {
             arguments,
             arguments.count
         )
-    }
-
-    /// Scoped accessor that enables safe access to a ``KafkaProducer/Message``'s key and value raw buffers.
-    /// - Warning: Do not escape the pointer from the closure for later use.
-    /// - Parameter body: The closure that uses the pointer.
-    @discardableResult
-    private static func withMessageKeyAndValueBuffer<T, Key, Value>(
-        for message: KafkaProducer.Message<Key, Value>,
-        _ body: (UnsafeRawBufferPointer?, UnsafeRawBufferPointer) throws -> T  // (keyBuffer, valueBuffer)
-    ) rethrows -> T {
-        try message.value.withUnsafeBytes { valueBuffer in
-            if let key = message.key {
-                return try key.withUnsafeBytes { keyBuffer in
-                    try body(keyBuffer, valueBuffer)
-                }
-            } else {
-                return try body(nil, valueBuffer)
-            }
-        }
     }
 
     /// Scoped accessor that enables safe access the underlying memory of an array of ``KafkaHeader``s.
