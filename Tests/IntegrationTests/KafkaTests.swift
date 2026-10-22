@@ -99,8 +99,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(Array(testMessages[index].key!.utf8) == consumedMessage.key)
-                        #expect(Array(testMessages[index].value.utf8) == consumedMessage.value)
+                        #expect(testMessages[index].key! == consumedMessage.key)
+                        #expect(testMessages[index].value == consumedMessage.value)
                     }
                 }
 
@@ -157,8 +157,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(Array(testMessages[index].key!.utf8) == consumedMessage.key)
-                        #expect(Array(testMessages[index].value.utf8) == consumedMessage.value)
+                        #expect(testMessages[index].key! == consumedMessage.key)
+                        #expect(testMessages[index].value == consumedMessage.value)
                     }
                 }
 
@@ -371,8 +371,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 let consumedMessage = try await consumerIterator.next()
                 #expect(testMessages.first!.topic == consumedMessage!.topic)
-                #expect(Array(testMessages.first!.key!.utf8) == consumedMessage!.key)
-                #expect(Array(testMessages.first!.value.utf8) == consumedMessage!.value)
+                #expect(testMessages.first!.key! == consumedMessage!.key)
+                #expect(testMessages.first!.value == consumedMessage!.value)
 
                 // Trigger a graceful shutdown
                 await serviceGroup.triggerGracefulShutdown()
@@ -440,8 +440,8 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(Array(testMessages[index].key!.utf8) == consumedMessage.key)
-                        #expect(Array(testMessages[index].value.utf8) == consumedMessage.value)
+                        #expect(testMessages[index].key! == consumedMessage.key)
+                        #expect(testMessages[index].value == consumedMessage.value)
                     }
                 }
 
@@ -500,11 +500,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[firstConsumerOffset + index].topic == consumedMessage.topic)
                         #expect(
-                            Array(testMessages[firstConsumerOffset + index].key!.utf8)
+                            testMessages[firstConsumerOffset + index].key!
                                 == consumedMessage.key
                         )
                         #expect(
-                            Array(testMessages[firstConsumerOffset + index].value.utf8)
+                            testMessages[firstConsumerOffset + index].value
                                 == consumedMessage.value
                         )
                     }
@@ -807,11 +807,11 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     for (index, consumedMessage) in consumedMessages.enumerated() {
                         #expect(testMessages[firstConsumerCount + index].topic == consumedMessage.topic)
                         #expect(
-                            Array(testMessages[firstConsumerCount + index].key!.utf8)
+                            testMessages[firstConsumerCount + index].key!
                                 == consumedMessage.key
                         )
                         #expect(
-                            Array(testMessages[firstConsumerCount + index].value.utf8)
+                            testMessages[firstConsumerCount + index].value
                                 == consumedMessage.value
                         )
                     }
@@ -2226,7 +2226,7 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
             #expect(consumed.count == testMessages.count)
             for (index, message) in consumed.enumerated() {
                 #expect(testMessages[index].topic == message.topic)
-                #expect(Array(testMessages[index].value.utf8) == message.value)
+                #expect(testMessages[index].value == message.value)
             }
         }
     }
@@ -2250,14 +2250,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
     // MARK: - Helpers
 
-    func produceMessages(topic: KafkaTopic, count: UInt) async throws -> [KafkaProducer.Message<String, String>] {
+    func produceMessages(topic: KafkaTopic, count: UInt) async throws -> [KafkaProducer.Message] {
         let testMessages = Self.createTestMessages(topic: topic, count: count)
         try await self.produceMessages(messages: testMessages)
         return testMessages
     }
 
     func produceMessages(
-        messages: [KafkaProducer.Message<String, String>]
+        messages: [KafkaProducer.Message]
     ) async throws {
         let (producer, events) = try KafkaProducer.makeProducer(
             config: self.producerConfig
@@ -2294,14 +2294,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
         topic: KafkaTopic,
         headers: [KafkaHeader] = [],
         count: UInt
-    ) -> [KafkaProducer.Message<String, String>] {
+    ) -> [KafkaProducer.Message] {
         _createTestMessages(topic: topic, headers: headers, count: count)
     }
 
     private static func sendAndAcknowledgeMessages(
         producer: KafkaProducer,
         events: KafkaProducer.Events,
-        messages: [KafkaProducer.Message<String, String>],
+        messages: [KafkaProducer.Message],
         skipConsistencyCheck: Bool = false
     ) async throws {
         try await _sendAndAcknowledgeMessages(

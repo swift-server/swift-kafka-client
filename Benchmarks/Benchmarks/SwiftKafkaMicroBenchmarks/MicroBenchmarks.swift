@@ -14,7 +14,6 @@
 
 import Benchmark
 import Kafka
-import NIOCore
 
 // Deterministic, broker-free micro-benchmarks that measure per-operation
 // allocations and CPU instructions for the library's hot paths. Because these
@@ -54,24 +53,13 @@ let benchmarks: @Sendable () -> Void = {
 
     // MARK: - Producer message construction (P1–P3)
     //
-    // `KafkaProducer.Message` is generic over `KafkaContiguousBytes`, so the same
-    // construction is measured for each supported payload representation. Each
-    // has a different `withUnsafeBytes` cost downstream, but here we isolate the
-    // message-value allocation itself.
+    // `KafkaProducer.Message` stores its key and value as `[UInt8]` and offers convenience
+    // initializers that take `String`. The same construction is measured for each input
+    // representation, isolating the message-value allocation itself.
 
     Benchmark("ProducerMessage_build_UInt8_256B") { benchmark in
         let key: [UInt8] = Array("benchmark-key".utf8)
         let value = [UInt8](repeating: 0xAB, count: 256)
-        benchmark.startMeasurement()
-        for _ in benchmark.scaledIterations {
-            blackHole(KafkaProducer.Message(topic: topic, key: key, value: value))
-        }
-        benchmark.stopMeasurement()
-    }
-
-    Benchmark("ProducerMessage_build_ByteBuffer_256B") { benchmark in
-        let key = ByteBuffer(string: "benchmark-key")
-        let value = ByteBuffer(repeating: 0xAB, count: 256)
         benchmark.startMeasurement()
         for _ in benchmark.scaledIterations {
             blackHole(KafkaProducer.Message(topic: topic, key: key, value: value))

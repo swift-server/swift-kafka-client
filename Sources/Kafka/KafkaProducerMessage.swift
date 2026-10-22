@@ -13,11 +13,15 @@
 //===----------------------------------------------------------------------===//
 
 import Crdkafka
-import NIOCore
 
 extension KafkaProducer {
     /// A message a producer sends to the Kafka cluster.
-    public struct Message<Key: KafkaContiguousBytes, Value: KafkaContiguousBytes> {
+    ///
+    /// A message owns its key and value as byte arrays, so you can keep it, queue it, or send it from
+    /// another task. To send bytes you hold in another type (for example `Foundation.Data`) without
+    /// copying them into an array first, use ``KafkaProducer/send(topic:partition:headers:key:value:)``
+    /// with a `RawSpan`.
+    public struct Message: Sendable, Hashable {
         /// The topic the producer sends the message to.
         public var topic: KafkaTopic
 
@@ -35,14 +39,12 @@ extension KafkaProducer {
         /// If the ``KafkaPartition`` is ``KafkaPartition/unassigned``, the producer uses
         /// ``KafkaProducer/Message/key`` to ensure that two ``KafkaProducer/Message``s with
         /// the same key route to the same ``KafkaPartition``.
-        public var key: Key?
+        public var key: [UInt8]?
 
         /// The value of the message to send.
-        public var value: Value
+        public var value: [UInt8]
 
-        /// Creates a producer message with key and value content.
-        ///
-        /// Both `key` and `value` must conform to ``KafkaContiguousBytes``.
+        /// Creates a producer message with a key and value as byte arrays.
         ///
         /// - Parameters:
         ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
@@ -54,8 +56,8 @@ extension KafkaProducer {
             topic: KafkaTopic,
             partition: KafkaPartition = .unassigned,
             headers: [KafkaHeader] = [],
-            key: Key?,
-            value: Value
+            key: [UInt8]?,
+            value: [UInt8]
         ) {
             self.topic = topic
             self.partition = partition
@@ -63,35 +65,61 @@ extension KafkaProducer {
             self.key = key
             self.value = value
         }
+
+        /// Creates a producer message with a value as a byte array and no key.
+        ///
+        /// - Parameters:
+        ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
+        ///     - partition: The topic partition the producer sends the message to. If you don't set this explicitly, the producer assigns the partition automatically.
+        ///     - headers: The headers of the message.
+        ///     - value: The message body.
+        public init(
+            topic: KafkaTopic,
+            partition: KafkaPartition = .unassigned,
+            headers: [KafkaHeader] = [],
+            value: [UInt8]
+        ) {
+            self.init(topic: topic, partition: partition, headers: headers, key: nil, value: value)
+        }
+
+        /// Creates a producer message with a key and value as strings, sent as their UTF-8 bytes.
+        ///
+        /// - Parameters:
+        ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
+        ///     - partition: The topic partition the producer sends the message to. If you don't set this explicitly, the producer assigns the partition automatically.
+        ///     - headers: The headers of the message.
+        ///     - key: Guarantees that messages with the same key go to the same partition, preserving their order.
+        ///     - value: The message's value.
+        public init(
+            topic: KafkaTopic,
+            partition: KafkaPartition = .unassigned,
+            headers: [KafkaHeader] = [],
+            key: String?,
+            value: String
+        ) {
+            self.init(
+                topic: topic,
+                partition: partition,
+                headers: headers,
+                key: key.map { Array($0.utf8) },
+                value: Array(value.utf8)
+            )
+        }
+
+        /// Creates a producer message with a value as a string, sent as its UTF-8 bytes, and no key.
+        ///
+        /// - Parameters:
+        ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
+        ///     - partition: The topic partition the producer sends the message to. If you don't set this explicitly, the producer assigns the partition automatically.
+        ///     - headers: The headers of the message.
+        ///     - value: The message body.
+        public init(
+            topic: KafkaTopic,
+            partition: KafkaPartition = .unassigned,
+            headers: [KafkaHeader] = [],
+            value: String
+        ) {
+            self.init(topic: topic, partition: partition, headers: headers, key: nil, value: Array(value.utf8))
+        }
     }
 }
-
-extension KafkaProducer.Message where Key == Never {
-    /// Creates a producer message with value content and no key.
-    ///
-    /// The `value` must conform to ``KafkaContiguousBytes``.
-    ///
-    /// - Parameters:
-    ///     - topic: The topic the producer sends the message to. The ``KafkaProducer`` creates the topic if it doesn't exist.
-    ///     - partition: The topic partition the producer sends the message to. If you don't set this explicitly, the producer assigns the partition automatically.
-    ///     - headers: The headers of the message.
-    ///     - value: The message body.
-    public init(
-        topic: KafkaTopic,
-        partition: KafkaPartition = .unassigned,
-        headers: [KafkaHeader] = [],
-        value: Value
-    ) {
-        self.topic = topic
-        self.partition = partition
-        self.headers = headers
-        self.key = nil
-        self.value = value
-    }
-}
-
-extension KafkaProducer.Message: Hashable where Key: Hashable, Value: Hashable {}
-
-extension KafkaProducer.Message: Equatable where Key: Equatable, Value: Equatable {}
-
-extension KafkaProducer.Message: Sendable where Key: Sendable, Value: Sendable {}
