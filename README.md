@@ -131,6 +131,13 @@ let report = try await withLogger(logger) { _ in
 }
 ```
 
+To send bytes you already hold in another type, such as `Foundation.Data`, pass them as a `RawSpan` instead of building a `KafkaProducer.Message`:
+
+```swift
+let payload = Data("Hello, World!".utf8)
+let report = try await producer.sendAndAwait(topic: "topic-name", value: payload.bytes)
+```
+
 ### Consumer API
 
 The consumer delivers messages as an `AsyncSequence`. Iterate them with a standard `for try await` loop that integrates naturally with Swift concurrency, structured tasks, and cancellation:
