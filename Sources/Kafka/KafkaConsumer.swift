@@ -865,10 +865,10 @@ extension KafkaConsumer {
                     }
 
                     switch action {
-                    case .poll(let client):
+                    case .poll:
                         // Attempt to fetch a message synchronously. Bail
                         // immediately if no message is waiting for us.
-                        if let message = try client.consumerPoll() {
+                        if let message = try self.pollIfRunning(timeoutMilliseconds: 0) {
                             return message
                         }
 
@@ -876,7 +876,9 @@ extension KafkaConsumer {
                         // The call below will block for `pollInterval`.
                         if let message = try await withTaskExecutorPreference(
                             queue,
-                            operation: { try client.consumerPoll(for: Int32(self.pollInterval.inMilliseconds)) }
+                            operation: {
+                                try self.pollIfRunning(timeoutMilliseconds: Int32(self.pollInterval.inMilliseconds))
+                            }
                         ) {
                             return message
                         }
@@ -887,6 +889,16 @@ extension KafkaConsumer {
                     }
                 }
                 return nil
+            }
+
+            /// Polls once, unless the consumer is no longer running, so close never overlaps a poll.
+            private func pollIfRunning(timeoutMilliseconds: Int32) throws -> Element? {
+                let stateMachine = self.stateMachineHolder.stateMachine
+                guard let client = stateMachine.withLockedValue({ $0.startConsumerPoll() }) else {
+                    return nil
+                }
+                defer { stateMachine.withLockedValue { $0.finishConsumerPoll() } }
+                return try client.consumerPoll(for: timeoutMilliseconds)
             }
         }
 
@@ -945,6 +957,9 @@ extension KafkaConsumer {
         /// The current state of the StateMachine.
         var state: State = .uninitialized
 
+        /// The number of `rd_kafka_consumer_poll` calls running. Close starts only when this is `0`.
+        var consumerPollsInFlight = 0
+
         /// Delayed initialization of `StateMachine` as the `source` and the `pollClosure` are
         /// not yet available when the normal initialization occurs.
         mutating func initialize(
@@ -1002,7 +1017,7 @@ extension KafkaConsumer {
                         return .suspendPollLoop
                     }
                 } else {
-                    if !closeInitiated {
+                    if !closeInitiated && self.consumerPollsInFlight == 0 {
                         self.state = .finishing(
                             client: client,
                             rebalanceContext: rebalanceContext,
@@ -1047,6 +1062,21 @@ extension KafkaConsumer {
             case .finishing, .finishedAwaitingGracefulShutdown, .finished:
                 return .terminatePollLoop
             }
+        }
+
+        /// Returns the client to poll, or `nil` if not running. Balance with ``finishConsumerPoll()``.
+        mutating func startConsumerPoll() -> RDKafkaClient? {
+            guard case .running(let client, _) = self.state else {
+                return nil
+            }
+            self.consumerPollsInFlight += 1
+            return client
+        }
+
+        /// Marks a poll started by ``startConsumerPoll()`` as returned.
+        mutating func finishConsumerPoll() {
+            precondition(self.consumerPollsInFlight > 0, "finishConsumerPoll() without startConsumerPoll()")
+            self.consumerPollsInFlight -= 1
         }
 
         /// Action to be taken when wanting to set up the connection through ``subscribe()`` or ``assign()``.
@@ -1143,6 +1173,16 @@ extension KafkaConsumer {
                 self.state = .finished
                 return nil
             case .running(let client, let rebalanceContext):
+                guard self.consumerPollsInFlight == 0 else {
+                    // The event poll loop starts close once the running poll returns.
+                    self.state = .finishing(
+                        client: client,
+                        rebalanceContext: rebalanceContext,
+                        closeInitiated: false,
+                        gracefulShutdownRequested: true
+                    )
+                    return nil
+                }
                 self.state = .finishing(
                     client: client,
                     rebalanceContext: rebalanceContext,
