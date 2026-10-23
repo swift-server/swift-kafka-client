@@ -104,22 +104,4 @@ API breakage: func _sendAndAcknowledgeMessages(producer:events:messages:skipCons
 API breakage: protocol KafkaContiguousBytes has been removed
 API breakage: var KafkaProducer.Message.key has declared type change from Key? to [Swift.UInt8]?
 API breakage: var KafkaProducer.Message.value has declared type change from Value to [Swift.UInt8]
-API breakage: func KafkaProducer.send(_:) has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: func KafkaProducer.sendAndAwait(_:) has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: struct KafkaProducer.Message has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.topic.Get() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.topic.Set() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.partition.Get() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.partition.Set() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.headers.Get() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.headers.Set() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.key.Get() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.key.Set() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.value.Get() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: accessor KafkaProducer.Message.value.Set() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: constructor KafkaProducer.Message.init(topic:partition:headers:key:value:) has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Value : Kafka.KafkaContiguousBytes> to
-API breakage: constructor KafkaProducer.Message.init(topic:partition:headers:value:) has generic signature change from <Key, Value where Key == Swift.Never, Value : Kafka.KafkaContiguousBytes> to
-API breakage: func KafkaProducer.Message.hash(into:) has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Key : Swift.Hashable, Value : Kafka.KafkaContiguousBytes, Value : Swift.Hashable> to
-API breakage: accessor KafkaProducer.Message.hashValue.Get() has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Key : Swift.Hashable, Value : Kafka.KafkaContiguousBytes, Value : Swift.Hashable> to
-API breakage: func KafkaProducer.Message.__derived_struct_equals(_:_:) has generic signature change from <Key, Value where Key : Kafka.KafkaContiguousBytes, Key : Swift.Equatable, Value : Kafka.KafkaContiguousBytes, Value : Swift.Equatable> to
 
