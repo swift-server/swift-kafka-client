@@ -22,6 +22,8 @@ For an end-to-end guide including configuration, delivery patterns, and event ha
 
 - ``send(_:)``
 - ``sendAndAwait(_:)``
+- ``send(topic:partition:headers:key:value:)``
+- ``sendAndAwait(topic:partition:headers:key:value:)``
 - ``KafkaProducer/Message``
 - ``KafkaProducer/MessageID``
 
