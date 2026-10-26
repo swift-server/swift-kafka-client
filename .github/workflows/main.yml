@@ -46,17 +46,30 @@ jobs:
       - name: Build with GSSAPI enabled (opt-in Cyrus SASL path)
         run: SWIFT_KAFKA_ENABLE_GSSAPI=1 swift build
 
-  ios-simulator-build:
-    name: iOS Simulator build
+  apple-simulator-builds:
+    name: ${{ matrix.platform }} Simulator build
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: iOS
+            sdk: iphonesimulator
+            triple: arm64-apple-ios-simulator
+          - platform: tvOS
+            sdk: appletvsimulator
+            triple: arm64-apple-tvos-simulator
+          - platform: watchOS
+            sdk: watchsimulator
+            triple: arm64-apple-watchos-simulator
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
           submodules: true
-      - name: Build for the iOS Simulator
-        # The iOS SDKs lack headers that the macOS SDK ships (e.g. curl/curl.h), so a
-        # librdkafka build-config regression can pass the macOS and Linux builds but break iOS.
+      - name: Build for the ${{ matrix.platform }} Simulator
+        # These SDKs lack headers that the macOS SDK ships (e.g. curl/curl.h), so a
+        # librdkafka build-config regression can pass the macOS and Linux builds but break them.
         run: |
-          "$(xcrun -f swift)" build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios-simulator
+          "$(xcrun -f swift)" build --sdk "$(xcrun --sdk ${{ matrix.sdk }} --show-sdk-path)" --triple ${{ matrix.triple }}
