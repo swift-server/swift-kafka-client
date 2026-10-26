@@ -20,6 +20,29 @@ import NIOCore
 
 import class Foundation.JSONDecoder
 
+/// Offset commit callback for commits the client requests; its opaque is the retained `CommitPromise`.
+/// librdkafka calls it only when the result is served by `rd_kafka_consumer_poll`, not as an event.
+private func requestedCommitCallback(
+    _ rk: OpaquePointer?,
+    _ err: rd_kafka_resp_err_t,
+    _ offsets: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>?,
+    _ opaque: UnsafeMutableRawPointer?
+) {
+    guard let opaque else { return }
+    let promise = Unmanaged<RDKafkaClient.CommitPromise>.fromOpaque(opaque).takeRetainedValue()
+    promise.resume(
+        with: err == RD_KAFKA_RESP_ERR_NO_ERROR ? .success(()) : .failure(KafkaError.rdKafkaError(wrapping: err))
+    )
+}
+
+/// Offset commit callback for automatic commits. The result is ignored; the opaque is the `RebalanceContext`.
+private func automaticCommitCallback(
+    _ rk: OpaquePointer?,
+    _ err: rd_kafka_resp_err_t,
+    _ offsets: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>?,
+    _ opaque: UnsafeMutableRawPointer?
+) {}
+
 /// Base class for ``KafkaProducer`` and ``KafkaConsumer``
 /// that handles the connection to the Kafka ecosystem.
 @_spi(Internal)
@@ -95,6 +118,7 @@ public final class RDKafkaClient: Sendable {
                 configPointer: rdConfig,
                 context: rebalanceContext
             )
+            rd_kafka_conf_set_offset_commit_cb(rdConfig, automaticCommitCallback)
         }
 
         let errorChars = UnsafeMutablePointer<CChar>.allocate(capacity: RDKafkaClient.stringSize)
@@ -836,7 +860,7 @@ public final class RDKafkaClient: Sendable {
                     self.kafkaHandle.pointer,
                     nil,  // NULL = commit all stored offsets
                     self.queueHandle.pointer,
-                    nil,
+                    requestedCommitCallback,
                     opaquePointer
                 )
 
@@ -878,7 +902,7 @@ public final class RDKafkaClient: Sendable {
                         self.kafkaHandle.pointer,
                         listPointer,
                         self.queueHandle.pointer,
-                        nil,
+                        requestedCommitCallback,
                         opaquePointer
                     )
 
