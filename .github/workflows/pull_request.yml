@@ -82,3 +82,18 @@ jobs:
         run: apt-get -qq update && apt-get -qq -y install libsasl2-dev
       - name: Build with GSSAPI enabled (opt-in Cyrus SASL path)
         run: SWIFT_KAFKA_ENABLE_GSSAPI=1 swift build
+
+  ios-simulator-build:
+    name: iOS Simulator build
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: true
+      - name: Build for the iOS Simulator
+        # The iOS SDKs lack headers that the macOS SDK ships (e.g. curl/curl.h), so a
+        # librdkafka build-config regression can pass the macOS and Linux builds but break iOS.
+        run: |
+          "$(xcrun -f swift)" build --sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" --triple arm64-apple-ios-simulator
