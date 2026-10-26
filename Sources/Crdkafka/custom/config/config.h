@@ -151,7 +151,9 @@
 // WITH_SASL_OAUTHBEARER
 #define WITH_SASL_OAUTHBEARER 0
 // WITH_OAUTHBEARER_OIDC
-#define WITH_OAUTHBEARER_OIDC 0
+// Left undefined: librdkafka v2.14.1 tests it with #ifdef in rdkafka_conf.c, so defining it as 0 still
+// includes <curl/curl.h>, which the iOS SDK does not have (fixed upstream in confluentinc/librdkafka#5136).
+#undef WITH_OAUTHBEARER_OIDC
 // regex
 #define HAVE_REGEX 1
 // strndup
