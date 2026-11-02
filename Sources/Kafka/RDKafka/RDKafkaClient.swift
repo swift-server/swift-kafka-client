@@ -1054,6 +1054,99 @@ public final class RDKafkaClient: Sendable {
         return results
     }
 
+    /// Retrieve the current positions (next offset to fetch) for the given topic+partition pairs.
+    ///
+    /// - Parameter topicPartition: ``KafkaTopicPartition`` to get in-memory watermarks.
+    /// - Returns: the respective low and high watermarks offsets. Offset is `nil` if no watermark is available.
+    /// - Throws: A ``KafkaError`` if the getting the offsets failed or consumer.
+    func watermarkOffsets(
+        topicPartition: KafkaTopicPartition
+    ) throws -> (low: KafkaTopicPartitionOffset, high: KafkaTopicPartitionOffset) {
+        // RD_KAFKA_OFFSET_INVALID (-1001) means no offset is stored
+        let invalidOffset = Int64(RD_KAFKA_OFFSET_INVALID)
+        var low = invalidOffset
+        var high = invalidOffset
+
+        let error = rd_kafka_get_watermark_offsets(
+            self.kafkaHandle.pointer,
+            topicPartition.topic.rawValue,
+            Int32(topicPartition.partition.rawValue),
+            &low,
+            &high
+        )
+
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            throw KafkaError.rdKafkaError(wrapping: error)
+        }
+
+        let lowOffset: KafkaOffset? =
+            low == invalidOffset
+            ? nil
+            : KafkaOffset(rawValue: Int(low))
+        let highOffset: KafkaOffset? =
+            high == invalidOffset
+            ? nil
+            : KafkaOffset(rawValue: Int(high))
+
+        return (
+            low: KafkaTopicPartitionOffset(topic: topicPartition.topic, partition: topicPartition.partition, offset: lowOffset),
+            high: KafkaTopicPartitionOffset(topic: topicPartition.topic, partition: topicPartition.partition, offset: highOffset)
+        )
+    }
+
+    /// Query broker for low (oldest/beginning) and high (newest/end) offsets for partition.
+    ///
+    /// - Parameters:
+    ///   - topicPartition: ``KafkaTopicPartition`` to query
+    ///   - timeoutMilliseconds: Maximum time to wait for the broker's response.
+    /// - Throws: A ``KafkaError`` if the getting the offsets failed or consumer.
+    /// - Returns: the respective low and high watermarks offsets. Offset is `nil` if no watermark is available.
+    func queryWatermarkOffsets(
+        topicPartition: KafkaTopicPartition,
+        timeoutMilliseconds: Int32
+    ) async throws -> (low: KafkaTopicPartitionOffset, high: KafkaTopicPartitionOffset) {
+        // rd_kafka_query_watermark_offsets is blocking — offload to a DispatchQueue so it does not
+        // block Swift Concurrency's cooperative thread pool.
+        return try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<(low: KafkaTopicPartitionOffset, high: KafkaTopicPartitionOffset), Error>) in
+            Self.blockingQueue.async {
+                // RD_KAFKA_OFFSET_INVALID (-1001) means no offset is stored
+                let invalidOffset = Int64(RD_KAFKA_OFFSET_INVALID)
+                var low = invalidOffset
+                var high = invalidOffset
+
+                let error = rd_kafka_query_watermark_offsets(
+                    self.kafkaHandle.pointer,
+                    topicPartition.topic.rawValue,
+                    Int32(topicPartition.partition.rawValue),
+                    &low,
+                    &high,
+                    timeoutMilliseconds
+                )
+
+                if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
+                } else {
+                    let lowOffset: KafkaOffset? =
+                    low == invalidOffset
+                    ? nil
+                    : KafkaOffset(rawValue: Int(low))
+                    let highOffset: KafkaOffset? =
+                    high == invalidOffset
+                    ? nil
+                    : KafkaOffset(rawValue: Int(high))
+
+                    continuation.resume(
+                        returning: (
+                            low: KafkaTopicPartitionOffset(topic: topicPartition.topic, partition: topicPartition.partition, offset: lowOffset),
+                            high: KafkaTopicPartitionOffset(topic: topicPartition.topic, partition: topicPartition.partition, offset: highOffset)
+                        )
+                    )
+                }
+            }
+        }
+    }
+
     /// Check if the current partition assignment has been lost involuntarily.
     ///
     /// This is only useful when reacting to a rebalance event or from within

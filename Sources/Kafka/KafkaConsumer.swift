@@ -702,6 +702,47 @@ public final class KafkaConsumer: Sendable, Service {
         }
     }
 
+    /// Get last known low (oldest/beginning) and high (newest/end) offsets for partition.
+    ///
+    /// The low offset is updated periodically (if `statistics.interval.ms` is set) while the high offset is updated on each fetched message set from the broker.
+    /// If there is no cached offset (either low or high, or both) then `nil` will be returned for the respective offset.
+    ///
+    /// - Parameter topicPartition: ``KafkaTopicPartition`` to get in-memory watermarks
+    /// - Returns: the respective low and high watermarks offsets
+    /// - Throws: A ``KafkaError`` if the query failed or the consumer is closed.
+    public func watermarkOffsets(
+        topicPartition: KafkaTopicPartition
+    ) throws -> (low: KafkaTopicPartitionOffset, high: KafkaTopicPartitionOffset)  {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to get consumer watermark offsets on a closed consumer")
+        case .client(let client):
+            return try client.watermarkOffsets(topicPartition: topicPartition)
+        }
+    }
+
+    /// Query broker for low (oldest/beginning) and high (newest/end) offsets for partition.
+    ///
+    /// See ``watermarkOffsets(topicPartition:)`` for a client in-memory query.
+    ///
+    /// - Parameter topicPartition: ``KafkaTopicPartition`` to get in-memory watermarks
+    /// - Parameter timeout: Maximum time to wait for the broker's response. Default: 5 seconds.
+    /// - Returns: the respective low and high watermarks offsets
+    /// - Throws: A ``KafkaError`` if the query failed or the consumer is closed.
+    public func queryWatermarkOffsets(
+        topicPartition: KafkaTopicPartition,
+        timeout: Duration = .milliseconds(5000)
+    ) async throws -> (low: KafkaTopicPartitionOffset, high: KafkaTopicPartitionOffset)  {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to query consumer watermark offsets on a closed consumer")
+        case .client(let client):
+                return try await client.queryWatermarkOffsets(topicPartition: topicPartition, timeoutMilliseconds: Int32(timeout.inMilliseconds))
+        }
+    }
+
     /// A Boolean value that indicates whether the current partition assignment is involuntarily lost.
     ///
     /// This value is primarily useful when reacting to a rebalance event.

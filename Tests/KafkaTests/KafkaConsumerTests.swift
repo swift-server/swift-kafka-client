@@ -545,6 +545,82 @@ import Foundation
         }
     }
 
+    // MARK: - watermark offsets Tests
+
+    @Test func watermarkOffsetsFailsOnClosedConsumerViaStateMachine() async throws {
+        let config = makeConfig(enableAutoOffsetStore: false)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        // After shutdown, all withClient()-based methods should throw connectionClosed
+        #expect(throws: KafkaError.self) {
+            _ = try consumer.watermarkOffsets(
+                topicPartition: KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))
+            )
+        }
+    }
+
+    @Test func watermarkOffsetsReturnNilWithoutBrokerMessages() async throws {
+        let config = makeConfig(enableAutoOffsetStore: false)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            let (low, high) = try consumer.watermarkOffsets(
+                topicPartition: KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))
+            )
+            #expect(low.offset == nil)
+            #expect(high.offset == nil)
+
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+    }
+
+    @Test func queryWatermarkOffsetsFailsOnClosedConsumerViaStateMachine() async throws {
+        let config = makeConfig(enableAutoOffsetStore: false)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        // After shutdown, all withClient()-based methods should throw connectionClosed
+        await #expect(throws: KafkaError.self) {
+            _ = try await consumer.queryWatermarkOffsets(
+                topicPartition: KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0))
+            )
+        }
+    }
+
     // MARK: - isAssignmentLost Tests
 
     @Test func isAssignmentLostFailsOnClosedConsumer() async throws {

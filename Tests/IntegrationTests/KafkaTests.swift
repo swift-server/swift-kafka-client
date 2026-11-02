@@ -995,6 +995,119 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
         }
     }
 
+    // MARK: - watermark offsets Tests
+
+    @Test func watermarkOffsetsAdvanceWithProduction() async throws {
+        try await withTestTopic { testTopic in
+            _ = try await self.produceMessages(topic: testTopic, count: 5)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: UUID().uuidString,
+                topics: [testTopic]
+            )
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    var lowWatermark = 0
+                    var expectedHighWatermark = 5
+                    for try await message in consumerMsgs {
+                        // After consuming, position should be message.offset + 1
+                        let tp = KafkaTopicPartition(
+                            topic: message.topic,
+                            partition: message.partition
+                        )
+
+                        // MUT
+                        let (low, high) = try consumer.watermarkOffsets(topicPartition: tp)
+
+                        lowWatermark = try #require(low.offset?.rawValue)
+                        let highWatermark = try #require(high.offset?.rawValue)
+                        #expect(highWatermark == expectedHighWatermark)
+
+                        if expectedHighWatermark >= 10 {
+                            break
+                        } else {
+                            expectedHighWatermark = expectedHighWatermark + 1
+                            _ = try await self.produceMessages(topic: testTopic, count: 1)
+                        }
+                    }
+
+                    #expect(lowWatermark == 0)
+                }
+
+                try await group.next()
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func queryWatermarkOffsetsAdvancesWithProduction() async throws {
+        try await withTestTopic { testTopic in
+            _ = try await self.produceMessages(topic: testTopic, count: 5)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: UUID().uuidString,
+                topics: [testTopic]
+            )
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+
+            let (consumer, _, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+                    let topicPartition = KafkaTopicPartition(topic: testTopic, partition: .init(rawValue: 0))
+                    let (low, high) = try await consumer.queryWatermarkOffsets(topicPartition: topicPartition, timeout: .seconds(1))
+                    let lowWatermark = try #require(low.offset?.rawValue)
+                    var highWatermark = try #require(high.offset?.rawValue)
+                    #expect(highWatermark == 5)
+
+                    _ = try await self.produceMessages(topic: testTopic, count: 1)
+
+                    highWatermark = try #require(try await consumer.queryWatermarkOffsets(topicPartition: topicPartition, timeout: .seconds(1)).high.offset?.rawValue)
+                    #expect(highWatermark == 6)
+                    #expect(lowWatermark == 0)
+                }
+
+                try await group.next()
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
     // MARK: - seek Tests
 
     @Test func seekReplaysPreviouslyConsumedMessages() async throws {
