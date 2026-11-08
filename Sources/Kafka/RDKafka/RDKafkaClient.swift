@@ -1147,6 +1147,54 @@ public final class RDKafkaClient: Sendable {
         }
     }
 
+    
+    /// Look up the offsets for the given partitions by timestamp.
+    ///
+    /// The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to the given timestamp in the corresponding partition.
+    ///
+    /// - Parameters:
+    ///   - topicPartitions: topicPartitions: An array of ``KafkaTopicPartition`` to query.
+    ///   - timeoutMilliseconds: Maximum time to wait for the broker's response. Timestamps are expressed as milliseconds since epoch (UTC).
+    /// - Throws: A ``KafkaError`` if the getting the offsets failed or consumer.
+    func offsetsForTimes(
+        topicPartitions: [(KafkaTopicPartition, timestamp: Int64)],
+        timeoutMilliseconds: Int32
+    ) async throws -> [KafkaTopicPartitionOffset] {
+        precondition(!topicPartitions.isEmpty, "topic partitions cannot be empty when querying for offsets")
+
+        let tpl = RDKafkaTopicPartitionList(size: Int32(topicPartitions.count))
+        for tp in topicPartitions {
+            tpl.setOffset(topic: tp.0.topic, partition: tp.0.partition, offset: Int64(tp.timestamp))
+        }
+
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[KafkaTopicPartitionOffset], Error>) in
+            Self.blockingQueue.async {
+                let error = tpl.withListPointer { listPointer in
+                    rd_kafka_offsets_for_times(
+                        self.kafkaHandle.pointer,
+                        listPointer,
+                        timeoutMilliseconds
+                    )
+                }
+
+                if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    continuation.resume(throwing: KafkaError.rdKafkaError(wrapping: error))
+                } else {
+                    let offsets = tpl.withListPointer { listPointer in
+                        Self.extractOffsetsFromList(listPointer)
+                    }.map {
+                        KafkaTopicPartitionOffset(
+                            topic: $0.topic,
+                            partition: $0.partition,
+                            offset: $0.offset?.rawValue == Int(RD_KAFKA_OFFSET_END) ? nil: $0.offset
+                        )
+                    }
+                    continuation.resume(returning: offsets)
+                }
+            }
+        }
+    }
+
     /// Check if the current partition assignment has been lost involuntarily.
     ///
     /// This is only useful when reacting to a rebalance event or from within

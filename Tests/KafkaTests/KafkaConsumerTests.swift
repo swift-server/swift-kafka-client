@@ -621,6 +621,33 @@ import Foundation
         }
     }
 
+    // MARK: . offsets for timestamp
+
+    @Test func offsetsForTimesFailsOnClosedConsumerViaStateMachine() async throws {
+        let config = makeConfig(enableAutoOffsetStore: false)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            await serviceGroup.triggerGracefulShutdown()
+            try await group.waitForAll()
+        }
+
+        // After shutdown, all withClient()-based methods should throw connectionClosed
+        await #expect(throws: KafkaError.self) {
+            _ = try await consumer.offsetsForTimestamp(
+                topicPartitions: [(KafkaTopicPartition(topic: "test", partition: KafkaPartition(rawValue: 0)), timestamp: Int64(0))]
+            )
+        }
+    }
+
     // MARK: - isAssignmentLost Tests
 
     @Test func isAssignmentLostFailsOnClosedConsumer() async throws {

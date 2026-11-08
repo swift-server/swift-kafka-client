@@ -701,6 +701,31 @@ public final class KafkaConsumer: Sendable, Service {
             return try client.position(topicPartitions: topicPartitions)
         }
     }
+    
+    /// Look up the offsets for the given partitions by timestamp.
+    ///
+    /// The returned offset for each partition is the earliest offset whose timestamp is greater than or equal to the given timestamp in the corresponding partition.
+    ///
+    /// Timestamps are expressed as milliseconds since epoch (UTC).
+    ///
+    /// - Parameters:
+    ///   - topicPartitions: topicPartitions: An array of tuples``KafkaTopicPartition`` and timestamp to query for.
+    ///   - timeout: Maximum time to wait for the broker's response.
+    /// - Returns: An array of ``KafkaTopicPartitionOffset``. The ``KafkaTopicPartitionOffset/offset``
+    ///   is `nil` if there is no offset that satisfies the timestamp query.
+    /// - Throws: A ``KafkaError`` if the getting the offsets failed or consumer.
+    public func offsetsForTimestamp(
+        topicPartitions: [(KafkaTopicPartition, timestamp: Int64)],
+        timeout: Duration = .milliseconds(5000)
+    ) async throws -> [KafkaTopicPartitionOffset] {
+        let action = self.stateMachine.withLockedValue { $0.withClient() }
+        switch action {
+        case .throwClosedError:
+            throw KafkaError.connectionClosed(reason: "Tried to query consumer position on a closed consumer")
+        case .client(let client):
+            return try await client.offsetsForTimes(topicPartitions: topicPartitions, timeoutMilliseconds: Int32(timeout.inMilliseconds))
+        }
+    }
 
     /// Get last known low (oldest/beginning) and high (newest/end) offsets for partition.
     ///

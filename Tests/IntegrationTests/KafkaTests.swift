@@ -1108,6 +1108,120 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
         }
     }
 
+    // MARK: offsets for time Test
+
+    @Test func missingEarliestOffsetWithTimeIsNil() async throws {
+        try await withTestTopic { testTopic in
+            _ = try await self.produceMessages(topic: testTopic, count: 5)
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+            let endProductionTimestampInMilliseconds = Int64(Date.now.timeIntervalSince1970 * 1000)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: UUID().uuidString,
+                topics: [testTopic]
+            )
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+            consumerConfig.pollInterval = .milliseconds(1)
+
+            let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    var consumedMessages = [KafkaConsumer.Message]()
+                    for try await message in consumerMsgs {
+                        consumedMessages.append(message)
+
+                        if consumedMessages.count >= 5 {
+                            // Verify there can be an offset with a timestamp bigger than the end production timestamp
+                            let allTopicPartitions = consumedMessages.map({ (KafkaTopicPartition(topic: $0.topic, partition: $0.partition), timestamp: endProductionTimestampInMilliseconds) })
+                            let result = try await consumer.offsetsForTimestamp(topicPartitions: allTopicPartitions).filter({ $0.offset != nil })
+                            #expect(result.isEmpty)
+
+                            break
+                        }
+                    }
+                }
+
+                try await group.next()
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
+    @Test func offsetsForTimeIsEarliestOffsetBiggerThanGivenTimestamp() async throws {
+        try await withTestTopic { testTopic in
+            _ = try await self.produceMessages(topic: testTopic, count: 1)
+            // Wait a bit to produce with different timestamps
+            let baselineTimestamp = Int64(Date.now.timeIntervalSince1970 * 1000)
+            for _ in 0..<2 {
+                try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+                _ = try await self.produceMessages(topic: testTopic, count: 2)
+            }
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(
+                id: UUID().uuidString,
+                topics: [testTopic]
+            )
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+            consumerConfig.pollInterval = .milliseconds(1)
+
+            let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(
+                config: consumerConfig
+            )
+
+            let serviceGroupConfiguration = ServiceGroupConfiguration(
+                services: [consumer],
+                logger: .kafkaTest
+            )
+            let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await serviceGroup.run()
+                }
+
+                group.addTask {
+                    var consumedMessages = [KafkaConsumer.Message]()
+                    let expectedOffset = KafkaOffset(rawValue: 1)
+                    for try await message in consumerMsgs {
+                        consumedMessages.append(message)
+
+                        if consumedMessages.count >= 5 {
+                            let allTopicPartitions = consumedMessages.map({ (KafkaTopicPartition(topic: $0.topic, partition: $0.partition), timestamp: baselineTimestamp) })
+                            let offsetsForTimestamp = try await consumer.offsetsForTimestamp(topicPartitions: allTopicPartitions)
+                            for tp in offsetsForTimestamp {
+                                #expect(tp.offset == expectedOffset)
+                            }
+
+                            break
+                        }
+                    }
+                }
+
+                try await group.next()
+                await serviceGroup.triggerGracefulShutdown()
+            }
+        }
+    }
+
     // MARK: - seek Tests
 
     @Test func seekReplaysPreviouslyConsumedMessages() async throws {
