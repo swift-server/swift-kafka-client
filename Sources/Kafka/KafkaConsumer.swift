@@ -721,7 +721,7 @@ public final class KafkaConsumer: Sendable, Service {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
-            throw KafkaError.connectionClosed(reason: "Tried to query consumer position on a closed consumer")
+            throw KafkaError.connectionClosed(reason: "Tried to query consumer offset for timestamp on a closed consumer")
         case .client(let client):
             return try await client.offsetsForTimes(topicPartitions: topicPartitions, timeoutMilliseconds: Int32(timeout.inMilliseconds))
         }
