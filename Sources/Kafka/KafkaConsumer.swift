@@ -460,7 +460,9 @@ public final class KafkaConsumer: Sendable, Service {
             case .error(let kafkaError):
                 self.clientMetrics?.recordError()
                 if let source = self.eventsSource {
-                    _ = source.yield(.error(kafkaError))
+                    _ = source.yield(
+                        kafkaError.code == .partitionEOF ? .partitionEOF : .error(kafkaError)
+                    )
                 }
                 self.logger.info(
                     "Kafka client error",
@@ -540,7 +542,7 @@ public final class KafkaConsumer: Sendable, Service {
     ///
     /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed or the consumer is closed.
-    public func storeOffset(_ message: Message) throws {
+    public func storeOffset(_ message: Message.Record) throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:
@@ -569,7 +571,7 @@ public final class KafkaConsumer: Sendable, Service {
     /// - Parameters:
     ///     - message: Last received message to mark as read.
     /// - Throws: A ``KafkaError`` if committing failed.
-    public func commit(_ message: Message) async throws {
+    public func commit(_ message: Message.Record) async throws {
         let action = self.stateMachine.withLockedValue { $0.withClient() }
         switch action {
         case .throwClosedError:

@@ -964,7 +964,7 @@ public struct KafkaConsumerConfig: Sendable {
     ///
     /// Default: read_committed
     public var isolationLevel: KafkaConfig.IsolationLevel?
-    /// Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the consumer reaches the end of a partition.
+    /// Emit `RD_KAFKA_RESP_ERR__PARTITION_EOF` event whenever the consumer reaches the end of a partition.
     ///
     /// Importance: low
     ///

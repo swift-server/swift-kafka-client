@@ -54,75 +54,125 @@ public struct KafkaTimestampType: Hashable, Sendable, CustomStringConvertible {
 
 extension KafkaConsumer {
     /// A message received from the Kafka cluster.
-    public struct Message: Hashable, Sendable {
-        /// The topic the consumer received the message from.
-        public var topic: KafkaTopic
-        /// The partition the consumer received the message from.
-        public var partition: KafkaPartition
-        /// The headers of the message.
-        public var headers: [KafkaHeader]
-        /// The key of the message.
-        public var key: [UInt8]?
-        /// The body of the message.
-        public var value: [UInt8]
-        /// The offset of the message in its partition.
-        public var offset: KafkaOffset
-        /// The timestamp of the message in milliseconds since epoch, or `nil` if not available.
-        public var timestamp: Int64?
-        /// The type of timestamp on this message.
-        public var timestampType: KafkaTimestampType
+    public enum Message: Hashable, Sendable {
+        case record(Record)
+        case partitionEOF(KafkaTopicPartitionEOF)
 
-        /// Creates a ``KafkaConsumer/Message`` from an `rd_kafka_message_t` pointer.
-        /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
-        internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
-            let rdKafkaMessage = messagePointer.pointee
+        /// A topic and partition pair identifying a specific Kafka partition.
+        public struct KafkaTopicPartitionEOF: Sendable, Hashable {
+            /// The name of the Kafka topic.
+            public var topic: KafkaTopic
 
-            guard let valuePointer = rdKafkaMessage.payload else {
-                fatalError("Could not resolve payload of consumer message")
-            }
+            /// The partition within the topic.
+            public var partition: KafkaPartition
 
-            let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
+            /// Latest offset of partition EOF
+            public var offset: KafkaOffset
 
-            guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
-                var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
-                let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
+            /// Creates a ``KafkaConsumer/Message/KafkaTopicPartitionEOF`` from an `rd_kafka_message_t` pointer.
+            /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
+            init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
+                let rdKafkaMessage = messagePointer.pointee
 
-                if let errorString {
-                    throw KafkaError.messageConsumption(reason: errorString)
-                } else {
-                    throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
+                guard let valuePointer = rdKafkaMessage.payload else {
+                    fatalError("Could not resolve payload of consumer message")
                 }
+
+                let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
+
+                guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR__PARTITION_EOF else {
+                    var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
+                    let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
+
+                    if let errorString {
+                        throw KafkaError.messageConsumption(reason: errorString)
+                    } else {
+                        throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
+                    }
+                }
+
+                guard let topic = String(validatingCString: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
+                    fatalError("Received topic name that is non-valid UTF-8")
+                }
+
+                self.topic = KafkaTopic(rawValue: topic)
+
+                self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
+
+                self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
             }
+        }
 
-            guard let topic = String(validatingCString: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
-                fatalError("Received topic name that is non-valid UTF-8")
+        public struct Record: Hashable, Sendable {
+            /// The topic the consumer received the message from.
+            public var topic: KafkaTopic
+            /// The partition the consumer received the message from.
+            public var partition: KafkaPartition
+            /// The headers of the message.
+            public var headers: [KafkaHeader]
+            /// The key of the message.
+            public var key: [UInt8]?
+            /// The body of the message.
+            public var value: [UInt8]
+            /// The offset of the message in its partition.
+            public var offset: KafkaOffset
+            /// The timestamp of the message in milliseconds since epoch, or `nil` if not available.
+            public var timestamp: Int64?
+            /// The type of timestamp on this message.
+            public var timestampType: KafkaTimestampType
+
+            /// Creates a ``KafkaConsumer/Message/Record`` from an `rd_kafka_message_t` pointer.
+            /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
+            internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
+                let rdKafkaMessage = messagePointer.pointee
+
+                guard let valuePointer = rdKafkaMessage.payload else {
+                    fatalError("Could not resolve payload of consumer message")
+                }
+
+                let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
+
+                guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
+                    var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
+                    let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
+
+                    if let errorString {
+                        throw KafkaError.messageConsumption(reason: errorString)
+                    } else {
+                        throw KafkaError.rdKafkaError(wrapping: rdKafkaMessage.err)
+                    }
+                }
+
+                guard let topic = String(validatingCString: rd_kafka_topic_name(rdKafkaMessage.rkt)) else {
+                    fatalError("Received topic name that is non-valid UTF-8")
+                }
+
+                self.topic = KafkaTopic(rawValue: topic)
+
+                self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
+
+                self.headers = try RDKafkaClient.getHeaders(for: messagePointer)
+
+                if let keyPointer = rdKafkaMessage.key {
+                    let keyBufferPointer = UnsafeRawBufferPointer(
+                        start: keyPointer,
+                        count: rdKafkaMessage.key_len
+                    )
+                    self.key = [UInt8](keyBufferPointer)
+                } else {
+                    self.key = nil
+                }
+
+                self.value = [UInt8](valueBufferPointer)
+
+                self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
+
+                // Extract timestamp and type
+                var tsType = rd_kafka_timestamp_type_t(rawValue: 0)
+                let tsValue = rd_kafka_message_timestamp(messagePointer, &tsType)
+                self.timestampType = KafkaTimestampType(rawValue: Int32(tsType.rawValue))
+                self.timestamp = tsValue != -1 ? tsValue : nil
             }
-
-            self.topic = KafkaTopic(rawValue: topic)
-
-            self.partition = KafkaPartition(rawValue: Int(rdKafkaMessage.partition))
-
-            self.headers = try RDKafkaClient.getHeaders(for: messagePointer)
-
-            if let keyPointer = rdKafkaMessage.key {
-                let keyBufferPointer = UnsafeRawBufferPointer(
-                    start: keyPointer,
-                    count: rdKafkaMessage.key_len
-                )
-                self.key = [UInt8](keyBufferPointer)
-            } else {
-                self.key = nil
-            }
-
-            self.value = [UInt8](valueBufferPointer)
-
-            self.offset = KafkaOffset(rawValue: Int(rdKafkaMessage.offset))
-
-            // Extract timestamp and type
-            var tsType = rd_kafka_timestamp_type_t(rawValue: 0)
-            let tsValue = rd_kafka_message_timestamp(messagePointer, &tsType)
-            self.timestampType = KafkaTimestampType(rawValue: Int32(tsType.rawValue))
-            self.timestamp = tsValue != -1 ? tsValue : nil
         }
     }
 }

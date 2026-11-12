@@ -678,10 +678,10 @@ public final class RDKafkaClient: Sendable {
 
         // Reached the end of the topic+partition queue on the broker
         if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
-            return nil
+            return try KafkaConsumer.Message.partitionEOF(.init(messagePointer: messagePointer))
         }
 
-        let message = try KafkaConsumer.Message(messagePointer: messagePointer)
+        let message = try KafkaConsumer.Message.record(.init(messagePointer: messagePointer))
         return message
     }
 
@@ -822,7 +822,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: The message whose offset to store.
     /// - Throws: A ``KafkaError`` if storing the offset failed.
-    func storeOffset(_ message: KafkaConsumer.Message) throws {
+    func storeOffset(_ message: KafkaConsumer.Message.Record) throws {
         // rd_kafka_offsets_store expects the offset of the *next* message to consume,
         // which is the current message's offset + 1.
         // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
@@ -879,7 +879,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if the commit failed.
-    func commit(_ message: KafkaConsumer.Message) async throws {
+    func commit(_ message: KafkaConsumer.Message.Record) async throws {
         let promise = CommitPromise()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
