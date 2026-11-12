@@ -308,6 +308,17 @@ public struct KafkaError: Error, CustomStringConvertible, @unchecked Sendable {
             )
         )
     }
+
+    static func partitionEOF(
+        file: String = #fileID,
+        line: UInt = #line
+    ) -> KafkaError {
+        return KafkaError(
+            backing: .init(
+                code: .partitionEOF, reason: "Partition EOF", file: file, line: line
+            )
+        )
+    }
 }
 
 extension KafkaError {
@@ -326,6 +337,7 @@ extension KafkaError {
             case messageConsumption
             case topicCreation
             case topicDeletion
+            case partitionEOF
         }
 
         fileprivate var backingCode: BackingCode
@@ -350,6 +362,9 @@ extension KafkaError {
         public static let topicCreationFailed = ErrorCode(.topicCreation)
         /// Deleting a topic failed.
         public static let topicDeletionFailed = ErrorCode(.topicDeletion)
+        /// Reached the end of the topic+partition queue on the broker. Not really an error, but librdkafka defines it as an error.
+        /// This event is disabled by default, see the ``KafkaConsumerConfig.enablePartitionEof`` configuration property.
+        public static let partitionEOF = ErrorCode(.partitionEOF)
 
         /// A textual representation of the error code.
         public var description: String {

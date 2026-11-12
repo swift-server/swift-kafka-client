@@ -28,5 +28,8 @@ extension KafkaConsumer {
 
         /// An error reported by the Kafka client (for example, broker disconnection or authentication failure).
         case error(KafkaError)
+
+        /// End of a partition has been reached (see ``KafkaConsumerConfig.enablePartitionEof``).
+        case partitionEOF
     }
 }
