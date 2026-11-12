@@ -98,9 +98,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     #expect(testMessages.count == consumedMessages.count)
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
-                        #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(testMessages[index].key! == consumedMessage.key)
-                        #expect(testMessages[index].value == consumedMessage.value)
+                        switch consumedMessage {
+                            case .record(let record):
+                                #expect(testMessages[index].topic == record.topic)
+                                #expect(testMessages[index].key! == record.key)
+                                #expect(testMessages[index].value == record.value)
+                            case .partitionEOF:
+                                Issue.record("Unexpected partition EOF event at index \(index)")
+                        }
                     }
                 }
 
@@ -156,9 +161,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     #expect(testMessages.count == consumedMessages.count)
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
-                        #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(testMessages[index].key! == consumedMessage.key)
-                        #expect(testMessages[index].value == consumedMessage.value)
+                        switch consumedMessage {
+                            case .record(let record):
+                                #expect(testMessages[index].topic == record.topic)
+                                #expect(testMessages[index].key! == record.key)
+                                #expect(testMessages[index].value == record.value)
+                            case .partitionEOF:
+                                Issue.record("Unexpected partition EOF event at index \(index)")
+                        }
                     }
                 }
 
@@ -199,11 +209,15 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 // Consumer Task
                 group.addTask {
-                    var consumedMessages = [KafkaConsumer.Message]()
+                    var consumedMessages = [KafkaConsumer.Message.Record]()
                     for try await message in consumerMsgs {
-                        consumedMessages.append(message)
-                        try await consumer.commit(message)
-
+                        switch message {
+                            case .partitionEOF:
+                                break
+                            case .record(let record):
+                                consumedMessages.append(record)
+                                try await consumer.commit(record)
+                        }
                         if consumedMessages.count >= testMessages.count {
                             break
                         }
@@ -249,11 +263,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 // Consumer Task
                 group.addTask {
-                    var consumedMessages = [KafkaConsumer.Message]()
+                    var consumedMessages = [KafkaConsumer.Message.Record]()
                     for try await message in consumerMsgs {
-                        consumedMessages.append(message)
-                        try await consumer.commit(message)
-
+                        switch message {
+                            case .partitionEOF: break
+                            case .record(let record):
+                                consumedMessages.append(record)
+                                try await consumer.commit(record)
+                        }
                         if consumedMessages.count >= testMessages.count {
                             break
                         }
@@ -310,13 +327,13 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 // Consumer Task
                 group.addTask {
-                    var consumedMessages = [KafkaConsumer.Message]()
+                    var consumedMessages = [KafkaConsumer.Message.Record]()
                     for try await messageResult in consumerMsgs {
-                        guard case let message = messageResult else {
-                            continue
+                        guard case let .record(record) = messageResult else {
+                            break
                         }
-                        consumedMessages.append(message)
-                        try await consumer.commit(message)
+                        consumedMessages.append(record)
+                        try await consumer.commit(record)
 
                         if consumedMessages.count >= testMessages.count {
                             break
@@ -369,10 +386,15 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 // Verify that we receive the first message
                 let consumerIterator = consumerMsgs.makeAsyncIterator()
 
-                let consumedMessage = try await consumerIterator.next()
-                #expect(testMessages.first!.topic == consumedMessage!.topic)
-                #expect(testMessages.first!.key! == consumedMessage!.key)
-                #expect(testMessages.first!.value == consumedMessage!.value)
+                if let consumedMessage = try await consumerIterator.next() {
+                    switch consumedMessage {
+                        case .record(let record):
+                            #expect(testMessages.first!.topic == record.topic)
+                            #expect(testMessages.first!.key! == record.key)
+                            #expect(testMessages.first!.value == record.value)
+                        case .partitionEOF: break
+                    }
+                }
 
                 // Trigger a graceful shutdown
                 await serviceGroup.triggerGracefulShutdown()
@@ -439,9 +461,13 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     #expect(firstConsumerOffset == consumedMessages.count)
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
-                        #expect(testMessages[index].topic == consumedMessage.topic)
-                        #expect(testMessages[index].key! == consumedMessage.key)
-                        #expect(testMessages[index].value == consumedMessage.value)
+                        switch consumedMessage {
+                            case .record(let record):
+                                #expect(testMessages[index].topic == record.topic)
+                                #expect(testMessages[index].key! == record.key)
+                                #expect(testMessages[index].value == record.value)
+                            case .partitionEOF: break
+                        }
                     }
                 }
 
@@ -498,15 +524,20 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     #expect(testMessages.count - firstConsumerOffset == consumedMessages.count)
 
                     for (index, consumedMessage) in consumedMessages.enumerated() {
-                        #expect(testMessages[firstConsumerOffset + index].topic == consumedMessage.topic)
-                        #expect(
-                            testMessages[firstConsumerOffset + index].key!
-                                == consumedMessage.key
-                        )
-                        #expect(
-                            testMessages[firstConsumerOffset + index].value
-                                == consumedMessage.value
-                        )
+                        switch consumedMessage {
+                            case .record(let record):
+                                #expect(testMessages[firstConsumerOffset + index].topic == record.topic)
+                                #expect(
+                                    testMessages[firstConsumerOffset + index].key!
+                                    == record.key
+                                )
+                                #expect(
+                                    testMessages[firstConsumerOffset + index].value
+                                    == record.value
+                                )
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
+                        }
                     }
                 }
 
@@ -589,24 +620,33 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 // First Consumer Task
                 group.addTask {
                     // 6 partitions
-                    for try await record in consumer1Msgs {
-                        c1messages.wrappingIncrement(ordering: .relaxed)
+                    for try await message in consumer1Msgs {
+                        switch message {
+                            case .record(let record):
+                                c1messages.wrappingIncrement(ordering: .relaxed)
 
-                        try await consumer1.commit(record)  // commit time to time
-                        if c2messages.load(ordering: .relaxed) == 0 {
-                            // Don't read all messages before 2nd consumer
-                            try await Task.sleep(for: .milliseconds(100))
+                                try await consumer1.commit(record)  // commit time to time
+                                if c2messages.load(ordering: .relaxed) == 0 {
+                                    // Don't read all messages before 2nd consumer
+                                    try await Task.sleep(for: .milliseconds(100))
+                                }
+                            case .partitionEOF: break
                         }
+
                     }
                 }
 
                 // Second Consumer Task
                 group.addTask {
                     // 6 partitions
-                    for try await record in consumer2Msgs {
-                        c2messages.wrappingIncrement(ordering: .relaxed)
+                    for try await message in consumer2Msgs {
+                        switch message {
+                            case .record(let record):
+                                c2messages.wrappingIncrement(ordering: .relaxed)
 
-                        try await consumer2.commit(record)  // commit time to time
+                                try await consumer2.commit(record)  // commit time to time
+                            case .partitionEOF: continue
+                        }
                     }
                 }
 
@@ -745,14 +785,17 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 }
 
                 group.addTask {
-                    var consumedMessages = [KafkaConsumer.Message]()
-                    for try await message in consumer1Msgs {
-                        // Store offset only after "processing" — at-least-once pattern
-                        try consumer1.storeOffset(message)
-                        consumedMessages.append(message)
-
+                    var consumedMessages = [KafkaConsumer.Message.Record]()
+                    messageStream: for try await message in consumer1Msgs {
+                        switch message {
+                            case .record(let record):
+                                // Store offset only after "processing" — at-least-once pattern
+                                try consumer1.storeOffset(record)
+                                consumedMessages.append(record)
+                            case .partitionEOF: break
+                        }
                         if consumedMessages.count >= firstConsumerCount {
-                            break
+                            break messageStream
                         }
                     }
 
@@ -805,15 +848,20 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     // Verify second consumer got the second half of messages
                     for (index, consumedMessage) in consumedMessages.enumerated() {
-                        #expect(testMessages[firstConsumerCount + index].topic == consumedMessage.topic)
-                        #expect(
-                            testMessages[firstConsumerCount + index].key!
-                                == consumedMessage.key
-                        )
-                        #expect(
-                            testMessages[firstConsumerCount + index].value
-                                == consumedMessage.value
-                        )
+                        switch consumedMessage {
+                            case .record(let record):
+                                #expect(testMessages[firstConsumerCount + index].topic == record.topic)
+                                #expect(
+                                    testMessages[firstConsumerCount + index].key!
+                                    == record.key
+                                )
+                                #expect(
+                                    testMessages[firstConsumerCount + index].value
+                                    == record.value
+                                )
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event at index \(index)")
+                        }
                     }
                 }
 
@@ -855,8 +903,12 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 group.addTask {
                     // Consume one real message, then try storeOffset — should throw config error
                     for try await message in consumerMsgs {
-                        #expect(throws: KafkaError.self) {
-                            try consumer.storeOffset(message)
+                        switch message {
+                            case .record(let record):
+                                #expect(throws: KafkaError.self) {
+                                    try consumer.storeOffset(record)
+                                }
+                            case .partitionEOF: Issue.record("Unexpected end of partition")
                         }
                         break
                     }
@@ -903,29 +955,33 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 group.addTask {
                     var consumedCount = 0
-                    for try await message in consumerMsgs {
-                        consumedCount += 1
-                        if consumedCount >= testMessages.count {
-                            // Commit and verify BEFORE breaking — breaking drops the
-                            // iterator which triggers consumer shutdown.
-                            try await consumer.commit(message)
+                    messageStream: for try await message in consumerMsgs {
+                        switch message {
+                            case .record(let record):
+                                consumedCount += 1
+                                if consumedCount >= testMessages.count {
+                                    // Commit and verify BEFORE breaking — breaking drops the
+                                    // iterator which triggers consumer shutdown.
+                                    try await consumer.commit(record)
 
-                            let tp = KafkaTopicPartition(
-                                topic: message.topic,
-                                partition: message.partition
-                            )
-                            let committedOffsets = try await consumer.committed(
-                                topicPartitions: [tp],
-                                timeout: .milliseconds(5000)
-                            )
+                                    let tp = KafkaTopicPartition(
+                                        topic: record.topic,
+                                        partition: record.partition
+                                    )
+                                    let committedOffsets = try await consumer.committed(
+                                        topicPartitions: [tp],
+                                        timeout: .milliseconds(5000)
+                                    )
 
-                            // committed offset should be message.offset + 1 (next offset to consume)
-                            let committedOffset = try #require(committedOffsets.first)
-                            #expect(committedOffset.topic == message.topic)
-                            #expect(committedOffset.partition == message.partition)
-                            let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
-                            #expect(committedOffset.offset == expectedOffset)
-                            break
+                                    // committed offset should be message.offset + 1 (next offset to consume)
+                                    let committedOffset = try #require(committedOffsets.first)
+                                    #expect(committedOffset.topic == record.topic)
+                                    #expect(committedOffset.partition == record.partition)
+                                    let expectedOffset = KafkaOffset(rawValue: record.offset.rawValue + 1)
+                                    #expect(committedOffset.offset == expectedOffset)
+                                    break messageStream
+                                }
+                            case .partitionEOF: Issue.record("Unexpected end of partition at consumed message \(consumedCount)")
                         }
                     }
 
@@ -968,21 +1024,25 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 group.addTask {
                     var consumedCount = 0
-                    for try await message in consumerMsgs {
+                    messageStream: for try await message in consumerMsgs {
                         consumedCount += 1
+                        switch message {
+                            case .record(let record):
+                                // After consuming, position should be message.offset + 1
+                                let tp = KafkaTopicPartition(
+                                    topic: record.topic,
+                                    partition: record.partition
+                                )
+                                let positions = try consumer.position(topicPartitions: [tp])
+                                let position = try #require(positions.first)
+                                let expectedOffset = KafkaOffset(rawValue: record.offset.rawValue + 1)
+                                #expect(position.offset == expectedOffset)
 
-                        // After consuming, position should be message.offset + 1
-                        let tp = KafkaTopicPartition(
-                            topic: message.topic,
-                            partition: message.partition
-                        )
-                        let positions = try consumer.position(topicPartitions: [tp])
-                        let position = try #require(positions.first)
-                        let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
-                        #expect(position.offset == expectedOffset)
+                            case .partitionEOF: Issue.record("Unexpected end of partition at consumed message \(consumedCount)")
+                        }
 
                         if consumedCount >= 3 {
-                            break
+                            break messageStream
                         }
                     }
 
@@ -1028,25 +1088,29 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 group.addTask {
                     var lowWatermark = 0
                     var expectedHighWatermark = 5
-                    for try await message in consumerMsgs {
-                        // After consuming, position should be message.offset + 1
-                        let tp = KafkaTopicPartition(
-                            topic: message.topic,
-                            partition: message.partition
-                        )
+                    messageStream: for try await message in consumerMsgs {
+                        switch message {
+                            case .record(let record):
+                                // After consuming, position should be message.offset + 1
+                                let tp = KafkaTopicPartition(
+                                    topic: record.topic,
+                                    partition: record.partition
+                                )
 
-                        // MUT
-                        let (low, high) = try consumer.watermarkOffsets(topicPartition: tp)
+                                // MUT
+                                let (low, high) = try consumer.watermarkOffsets(topicPartition: tp)
 
-                        lowWatermark = try #require(low.offset?.rawValue)
-                        let highWatermark = try #require(high.offset?.rawValue)
-                        #expect(highWatermark == expectedHighWatermark)
+                                lowWatermark = try #require(low.offset?.rawValue)
+                                let highWatermark = try #require(high.offset?.rawValue)
+                                #expect(highWatermark == expectedHighWatermark)
 
-                        if expectedHighWatermark >= 10 {
-                            break
-                        } else {
-                            expectedHighWatermark = expectedHighWatermark + 1
-                            _ = try await self.produceMessages(topic: testTopic, count: 1)
+                                if expectedHighWatermark >= 10 {
+                                    break messageStream
+                                } else {
+                                    expectedHighWatermark = expectedHighWatermark + 1
+                                    _ = try await self.produceMessages(topic: testTopic, count: 1)
+                                }
+                            case .partitionEOF: Issue.record("Unexpected end of partition at consumed message")
                         }
                     }
 
@@ -1142,17 +1206,22 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 }
 
                 group.addTask {
-                    var consumedMessages = [KafkaConsumer.Message]()
-                    for try await message in consumerMsgs {
-                        consumedMessages.append(message)
+                    var consumedMessages = [KafkaConsumer.Message.Record]()
+                    messageStream: for try await message in consumerMsgs {
+                        switch message {
+                            case .record(let record):
+                                consumedMessages.append(record)
 
-                        if consumedMessages.count >= 5 {
-                            // Verify there can be an offset with a timestamp bigger than the end production timestamp
-                            let allTopicPartitions = consumedMessages.map({ (KafkaTopicPartition(topic: $0.topic, partition: $0.partition), timestamp: endProductionTimestampInMilliseconds) })
-                            let result = try await consumer.offsetsForTimestamp(topicPartitions: allTopicPartitions).filter({ $0.offset != nil })
-                            #expect(result.isEmpty)
+                                if consumedMessages.count >= 5 {
+                                    // Verify there can be an offset with a timestamp bigger than the end production timestamp
+                                    let allTopicPartitions = consumedMessages.map({ (KafkaTopicPartition(topic: $0.topic, partition: $0.partition), timestamp: endProductionTimestampInMilliseconds) })
+                                    let result = try await consumer.offsetsForTimestamp(topicPartitions: allTopicPartitions).filter({ $0.offset != nil })
+                                    #expect(result.isEmpty)
 
-                            break
+                                    break messageStream
+                                }
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
                         }
                     }
                 }
@@ -1199,19 +1268,24 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 }
 
                 group.addTask {
-                    var consumedMessages = [KafkaConsumer.Message]()
+                    var consumedMessages = [KafkaConsumer.Message.Record]()
                     let expectedOffset = KafkaOffset(rawValue: 1)
-                    for try await message in consumerMsgs {
-                        consumedMessages.append(message)
+                    messageStream: for try await message in consumerMsgs {
+                        switch message {
+                            case .record(let record):
+                                consumedMessages.append(record)
 
-                        if consumedMessages.count >= 5 {
-                            let allTopicPartitions = consumedMessages.map({ (KafkaTopicPartition(topic: $0.topic, partition: $0.partition), timestamp: baselineTimestamp) })
-                            let offsetsForTimestamp = try await consumer.offsetsForTimestamp(topicPartitions: allTopicPartitions)
-                            for tp in offsetsForTimestamp {
-                                #expect(tp.offset == expectedOffset)
-                            }
+                                if consumedMessages.count >= 5 {
+                                    let allTopicPartitions = consumedMessages.map({ (KafkaTopicPartition(topic: $0.topic, partition: $0.partition), timestamp: baselineTimestamp) })
+                                    let offsetsForTimestamp = try await consumer.offsetsForTimestamp(topicPartitions: allTopicPartitions)
+                                    for tp in offsetsForTimestamp {
+                                        #expect(tp.offset == expectedOffset)
+                                    }
 
-                            break
+                                    break messageStream
+                                }
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
                         }
                     }
                 }
@@ -1257,11 +1331,16 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                     let iterator = consumerMsgs.makeAsyncIterator()
 
                     // Consume all 5 messages
-                    var firstPassMessages = [KafkaConsumer.Message]()
-                    for _ in 0..<testMessages.count {
+                    var firstPassMessages = [KafkaConsumer.Message.Record]()
+                    for i in 0..<testMessages.count {
                         let optionalMessage = try await iterator.next()
                         let message = try #require(optionalMessage)
-                        firstPassMessages.append(message)
+                        switch message {
+                            case .record(let record):
+                                firstPassMessages.append(record)
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event at message \(i)")
+                        }
                     }
                     #expect(firstPassMessages.count == testMessages.count)
 
@@ -1284,10 +1363,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     // Verify replayed messages match the originals
                     for (index, replayed) in replayedMessages.enumerated() {
-                        #expect(firstPassMessages[index].topic == replayed.topic)
-                        #expect(firstPassMessages[index].key == replayed.key)
-                        #expect(firstPassMessages[index].value == replayed.value)
-                        #expect(firstPassMessages[index].offset == replayed.offset)
+                        switch replayed {
+                            case .record(let record):
+                                #expect(firstPassMessages[index].topic == record.topic)
+                                #expect(firstPassMessages[index].key == record.key)
+                                #expect(firstPassMessages[index].value == record.value)
+                                #expect(firstPassMessages[index].offset == record.offset)
+                            case .partitionEOF: Issue.record("Unexpected partitionEOF event at message \(index)")
+                        }
                     }
                 }
 
@@ -1335,31 +1418,37 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 group.addTask {
                     var consumedCount = 0
-                    for try await message in consumerMsgs {
-                        try consumer.storeOffset(message)
-                        consumedCount += 1
-                        if consumedCount >= testMessages.count {
-                            // Wait for auto-commit to flush stored offsets to broker.
-                            // Must happen BEFORE breaking — breaking drops the iterator
-                            // which triggers consumer shutdown.
-                            try await Task.sleep(for: .seconds(2))
+                    messageStream: for try await message in consumerMsgs {
+                        switch message {
+                            case .record(let record):
+                                try consumer.storeOffset(record)
+                                consumedCount += 1
+                                if consumedCount >= testMessages.count {
+                                    // Wait for auto-commit to flush stored offsets to broker.
+                                    // Must happen BEFORE breaking — breaking drops the iterator
+                                    // which triggers consumer shutdown.
+                                    try await Task.sleep(for: .seconds(2))
 
-                            let tp = KafkaTopicPartition(
-                                topic: message.topic,
-                                partition: message.partition
-                            )
-                            let committedOffsets = try await consumer.committed(
-                                topicPartitions: [tp],
-                                timeout: .milliseconds(5000)
-                            )
+                                    let tp = KafkaTopicPartition(
+                                        topic: record.topic,
+                                        partition: record.partition
+                                    )
+                                    let committedOffsets = try await consumer.committed(
+                                        topicPartitions: [tp],
+                                        timeout: .milliseconds(5000)
+                                    )
 
-                            let committedOffset = try #require(committedOffsets.first)
-                            #expect(committedOffset.topic == message.topic)
-                            #expect(committedOffset.partition == message.partition)
-                            // storeOffset stores message.offset + 1 internally
-                            let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
-                            #expect(committedOffset.offset == expectedOffset)
-                            break
+                                    let committedOffset = try #require(committedOffsets.first)
+                                    #expect(committedOffset.topic == record.topic)
+                                    #expect(committedOffset.partition == record.partition)
+                                    // storeOffset stores message.offset + 1 internally
+                                    let expectedOffset = KafkaOffset(rawValue: record.offset.rawValue + 1)
+                                    #expect(committedOffset.offset == expectedOffset)
+                                    break messageStream
+                                }
+
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
                         }
                     }
 
@@ -1409,30 +1498,34 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 group.addTask {
                     var consumedCount = 0
-                    for try await message in consumerMsgs {
-                        try consumer.storeOffset(message)
-                        consumedCount += 1
-                        if consumedCount >= testMessages.count {
-                            // Commit and verify BEFORE breaking — breaking drops the
-                            // iterator which triggers consumer shutdown.
-                            try await consumer.commitStoredOffsets()
+                    messageStream: for try await message in consumerMsgs {
+                        switch message {
+                            case .record(let record):
+                                try consumer.storeOffset(record)
+                                consumedCount += 1
+                                if consumedCount >= testMessages.count {
+                                    // Commit and verify BEFORE breaking — breaking drops the
+                                    // iterator which triggers consumer shutdown.
+                                    try await consumer.commitStoredOffsets()
 
-                            let tp = KafkaTopicPartition(
-                                topic: message.topic,
-                                partition: message.partition
-                            )
-                            let committedOffsets = try await consumer.committed(
-                                topicPartitions: [tp],
-                                timeout: .milliseconds(5000)
-                            )
+                                    let tp = KafkaTopicPartition(
+                                        topic: record.topic,
+                                        partition: record.partition
+                                    )
+                                    let committedOffsets = try await consumer.committed(
+                                        topicPartitions: [tp],
+                                        timeout: .milliseconds(5000)
+                                    )
 
-                            let committedOffset = try #require(committedOffsets.first)
-                            #expect(committedOffset.topic == message.topic)
-                            #expect(committedOffset.partition == message.partition)
-                            // storeOffset stores message.offset + 1 internally
-                            let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
-                            #expect(committedOffset.offset == expectedOffset)
-                            break
+                                    let committedOffset = try #require(committedOffsets.first)
+                                    #expect(committedOffset.topic == record.topic)
+                                    #expect(committedOffset.partition == record.partition)
+                                    // storeOffset stores message.offset + 1 internally
+                                    let expectedOffset = KafkaOffset(rawValue: record.offset.rawValue + 1)
+                                    #expect(committedOffset.offset == expectedOffset)
+                                    break messageStream
+                                }
+                            case .partitionEOF: Issue.record("Unexpected partitionEOF event")
                         }
                     }
 
@@ -1479,32 +1572,37 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 group.addTask {
                     var consumedCount = 0
-                    for try await message in consumerMsgs {
-                        try consumer.storeOffset(message)
-                        consumedCount += 1
-                        if consumedCount >= testMessages.count {
-                            // Schedule commit and verify BEFORE breaking — breaking
-                            // drops the iterator which triggers consumer shutdown.
-                            try await consumer.commitStoredOffsets()
+                    messageStream: for try await message in consumerMsgs {
+                        switch message {
+                            case .record(let record):
+                                try consumer.storeOffset(record)
+                                consumedCount += 1
+                                if consumedCount >= testMessages.count {
+                                    // Schedule commit and verify BEFORE breaking — breaking
+                                    // drops the iterator which triggers consumer shutdown.
+                                    try await consumer.commitStoredOffsets()
 
-                            // Wait for the async commit to complete on the broker
-                            try await Task.sleep(for: .seconds(2))
+                                    // Wait for the async commit to complete on the broker
+                                    try await Task.sleep(for: .seconds(2))
 
-                            let tp = KafkaTopicPartition(
-                                topic: message.topic,
-                                partition: message.partition
-                            )
-                            let committedOffsets = try await consumer.committed(
-                                topicPartitions: [tp],
-                                timeout: .milliseconds(5000)
-                            )
+                                    let tp = KafkaTopicPartition(
+                                        topic: record.topic,
+                                        partition: record.partition
+                                    )
+                                    let committedOffsets = try await consumer.committed(
+                                        topicPartitions: [tp],
+                                        timeout: .milliseconds(5000)
+                                    )
 
-                            let committedOffset = try #require(committedOffsets.first)
-                            #expect(committedOffset.topic == message.topic)
-                            #expect(committedOffset.partition == message.partition)
-                            let expectedOffset = KafkaOffset(rawValue: message.offset.rawValue + 1)
-                            #expect(committedOffset.offset == expectedOffset)
-                            break
+                                    let committedOffset = try #require(committedOffsets.first)
+                                    #expect(committedOffset.topic == record.topic)
+                                    #expect(committedOffset.partition == record.partition)
+                                    let expectedOffset = KafkaOffset(rawValue: record.offset.rawValue + 1)
+                                    #expect(committedOffset.offset == expectedOffset)
+                                    break messageStream
+                                }
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
                         }
                     }
 
@@ -1679,11 +1777,16 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 group.addTask { try await serviceGroup1.run() }
 
                 group.addTask {
-                    for try await record in consumer1Msgs {
-                        c1Messages.wrappingIncrement(ordering: .relaxed)
-                        try await consumer1.commit(record)
-                        if c2Messages.load(ordering: .relaxed) == 0 {
-                            try await Task.sleep(for: .milliseconds(50))
+                    for try await message in consumer1Msgs {
+                        switch message {
+                            case .record(let record):
+                                c1Messages.wrappingIncrement(ordering: .relaxed)
+                                try await consumer1.commit(record)
+                                if c2Messages.load(ordering: .relaxed) == 0 {
+                                    try await Task.sleep(for: .milliseconds(50))
+                                }
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
                         }
                     }
                 }
@@ -1712,9 +1815,14 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 // Start consumer 2 — triggers rebalance while messages are flowing
                 group.addTask { try await serviceGroup2.run() }
                 group.addTask {
-                    for try await record in consumer2Msgs {
-                        c2Messages.wrappingIncrement(ordering: .relaxed)
-                        try await consumer2.commit(record)
+                    for try await message in consumer2Msgs {
+                        switch message {
+                            case .record(let record):
+                                c2Messages.wrappingIncrement(ordering: .relaxed)
+                                try await consumer2.commit(record)
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
+                        }
                     }
                 }
 
@@ -1822,11 +1930,16 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 // Consumer 1 — consume + storeOffset (at-least-once)
                 group.addTask {
                     for try await message in consumer1Msgs {
-                        try consumer1.storeOffset(message)
-                        c1Messages.wrappingIncrement(ordering: .relaxed)
-                        // Slow down so consumer 2 can join mid-consumption
-                        if c2Messages.load(ordering: .relaxed) == 0 {
-                            try await Task.sleep(for: .milliseconds(50))
+                        switch message {
+                            case .record(let record):
+                                try consumer1.storeOffset(record)
+                                c1Messages.wrappingIncrement(ordering: .relaxed)
+                                // Slow down so consumer 2 can join mid-consumption
+                                if c2Messages.load(ordering: .relaxed) == 0 {
+                                    try await Task.sleep(for: .milliseconds(50))
+                                }
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
                         }
                     }
                 }
@@ -1854,8 +1967,13 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 group.addTask { try await serviceGroup2.run() }
                 group.addTask {
                     for try await message in consumer2Msgs {
-                        try consumer2.storeOffset(message)
-                        c2Messages.wrappingIncrement(ordering: .relaxed)
+                        switch message {
+                            case .record(let record):
+                                try consumer2.storeOffset(record)
+                                c2Messages.wrappingIncrement(ordering: .relaxed)
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
+                        }
                     }
                 }
 
@@ -2452,8 +2570,13 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
             #expect(consumed.count == testMessages.count)
             for (index, message) in consumed.enumerated() {
-                #expect(testMessages[index].topic == message.topic)
-                #expect(testMessages[index].value == message.value)
+                switch message {
+                    case .record(let record):
+                        #expect(testMessages[index].topic == record.topic)
+                        #expect(testMessages[index].value == record.value)
+                    case .partitionEOF:
+                        Issue.record("Unexpected partitionEOF event")
+                }
             }
         }
     }
@@ -2732,7 +2855,12 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                     var receivedTopics: Set<KafkaTopic> = []
                     for try await message in consumerMsgs {
-                        receivedTopics.insert(message.topic)
+                        switch message {
+                            case .record(let record):
+                                receivedTopics.insert(record.topic)
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
+                        }
                         if receivedTopics.count >= 2 {
                             break
                         }
@@ -2773,15 +2901,20 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 }
 
                 for try await message in consumerMsgs {
-                    // Timestamp should be set (broker assigns it)
-                    #expect(message.timestamp != nil)
-                    #expect(
-                        message.timestampType == .createTime
-                            || message.timestampType == .logAppendTime
-                    )
-                    // Timestamp should be a reasonable epoch (after year 2020)
-                    if let ts = message.timestamp {
-                        #expect(ts > 1_577_836_800_000)  // 2020-01-01 in ms
+                    switch message {
+                        case .record(let record):
+                            // Timestamp should be set (broker assigns it)
+                            #expect(record.timestamp != nil)
+                            #expect(
+                                record.timestampType == .createTime
+                                || record.timestampType == .logAppendTime
+                            )
+                            // Timestamp should be a reasonable epoch (after year 2020)
+                            if let ts = record.timestamp {
+                                #expect(ts > 1_577_836_800_000)  // 2020-01-01 in ms
+                            }
+                        case .partitionEOF:
+                            Issue.record("Unexpected partitionEOF event")
                     }
                     break
                 }
@@ -2828,13 +2961,18 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
                 let firstPartition = ManagedAtomic<Int32>(-1)
                 group.addTask {
                     for try await message in consumerMsgs {
-                        if firstPartition.load(ordering: .relaxed) == -1 {
-                            firstPartition.store(
-                                Int32(message.partition.rawValue),
-                                ordering: .relaxed
-                            )
+                        switch message {
+                            case .record(let record):
+                                if firstPartition.load(ordering: .relaxed) == -1 {
+                                    firstPartition.store(
+                                        Int32(record.partition.rawValue),
+                                        ordering: .relaxed
+                                    )
+                                }
+                                consumedCount.wrappingIncrement(ordering: .relaxed)
+                            case .partitionEOF:
+                                Issue.record("Unexpected partitionEOF event")
                         }
-                        consumedCount.wrappingIncrement(ordering: .relaxed)
                     }
                 }
 
@@ -2866,6 +3004,44 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
 
                 await serviceGroup.triggerGracefulShutdown()
                 try await group.waitForAll()
+            }
+        }
+    }
+
+    @Test
+    func partitionEOF() async throws {
+        try await withTestTopic { testTopic in
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+            consumerConfig.enablePartitionEof = true
+
+            // withConsumer runs the consumer for the duration of the closure and
+            // gracefully shuts it down when the closure returns.
+            let consumed = try await KafkaConsumer.withConsumer(config: consumerConfig) { _, messages, _ in
+                var received = [KafkaConsumer.Message.Record]()
+                messageStream: for try await message in messages {
+                    switch message {
+                        case .record(let record):
+                            received.append(record)
+                        case .partitionEOF(let eof):
+                            #expect(eof.topic == testTopic)
+                            #expect(eof.partition == .init(rawValue: 0))
+                            #expect(eof.offset == .init(rawValue: testMessages.count))
+                            break messageStream
+                    }
+                }
+                return received
+            }
+
+            #expect(consumed.count == testMessages.count)
+            for (index, record) in consumed.enumerated() {
+                #expect(testMessages[index].topic == record.topic)
+                #expect(testMessages[index].value == record.value)
             }
         }
     }

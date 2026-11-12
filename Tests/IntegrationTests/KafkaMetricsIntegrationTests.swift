@@ -122,11 +122,16 @@ struct KafkaMetricsIntegrationTests {
 
                     group.addTask {
                         var consumed = 0
-                        for try await message in consumerMessages {
-                            try await consumer.commit(message)
-                            consumed += 1
-                            if consumed >= messageCount {
-                                break
+                        messageStream: for try await message in consumerMessages {
+                            switch message {
+                                case .record(let record):
+                                    try await consumer.commit(record)
+                                    consumed += 1
+                                    if consumed >= messageCount {
+                                        break messageStream
+                                    }
+                                case .partitionEOF:
+                                    break
                             }
                         }
                         // Give the statistics callback (100 ms interval) time to sample at least once
