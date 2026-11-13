@@ -912,6 +912,62 @@ extension KafkaConsumer {
     }
 }
 
+// MARK: KafkaConsumer + PartitionEOF
+
+extension KafkaConsumer.Messages {
+    /// Creates an asynchronous sequence of messages which includes the partition EOF event message
+    ///
+    /// The sequence yields ``KafkaConsumer/WrappedMessages`` values.
+    ///
+    /// Use this together with  ``KafkaConsumer.withConsumer(config:_:)`` when you want to read all available messages and then exit and do other stuff
+    public func includeEOF() -> KafkaConsumer.WrappedMessages {
+        .init(base: self)
+    }
+}
+
+extension KafkaConsumer {
+    /// Message record or partition EOF event message
+    public struct WrappedMessages: Sendable, AsyncSequence {
+        public enum WrappedMessage {
+            /// Broker recorded message
+            case record(Message)
+
+            /// Partition EOF event message
+            case partitionEOF(KafkaTopicPartitionEOF)
+        }
+
+        public typealias Element = WrappedMessage
+
+        let base: Messages
+
+        init(base: Messages) {
+            self.base = base
+        }
+
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            var _iterator: Messages.AsyncIterator
+
+            init(iterator: Messages.AsyncIterator) {
+                self._iterator = iterator
+            }
+
+            public func next() async throws -> Element? {
+                guard let value = try await self._iterator.next() else {
+                    return nil
+                }
+
+                return value._isEOF ? .partitionEOF(.init(value)) : .record(value)
+            }
+        }
+
+        public func makeAsyncIterator() -> AsyncIterator {
+            AsyncIterator(
+                iterator: self.base.makeAsyncIterator()
+            )
+        }
+    }
+}
+
 // MARK: - KafkaConsumer + StateMachine
 
 extension KafkaConsumer {
