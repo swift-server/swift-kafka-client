@@ -72,6 +72,9 @@ extension KafkaConsumer {
         /// The type of timestamp on this message.
         public var timestampType: KafkaTimestampType
 
+        /// Reached the end of the topic+partition queue on the broker
+        var _isEOF: Bool
+
         /// Creates a ``KafkaConsumer/Message`` from an `rd_kafka_message_t` pointer.
         /// - Throws: A ``KafkaError`` if the received message is an error message or malformed.
         internal init(messagePointer: UnsafePointer<rd_kafka_message_t>) throws {
@@ -83,7 +86,10 @@ extension KafkaConsumer {
 
             let valueBufferPointer = UnsafeRawBufferPointer(start: valuePointer, count: rdKafkaMessage.len)
 
-            guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            // librdkafka's `RD_KAFKA_RESP_ERR__PARTITION_EOF` is not really an error.
+            // It just signals the event that the consumer has reached the end of the partition.
+            self._isEOF = rdKafkaMessage.err == RD_KAFKA_RESP_ERR__PARTITION_EOF
+            guard rdKafkaMessage.err == RD_KAFKA_RESP_ERR_NO_ERROR || _isEOF else {
                 var errorStringBuffer = ByteBuffer(bytes: valueBufferPointer)
                 let errorString = errorStringBuffer.readString(length: errorStringBuffer.readableBytes)
 
@@ -123,6 +129,24 @@ extension KafkaConsumer {
             let tsValue = rd_kafka_message_timestamp(messagePointer, &tsType)
             self.timestampType = KafkaTimestampType(rawValue: Int32(tsType.rawValue))
             self.timestamp = tsValue != -1 ? tsValue : nil
+        }
+    }
+
+    /// The topic, partition and offset identifying an EOF event.
+    public struct KafkaTopicPartitionEOF: Sendable, Hashable {
+        /// The name of the Kafka topic.
+        public var topic: KafkaTopic
+
+        /// The partition within the topic.
+        public var partition: KafkaPartition
+
+        /// Fresh end offset of partition EOF
+        public var offset: KafkaOffset
+
+        init(_ message: Message) {
+            self.topic = message.topic
+            self.partition = message.partition
+            self.offset = message.offset
         }
     }
 }

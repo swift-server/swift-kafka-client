@@ -2642,4 +2642,78 @@ func withTestTopic(partitions: Int32 = 1, _ body: (_ testTopic: KafkaTopic) asyn
             }
         }
     }
+
+    // MARK: Partition EOF
+
+    @Test
+    func partitionEOF() async throws {
+        try await withTestTopic { testTopic in
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+            consumerConfig.enablePartitionEof = true
+
+            // withConsumer runs the consumer for the duration of the closure and
+            // gracefully shuts it down when the closure returns.
+            let consumed = try await KafkaConsumer.withConsumer(config: consumerConfig) { _, messages, _ in
+                var received = [KafkaConsumer.Message]()
+                messageStream: for try await message in messages.includeEOF() {
+                    switch message {
+                        case .record(let record):
+                            received.append(record)
+                        case .partitionEOF(let eof):
+                            #expect(eof.topic == testTopic)
+                            #expect(eof.partition == .init(rawValue: 0))
+                            #expect(eof.offset == .init(rawValue: testMessages.count))
+                            break messageStream
+                    }
+                }
+                return received
+            }
+
+            #expect(consumed.count == testMessages.count)
+            for (index, record) in consumed.enumerated() {
+                #expect(testMessages[index].topic == record.topic)
+                #expect(testMessages[index].value == record.value)
+            }
+        }
+    }
+
+    @Test
+    func partitionEOFMessageAppearsOnlyWhenEnabledInConsumerConfig() async throws {
+        try await withTestTopic { testTopic in
+            let testMessages = try await self.produceMessages(topic: testTopic, count: 10)
+
+            var consumerConfig = KafkaConsumerConfig()
+            consumerConfig.consumptionStrategy = .group(id: UUID().uuidString, topics: [testTopic])
+            consumerConfig.bootstrapServers = ["\(kafkaHost):\(kafkaPort)"]
+            consumerConfig.autoOffsetReset = .beginning
+            consumerConfig.brokerAddressFamily = .v4
+            consumerConfig.enablePartitionEof = false
+
+            // withConsumer runs the consumer for the duration of the closure and
+            // gracefully shuts it down when the closure returns.
+            let consumed = try await KafkaConsumer.withConsumer(config: consumerConfig) { _, messages, _ in
+                var received = [KafkaConsumer.Message]()
+                messageStream: for try await message in messages.includeEOF() {
+                    switch message {
+                        case .record(let record):
+                            received.append(record)
+                            if received.count >= testMessages.count {
+                                break messageStream
+                            }
+                        case .partitionEOF:
+                            Issue.record("Received unexpected partition EOF")
+                    }
+                }
+                return received
+            }
+
+            #expect(consumed.count == testMessages.count)
+        }
+    }
 }
