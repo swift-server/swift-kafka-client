@@ -818,6 +818,8 @@ extension KafkaConsumer {
     /// An asynchronous sequence of messages received from the Kafka cluster.
     ///
     /// The sequence yields ``KafkaConsumer/Message`` values.
+    ///
+    /// In order to listen to the partition EOF events as well, use ``KafkaConsumer/Messages/includeEOF()``.
     public struct Messages: Sendable, AsyncSequence {
         typealias LockedMachine = NIOLockedValueBox<KafkaConsumer.StateMachine>
 
@@ -907,6 +909,87 @@ extension KafkaConsumer {
             AsyncIterator(
                 stateMachine: self.stateMachine,
                 pollInterval: self.pollInterval
+            )
+        }
+    }
+}
+
+// MARK: KafkaConsumer + PartitionEOF
+
+extension KafkaConsumer.Messages {
+    /// Creates an asynchronous sequence of messages which includes the partition EOF event message
+    ///
+    /// The sequence yields ``KafkaConsumer/WrappedMessages`` values.
+    ///
+    /// Use this together with  ``KafkaConsumer/withConsumer(config:_:)`` when you want to read all available messages and then exit and do other stuff.
+    ///
+    /// ```swift
+    /// let consumed = try await KafkaConsumer.withConsumer(config: consumerConfig) { _, messages, _ in
+    ///     var received = [KafkaConsumer.Message]()
+    ///     messageSequence: for try await message in messages.includeEOF() {
+    ///         switch message {
+    ///             case .record(let record):
+    ///                 received.append(record)
+    ///             case .partitionEOF:
+    ///                 break messageSequence
+    ///         }
+    ///     }
+    ///     return received
+    /// }
+    /// ```
+    ///
+    public func includeEOF() -> KafkaConsumer.WrappedMessages {
+        .init(base: self)
+    }
+}
+
+extension KafkaConsumer {
+    /// Record or partition EOF event messages
+    public struct WrappedMessages: Sendable, AsyncSequence {
+        /// Record or partition EOF event message received from the Kafka cluster.
+        public enum WrappedMessage {
+            /// Broker recorded message
+            case record(Message)
+
+            /// Partition EOF event message
+            case partitionEOF(KafkaTopicPartitionEOF)
+        }
+
+        /// The type of message the sequence yields.
+        public typealias Element = WrappedMessage
+
+        let base: Messages
+
+        init(base: Messages) {
+            self.base = base
+        }
+
+        /// An asynchronous iterator over messages received from the Kafka cluster.
+        ///
+        /// The iterator yields ``KafkaConsumer/WrappedMessages/WrappedMessage`` values.
+        public struct AsyncIterator: AsyncIteratorProtocol {
+            var _iterator: Messages.AsyncIterator
+
+            init(iterator: Messages.AsyncIterator) {
+                self._iterator = iterator
+            }
+
+            /// Returns the next consumer wrapped message, or `nil` when the consumer has shut down or the task is canceled.
+            ///
+            /// - Throws: A ``KafkaError`` if polling for the next message fails.
+            public func next() async throws -> Element? {
+                guard let value = try await self._iterator.next() else {
+                    return nil
+                }
+
+                return value._isEOF ? .partitionEOF(.init(value)) : .record(value)
+            }
+        }
+
+        /// Returns an asynchronous iterator over the consumer message sequence including partition EOF.
+        public func makeAsyncIterator() -> AsyncIterator {
+            AsyncIterator(
+                iterator: self.base.makeAsyncIterator()
             )
         }
     }

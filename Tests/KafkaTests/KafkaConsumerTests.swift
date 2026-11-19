@@ -34,7 +34,8 @@ import Foundation
     /// Create a consumer config with a unique group ID.
     private func makeConfig(
         enableAutoCommit: Bool = true,
-        enableAutoOffsetStore: Bool? = nil
+        enableAutoOffsetStore: Bool? = nil,
+        enablePartitionEOF: Bool? = nil
     ) -> KafkaConsumerConfig {
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfig()
@@ -49,6 +50,7 @@ import Foundation
         }
         config.useMockBroker()
         config.brokerAddressFamily = .v4
+        config.enablePartitionEof = enablePartitionEOF
         return config
     }
 
@@ -1230,6 +1232,64 @@ import Foundation
 
             // Drop the iterator by creating and immediately discarding it
             var iterator: KafkaConsumer.Messages.AsyncIterator? = consumerMsgs.makeAsyncIterator()
+            _ = iterator
+            iterator = nil
+
+            // Wait for state transition
+            try await Task.sleep(for: .seconds(1))
+
+            // Graceful shutdown should succeed without error
+            await serviceGroup.triggerGracefulShutdown()
+        }
+    }
+
+    // MARK: - WrappedMessages Iterator Drop Shutdown Tests
+
+    @Test func wrappedMessagesIteratorDropDoesNotCrashServiceGroup() async throws {
+        let config = makeConfig(enablePartitionEOF: true)
+        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: config)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            // Start consuming messages in a separate task, then drop the iterator
+            group.addTask {
+                for try await _ in consumerMsgs.includeEOF() {
+                    break  // immediately drop the iterator
+                }
+            }
+
+            // Wait for iterator drop to take effect
+            try await Task.sleep(for: .seconds(1))
+
+            // If we get here, run() did NOT exit early — ServiceGroup is still alive.
+            // Now shut down cleanly.
+            await serviceGroup.triggerGracefulShutdown()
+        }
+        // Test passes if no ServiceGroupError was thrown
+    }
+
+    @Test func wrappedMessagesIteratorDropThenGracefulShutdownSucceeds() async throws {
+        let config = makeConfig(enablePartitionEOF: true)
+        let (consumer, consumerMsgs, _) = try KafkaConsumer.makeConsumer(config: config)
+
+        let serviceGroupConfiguration = ServiceGroupConfiguration(services: [consumer], logger: .kafkaTest)
+        let serviceGroup = ServiceGroup(configuration: serviceGroupConfiguration)
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await serviceGroup.run()
+            }
+
+            try await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            // Drop the iterator by creating and immediately discarding it
+            var iterator: KafkaConsumer.WrappedMessages.AsyncIterator? = consumerMsgs.includeEOF().makeAsyncIterator()
             _ = iterator
             iterator = nil
 

@@ -676,11 +676,6 @@ public final class RDKafkaClient: Sendable {
             rd_kafka_message_destroy(messagePointer)
         }
 
-        // Reached the end of the topic+partition queue on the broker
-        if messagePointer.pointee.err == RD_KAFKA_RESP_ERR__PARTITION_EOF {
-            return nil
-        }
-
         let message = try KafkaConsumer.Message(messagePointer: messagePointer)
         return message
     }
