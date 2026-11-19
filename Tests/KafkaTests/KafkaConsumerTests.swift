@@ -35,7 +35,7 @@ import Foundation
     private func makeConfig(
         enableAutoCommit: Bool = true,
         enableAutoOffsetStore: Bool? = nil,
-        enablePartitionEOF: Bool? = false
+        enablePartitionEOF: Bool? = nil
     ) -> KafkaConsumerConfig {
         let uniqueGroupID = UUID().uuidString
         var config = KafkaConsumerConfig()
