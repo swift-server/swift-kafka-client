@@ -669,6 +669,31 @@ import Foundation
         }
     }
 
+    @Test func commitStoredOffsetsDoesNotWaitForPollInterval() async throws {
+        var config = makeConfig(enableAutoCommit: false)
+        // Far longer than the time limit below, so a commit that waits for the next event poll fails the test.
+        config.pollInterval = .seconds(10)
+        let (consumer, _, _) = try KafkaConsumer.makeConsumer(config: config)
+
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { try? await consumer.run() }
+            // Let the event poll loop do its first poll and start sleeping for `pollInterval`.
+            try? await Task.sleep(for: .milliseconds(500), tolerance: .zero)
+
+            let clock = ContinuousClock()
+            let start = clock.now
+            // Nothing is assigned, so librdkafka reports that there is no offset to commit. The result
+            // arriving as a thrown error is enough: only how long it takes matters here.
+            await #expect(throws: KafkaError.self) {
+                try await consumer.commitStoredOffsets()
+            }
+            #expect(start.duration(to: clock.now) < .seconds(2))
+
+            // Cancel rather than shut down gracefully, which would wait for the long poll interval.
+            group.cancelAll()
+        }
+    }
+
     // MARK: - makeConsumer Tests
 
     @Test func makeConsumerConstructDeinit() async throws {

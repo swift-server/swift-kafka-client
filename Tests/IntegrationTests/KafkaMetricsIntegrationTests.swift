@@ -121,24 +121,33 @@ struct KafkaMetricsIntegrationTests {
                     group.addTask { try await consumerGroup.run() }
 
                     group.addTask {
-                        var consumed = 0
-                        for try await message in consumerMessages {
-                            try await consumer.commit(message)
-                            consumed += 1
-                            if consumed >= messageCount {
-                                break
+                        // Ending the messages sequence (for example with `break`) closes the consumer, which then
+                        // stops serving statistics. The iterator is kept until the instruments have been checked.
+                        let messageIterator = consumerMessages.makeAsyncIterator()
+                        for _ in 0..<messageCount {
+                            guard let message = try await messageIterator.next() else {
+                                Issue.record("The messages sequence ended before \(messageCount) messages")
+                                return
                             }
+                            try await consumer.commit(message)
                         }
-                        // Give the statistics callback (100 ms interval) time to sample at least once
-                        // so the stats-derived instrument below is populated.
-                        try await Task.sleep(for: .seconds(1))
-
                         // The instruments are removed from the backend when the consumer closes, so they
                         // are checked while it is still running.
                         let consumerClient = [("client_id", "metrics-integration-consumer")]
+                        // Statistics are sampled on their own schedule, so wait for a sample that includes
+                        // every consumed message rather than for a fixed delay.
+                        let messagesReceived = try metrics.expectMeter(
+                            "kafka.consumer.messages.received",
+                            consumerClient
+                        )
+                        let deadline = ContinuousClock.now + .seconds(10)
+                        while (messagesReceived.lastValue ?? 0) < Double(messageCount) && ContinuousClock.now < deadline
+                        {
+                            try await Task.sleep(for: .milliseconds(100))
+                        }
                         // Each successful manual commit increments the counter and records a duration.
                         let commits = try metrics.expectCounter("kafka.consumer.commits.total", consumerClient)
-                        #expect(commits.totalValue >= 1)
+                        #expect(commits.totalValue == Int64(messageCount))
                         let commitDuration = try metrics.expectTimer("kafka.consumer.commit.duration", consumerClient)
                         #expect(!commitDuration.values.isEmpty)
 
@@ -147,14 +156,11 @@ struct KafkaMetricsIntegrationTests {
                         let queueOperations = try metrics.expectGauge("kafka.consumer.queue.operations", consumerClient)
                         #expect(queueOperations.lastValue != nil)
                         // The same sample sets librdkafka's cumulative received-message total on the meter.
-                        let messagesReceived = try metrics.expectMeter(
-                            "kafka.consumer.messages.received",
-                            consumerClient
-                        )
                         #expect((messagesReceived.lastValue ?? 0) >= Double(messageCount))
                         // Bytes are message bytes (non-zero once messages were consumed).
                         let bytesReceived = try metrics.expectMeter("kafka.consumer.bytes.received", consumerClient)
                         #expect((bytesReceived.lastValue ?? 0) > 0)
+                        withExtendedLifetime(messageIterator) {}
                     }
 
                     try await group.next()
