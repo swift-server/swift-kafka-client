@@ -20,20 +20,22 @@ import NIOCore
 
 import class Foundation.JSONDecoder
 
-/// Offset commit callback for commits the client requests; its opaque is the retained `CommitPromise`.
-/// librdkafka calls it only when the result is served by `rd_kafka_consumer_poll`, not as an event.
+/// Called by `librdkafka` when the result of a commit the client requests arrives on that commit's own
+/// result queue. Its opaque is the unretained `CommitPromise`, which `RDKafkaClient.commit(_:)` keeps alive
+/// until it has disabled this callback.
+private func commitResultCallback(_ rk: OpaquePointer?, _ opaque: UnsafeMutableRawPointer?) {
+    guard let opaque else { return }
+    Unmanaged<RDKafkaClient.CommitPromise>.fromOpaque(opaque).takeUnretainedValue().resume(with: .success(()))
+}
+
+/// Offset commit callback for commits the client requests. The result is read from the commit's own queue;
+/// without a callback, librdkafka would also post it to the main queue as an automatic commit.
 private func requestedCommitCallback(
     _ rk: OpaquePointer?,
     _ err: rd_kafka_resp_err_t,
     _ offsets: UnsafeMutablePointer<rd_kafka_topic_partition_list_t>?,
     _ opaque: UnsafeMutableRawPointer?
-) {
-    guard let opaque else { return }
-    let promise = Unmanaged<RDKafkaClient.CommitPromise>.fromOpaque(opaque).takeRetainedValue()
-    promise.resume(
-        with: err == RD_KAFKA_RESP_ERR_NO_ERROR ? .success(()) : .failure(KafkaError.rdKafkaError(wrapping: err))
-    )
-}
+) {}
 
 /// Offset commit callback for automatic commits. The result is ignored; the opaque is the `RebalanceContext`.
 private func automaticCommitCallback(
@@ -620,43 +622,25 @@ public final class RDKafkaClient: Sendable {
     /// Handle event of type `RDKafkaEvent.offsetCommit`.
     ///
     /// - Parameter event: Pointer to underlying `rd_kafka_event_t`.
-    /// - Returns: The outcome of an automatic commit, or `nil` for a commit the application requested
-    ///   (whose outcome is delivered through its `CommitPromise` instead) and for an automatic commit
-    ///   that had no offsets to commit.
+    /// Only automatic commits post their result to this queue (for example, the periodic auto-commit or
+    /// the one `rd_kafka_consumer_close_queue` triggers during shutdown). Commits the application requests
+    /// receive their result on their own queue, see ``commit(_:)``.
+    ///
+    /// - Returns: The outcome of the automatic commit, or `nil` if it had no offsets to commit.
     private func handleOffsetCommitEvent(_ event: OpaquePointer?) -> ConsumerPollEvent? {
-        // A commit the application requested carries its `CommitPromise` as the event's opaque. An
-        // automatic commit carries no promise: its opaque is either absent or the client's own configured
-        // opaque (the `RebalanceContext` of a consumer), which must never be read as a promise.
-        guard let opaquePointer = rd_kafka_event_opaque(event),
-            opaquePointer != rd_kafka_opaque(self.kafkaHandle.pointer)
-        else {
-            // This is an auto-commit event (e.g. triggered by rd_kafka_consumer_close_queue during
-            // shutdown) rather than a user-initiated rd_kafka_commit_queue call. These don't have a
-            // callback to invoke.
-            let error = rd_kafka_event_error(event)
-            if error == RD_KAFKA_RESP_ERR__NO_OFFSET {
-                // Every auto-commit interval reports this when no offset changed since the last commit.
-                // Nothing was committed, so it is neither a success nor a failure.
-                return nil
-            }
-            if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-                self.logger.info(
-                    "Auto-commit failed during event processing",
-                    metadata: ["error": "\(String(cString: rd_kafka_err2str(error)))"]
-                )
-            }
-            return .automaticCommit(succeeded: error == RD_KAFKA_RESP_ERR_NO_ERROR)
-        }
-        let promise = Unmanaged<CommitPromise>.fromOpaque(opaquePointer).takeRetainedValue()
-
         let error = rd_kafka_event_error(event)
-        guard error == RD_KAFKA_RESP_ERR_NO_ERROR else {
-            let kafkaError = KafkaError.rdKafkaError(wrapping: error)
-            promise.resume(with: .failure(kafkaError))
+        if error == RD_KAFKA_RESP_ERR__NO_OFFSET {
+            // Every auto-commit interval reports this when no offset changed since the last commit.
+            // Nothing was committed, so it is neither a success nor a failure.
             return nil
         }
-        promise.resume(with: .success(()))
-        return nil
+        if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+            self.logger.info(
+                "Auto-commit failed during event processing",
+                metadata: ["error": "\(String(cString: rd_kafka_err2str(error)))"]
+            )
+        }
+        return .automaticCommit(succeeded: error == RD_KAFKA_RESP_ERR_NO_ERROR)
     }
 
     /// Request a new message from the Kafka cluster.
@@ -849,30 +833,7 @@ public final class RDKafkaClient: Sendable {
     ///
     /// Equivalent to `rd_kafka_commit_queue(rk, NULL, ...)`.
     func commitAll() async throws {
-        let promise = CommitPromise()
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                promise.set(continuation)
-
-                let opaquePointer: UnsafeMutableRawPointer = Unmanaged.passRetained(promise).toOpaque()
-
-                let error = rd_kafka_commit_queue(
-                    self.kafkaHandle.pointer,
-                    nil,  // NULL = commit all stored offsets
-                    self.queueHandle.pointer,
-                    requestedCommitCallback,
-                    opaquePointer
-                )
-
-                if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-                    // librdkafka will NOT enqueue an event, so we must consume the +1 retain count ourselves
-                    Unmanaged<CommitPromise>.fromOpaque(opaquePointer).release()
-                    promise.resume(with: .failure(KafkaError.rdKafkaError(wrapping: error)))
-                }
-            }
-        } onCancel: {
-            promise.resume(with: .failure(CancellationError()))
-        }
+        try await self.commit(nil)
     }
 
     /// Non-blocking **awaitable** commit of a `message`'s offset to Kafka.
@@ -880,41 +841,83 @@ public final class RDKafkaClient: Sendable {
     /// - Parameter message: Last received message that shall be marked as read.
     /// - Throws: A ``KafkaError`` if the commit failed.
     func commit(_ message: KafkaConsumer.Message) async throws {
+        // The offset committed is always the offset of the next requested message.
+        // Thus, we increase the offset of the current message by one before committing it.
+        // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
+        let changesList = RDKafkaTopicPartitionList()
+        changesList.setOffset(
+            topic: message.topic,
+            partition: message.partition,
+            offset: Int64(message.offset.rawValue + 1)
+        )
+        try await self.commit(changesList)
+    }
+
+    /// Commits `offsets`, or all stored offsets if `offsets` is `nil`, and awaits the result.
+    ///
+    /// The result is posted to a queue owned by this commit, which wakes the caller as soon as the
+    /// result arrives. Posting it to the main queue instead would delay the caller until the next
+    /// `pollInterval` tick of the consumer's event poll loop.
+    private func commit(_ offsets: RDKafkaTopicPartitionList?) async throws {
+        guard let resultQueue = rd_kafka_queue_new(self.kafkaHandle.pointer) else {
+            throw KafkaError.client(reason: "Failed to create the offset commit result queue")
+        }
         let promise = CommitPromise()
+        rd_kafka_queue_cb_event_enable(resultQueue, commitResultCallback, Unmanaged.passUnretained(promise).toOpaque())
+        defer {
+            // librdkafka holds the queue lock while it calls `commitResultCallback`, and disabling the callback
+            // takes the same lock. Once disabled, the callback can no longer use `promise`.
+            withExtendedLifetime(promise) {
+                rd_kafka_queue_cb_event_enable(resultQueue, nil, nil)
+            }
+            // A result that arrives after this, because the task was cancelled, is discarded by librdkafka.
+            rd_kafka_queue_destroy(resultQueue)
+        }
+
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 promise.set(continuation)
 
-                // The offset committed is always the offset of the next requested message.
-                // Thus, we increase the offset of the current message by one before committing it.
-                // See: https://github.com/edenhill/librdkafka/issues/2745#issuecomment-598067945
-                let changesList = RDKafkaTopicPartitionList()
-                changesList.setOffset(
-                    topic: message.topic,
-                    partition: message.partition,
-                    offset: Int64(message.offset.rawValue + 1)
-                )
-
-                let opaquePointer: UnsafeMutableRawPointer = Unmanaged.passRetained(promise).toOpaque()
-
-                changesList.withListPointer { listPointer in
-                    let error = rd_kafka_commit_queue(
-                        self.kafkaHandle.pointer,
-                        listPointer,
-                        self.queueHandle.pointer,
-                        requestedCommitCallback,
-                        opaquePointer
-                    )
-
-                    if error != RD_KAFKA_RESP_ERR_NO_ERROR {
-                        // librdkafka will NOT enqueue an event, so we must consume the +1 retain count ourselves
-                        Unmanaged<CommitPromise>.fromOpaque(opaquePointer).release()
-                        promise.resume(with: .failure(KafkaError.rdKafkaError(wrapping: error)))
+                let error: rd_kafka_resp_err_t
+                if let offsets {
+                    error = offsets.withListPointer { listPointer in
+                        rd_kafka_commit_queue(
+                            self.kafkaHandle.pointer,
+                            listPointer,
+                            resultQueue,
+                            requestedCommitCallback,
+                            nil
+                        )
                     }
+                } else {
+                    // NULL = commit all stored offsets
+                    error = rd_kafka_commit_queue(
+                        self.kafkaHandle.pointer,
+                        nil,
+                        resultQueue,
+                        requestedCommitCallback,
+                        nil
+                    )
+                }
+
+                if error != RD_KAFKA_RESP_ERR_NO_ERROR {
+                    // librdkafka will NOT enqueue a result, so the callback is never called.
+                    promise.resume(with: .failure(KafkaError.rdKafkaError(wrapping: error)))
                 }
             }
         } onCancel: {
             promise.resume(with: .failure(CancellationError()))
+        }
+
+        // The callback only runs once the result is on the queue, so this does not block.
+        guard let event = rd_kafka_queue_poll(resultQueue, 0) else {
+            throw KafkaError.client(reason: "No offset commit result on the result queue")
+        }
+        defer { rd_kafka_event_destroy(event) }
+
+        let error = rd_kafka_event_error(event)
+        guard error == RD_KAFKA_RESP_ERR_NO_ERROR else {
+            throw KafkaError.rdKafkaError(wrapping: error)
         }
     }
 
